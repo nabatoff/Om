@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AppNav } from "@/components/AppNav";
+import { Toaster } from "@/components/ui/sonner";
 import { getProfile } from "@/lib/auth";
 import "./globals.css";
 
@@ -31,9 +32,10 @@ export default async function RootLayout({
       lang="ru"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-zinc-50 dark:bg-black">
+      <body className="min-h-full flex flex-col">
         <AppNav profile={profile} />
         <main className="flex-1">{children}</main>
+        <Toaster richColors closeButton position="top-center" />
       </body>
     </html>
   );

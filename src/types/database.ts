@@ -83,6 +83,45 @@ export type Database = {
         };
         Relationships: [];
       };
+      supplier_comments: {
+        Row: {
+          author_id: string;
+          body: string;
+          created_at: string;
+          id: string;
+          supplier_id: string;
+        };
+        Insert: {
+          author_id: string;
+          body: string;
+          created_at?: string;
+          id?: string;
+          supplier_id: string;
+        };
+        Update: {
+          author_id?: string;
+          body?: string;
+          created_at?: string;
+          id?: string;
+          supplier_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "supplier_comments_author_id_fkey";
+            columns: ["author_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "supplier_comments_supplier_id_fkey";
+            columns: ["supplier_id"];
+            isOneToOne: false;
+            referencedRelation: "suppliers";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       suppliers: {
         Row: {
           bin: string;
@@ -92,6 +131,7 @@ export type Database = {
           kz_quality_mark: boolean;
           manager_id: string | null;
           name: string;
+          next_contact_date: string | null;
           nkt_member: boolean;
           status: string;
           updated_at: string;
@@ -104,6 +144,7 @@ export type Database = {
           kz_quality_mark?: boolean;
           manager_id?: string | null;
           name: string;
+          next_contact_date?: string | null;
           nkt_member?: boolean;
           status?: string;
           updated_at?: string;
@@ -116,6 +157,7 @@ export type Database = {
           kz_quality_mark?: boolean;
           manager_id?: string | null;
           name?: string;
+          next_contact_date?: string | null;
           nkt_member?: boolean;
           status?: string;
           updated_at?: string;

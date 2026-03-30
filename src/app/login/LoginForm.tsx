@@ -3,6 +3,10 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
 
 export function LoginForm() {
@@ -50,77 +54,81 @@ export function LoginForm() {
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="mt-6 flex flex-col gap-4 rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950"
-    >
-      <div className="flex gap-2 text-sm">
-        <button
-          type="button"
-          onClick={() => setMode("signin")}
-          className={`rounded-md px-3 py-1 ${mode === "signin" ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900" : "border border-zinc-300 dark:border-zinc-600"}`}
-        >
-          Вход
-        </button>
-        <button
-          type="button"
-          onClick={() => setMode("signup")}
-          className={`rounded-md px-3 py-1 ${mode === "signup" ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900" : "border border-zinc-300 dark:border-zinc-600"}`}
-        >
-          Регистрация
-        </button>
-      </div>
-      {mode === "signup" && (
-        <label className="grid gap-1 text-sm">
-          <span className="text-zinc-600 dark:text-zinc-400">ФИО</span>
-          <input
-            type="text"
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            className="rounded-md border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-600 dark:bg-zinc-900"
-            autoComplete="name"
-          />
-        </label>
-      )}
-      <label className="grid gap-1 text-sm">
-        <span className="text-zinc-600 dark:text-zinc-400">Email</span>
-        <input
-          type="email"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="rounded-md border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-600 dark:bg-zinc-900"
-          autoComplete="email"
-        />
-      </label>
-      <label className="grid gap-1 text-sm">
-        <span className="text-zinc-600 dark:text-zinc-400">Пароль</span>
-        <input
-          type="password"
-          required
-          minLength={6}
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="rounded-md border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-600 dark:bg-zinc-900"
-          autoComplete={mode === "signup" ? "new-password" : "current-password"}
-        />
-      </label>
-      {error && (
-        <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-      )}
-      <button
-        type="submit"
-        disabled={loading}
-        className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900"
-      >
-        {loading ? "…" : mode === "signup" ? "Зарегистрироваться" : "Войти"}
-      </button>
-      <Link
-        href="/"
-        className="text-center text-sm text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
-      >
-        На главную
-      </Link>
-    </form>
+    <Card className="mt-6 border-border/80 shadow-sm">
+      <CardContent className="pt-6">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant={mode === "signin" ? "default" : "outline"}
+              size="sm"
+              className="flex-1"
+              onClick={() => setMode("signin")}
+            >
+              Вход
+            </Button>
+            <Button
+              type="button"
+              variant={mode === "signup" ? "default" : "outline"}
+              size="sm"
+              className="flex-1"
+              onClick={() => setMode("signup")}
+            >
+              Регистрация
+            </Button>
+          </div>
+          {mode === "signup" && (
+            <div className="grid gap-2">
+              <Label htmlFor="full_name">ФИО</Label>
+              <Input
+                id="full_name"
+                type="text"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                autoComplete="name"
+              />
+            </div>
+          )}
+          <div className="grid gap-2">
+            <Label htmlFor="email">Email</Label>
+            <Input
+              id="email"
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="password">Пароль</Label>
+            <Input
+              id="password"
+              type="password"
+              required
+              minLength={6}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete={
+                mode === "signup" ? "new-password" : "current-password"
+              }
+            />
+          </div>
+          {error && (
+            <p className="text-sm text-destructive">{error}</p>
+          )}
+          <Button type="submit" disabled={loading} className="w-full">
+            {loading
+              ? "…"
+              : mode === "signup"
+                ? "Зарегистрироваться"
+                : "Войти"}
+          </Button>
+          <Button variant="link" asChild className="text-muted-foreground">
+            <Link href="/">На главную</Link>
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
   );
 }

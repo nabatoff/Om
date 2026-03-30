@@ -1,7 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm, type Resolver } from "react-hook-form";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
+import {
+  dailyReportFormSchema,
+  parseConfirmedSumInput,
+  type DailyReportFormValues,
+} from "@/lib/schemas/daily-report";
 
 type Props = {
   managerId: string;
@@ -9,127 +26,154 @@ type Props = {
 };
 
 export function DailyReportForm({ managerId, defaultDate }: Props) {
-  const [reportDate, setReportDate] = useState(defaultDate);
-  const [callsCount, setCallsCount] = useState(0);
-  const [gepPlanned, setGepPlanned] = useState(0);
-  const [gepDone, setGepDone] = useState(0);
-  const [cpSent, setCpSent] = useState(0);
-  const [confirmedSum, setConfirmedSum] = useState("");
-  const [message, setMessage] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+    reset,
+  } = useForm<DailyReportFormValues>({
+    resolver: zodResolver(
+      dailyReportFormSchema,
+    ) as Resolver<DailyReportFormValues>,
+    defaultValues: {
+      report_date: defaultDate,
+      calls_count: 0,
+      gep_planned: 0,
+      gep_done: 0,
+      cp_sent: 0,
+      confirmed_sum: "",
+    },
+  });
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    setMessage(null);
+  async function onSubmit(values: DailyReportFormValues) {
+    const sum = parseConfirmedSumInput(values.confirmed_sum);
     const supabase = createClient();
-    const sum = confirmedSum === "" ? 0 : Number(confirmedSum);
-    if (Number.isNaN(sum)) {
-      setMessage("Сумма должна быть числом");
-      setLoading(false);
-      return;
-    }
     const { error } = await supabase.from("daily_reports").upsert(
       {
         manager_id: managerId,
-        report_date: reportDate,
-        calls_count: callsCount,
-        gep_planned: gepPlanned,
-        gep_done: gepDone,
-        cp_sent: cpSent,
+        report_date: values.report_date,
+        calls_count: values.calls_count,
+        gep_planned: values.gep_planned,
+        gep_done: values.gep_done,
+        cp_sent: values.cp_sent,
         confirmed_sum: sum,
       },
       { onConflict: "manager_id,report_date" },
     );
-    setLoading(false);
     if (error) {
-      setMessage(error.message);
+      toast.error("Не удалось сохранить", { description: error.message });
       return;
     }
-    setMessage("Сохранено");
+    toast.success("Отчёт сохранён", {
+      description: `Дата: ${values.report_date}`,
+    });
+    reset({
+      ...values,
+      confirmed_sum: String(sum),
+    });
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="mt-6 grid max-w-xl gap-4 rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950"
-    >
-      <h2 className="text-lg font-medium text-zinc-900 dark:text-zinc-100">
-        Ежедневный отчёт
-      </h2>
-      <label className="grid gap-1 text-sm">
-        <span className="text-zinc-600 dark:text-zinc-400">Дата</span>
-        <input
-          type="date"
-          required
-          value={reportDate}
-          onChange={(e) => setReportDate(e.target.value)}
-          className="rounded-md border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-600 dark:bg-zinc-900"
-        />
-      </label>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <label className="grid gap-1 text-sm">
-          <span className="text-zinc-600 dark:text-zinc-400">Звонки</span>
-          <input
-            type="number"
-            min={0}
-            value={callsCount}
-            onChange={(e) => setCallsCount(Number(e.target.value))}
-            className="rounded-md border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-600 dark:bg-zinc-900"
-          />
-        </label>
-        <label className="grid gap-1 text-sm">
-          <span className="text-zinc-600 dark:text-zinc-400">КП отправлено</span>
-          <input
-            type="number"
-            min={0}
-            value={cpSent}
-            onChange={(e) => setCpSent(Number(e.target.value))}
-            className="rounded-md border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-600 dark:bg-zinc-900"
-          />
-        </label>
-        <label className="grid gap-1 text-sm">
-          <span className="text-zinc-600 dark:text-zinc-400">ГЭП план</span>
-          <input
-            type="number"
-            min={0}
-            value={gepPlanned}
-            onChange={(e) => setGepPlanned(Number(e.target.value))}
-            className="rounded-md border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-600 dark:bg-zinc-900"
-          />
-        </label>
-        <label className="grid gap-1 text-sm">
-          <span className="text-zinc-600 dark:text-zinc-400">ГЭП факт</span>
-          <input
-            type="number"
-            min={0}
-            value={gepDone}
-            onChange={(e) => setGepDone(Number(e.target.value))}
-            className="rounded-md border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-600 dark:bg-zinc-900"
-          />
-        </label>
-      </div>
-      <label className="grid gap-1 text-sm">
-        <span className="text-zinc-600 dark:text-zinc-400">Подтверждённая сумма</span>
-        <input
-          type="text"
-          inputMode="decimal"
-          value={confirmedSum}
-          onChange={(e) => setConfirmedSum(e.target.value)}
-          placeholder="0"
-          className="rounded-md border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-600 dark:bg-zinc-900"
-        />
-      </label>
-      {message && (
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">{message}</p>
-      )}
-      <button
-        type="submit"
-        disabled={loading}
-        className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900"
-      >
-        {loading ? "Сохранение…" : "Сохранить отчёт"}
-      </button>
-    </form>
+    <Card className="mt-6 max-w-xl border-border/80 shadow-sm">
+      <CardHeader className="space-y-1">
+        <CardTitle className="text-lg">Ежедневный отчёт</CardTitle>
+        <CardDescription>
+          Целые неотрицательные показатели; сумма продаж обязательна.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4">
+          <div className="grid gap-2">
+            <Label htmlFor="report_date">Дата</Label>
+            <Input id="report_date" type="date" {...register("report_date")} />
+            {errors.report_date && (
+              <p className="text-sm text-destructive">
+                {errors.report_date.message}
+              </p>
+            )}
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-2">
+              <Label htmlFor="calls_count">Звонки</Label>
+              <Input
+                id="calls_count"
+                type="number"
+                min={0}
+                step={1}
+                {...register("calls_count", { valueAsNumber: true })}
+              />
+              {errors.calls_count && (
+                <p className="text-sm text-destructive">
+                  {errors.calls_count.message}
+                </p>
+              )}
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="cp_sent">КП отправлено</Label>
+              <Input
+                id="cp_sent"
+                type="number"
+                min={0}
+                step={1}
+                {...register("cp_sent", { valueAsNumber: true })}
+              />
+              {errors.cp_sent && (
+                <p className="text-sm text-destructive">
+                  {errors.cp_sent.message}
+                </p>
+              )}
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="gep_planned">ГЭП план</Label>
+              <Input
+                id="gep_planned"
+                type="number"
+                min={0}
+                step={1}
+                {...register("gep_planned", { valueAsNumber: true })}
+              />
+              {errors.gep_planned && (
+                <p className="text-sm text-destructive">
+                  {errors.gep_planned.message}
+                </p>
+              )}
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="gep_done">ГЭП факт</Label>
+              <Input
+                id="gep_done"
+                type="number"
+                min={0}
+                step={1}
+                {...register("gep_done", { valueAsNumber: true })}
+              />
+              {errors.gep_done && (
+                <p className="text-sm text-destructive">
+                  {errors.gep_done.message}
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="confirmed_sum">Подтверждённая сумма</Label>
+            <Input
+              id="confirmed_sum"
+              type="text"
+              inputMode="decimal"
+              placeholder="0"
+              {...register("confirmed_sum")}
+            />
+            {errors.confirmed_sum && (
+              <p className="text-sm text-destructive">
+                {errors.confirmed_sum.message}
+              </p>
+            )}
+          </div>
+          <Button type="submit" disabled={isSubmitting} className="w-fit">
+            {isSubmitting ? "Сохранение…" : "Сохранить отчёт"}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
   );
 }

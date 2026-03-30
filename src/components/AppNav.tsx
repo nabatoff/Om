@@ -1,69 +1,64 @@
 import Link from "next/link";
 import { signOut } from "@/app/actions/auth";
+import { Button } from "@/components/ui/button";
 import type { ProfileRow } from "@/lib/auth";
 
 type Props = {
   profile: ProfileRow | null;
 };
 
+const navLink =
+  "text-sm text-muted-foreground transition-colors hover:text-foreground";
+
 export function AppNav({ profile }: Props) {
   if (!profile) {
     return (
-      <header className="border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
-          <Link href="/" className="font-semibold text-zinc-900 dark:text-zinc-100">
+      <header className="sticky top-0 z-40 border-b border-border/80 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
+          <Link
+            href="/"
+            className="text-sm font-semibold tracking-tight text-foreground"
+          >
             Sales CRM
           </Link>
-          <Link
-            href="/login"
-            className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm text-white dark:bg-zinc-100 dark:text-zinc-900"
-          >
-            Войти
-          </Link>
+          <Button asChild size="sm">
+            <Link href="/login">Войти</Link>
+          </Button>
         </div>
       </header>
     );
   }
 
   return (
-    <header className="border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
-      <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-2 px-4 py-3">
-        <nav className="flex flex-wrap items-center gap-4 text-sm">
-          <Link href="/dashboard" className="font-semibold text-zinc-900 dark:text-zinc-100">
-            Sales CRM
-          </Link>
+    <header className="sticky top-0 z-40 border-b border-border/80 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3">
+        <nav className="flex flex-wrap items-center gap-6">
           <Link
             href="/dashboard"
-            className="text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+            className="text-sm font-semibold tracking-tight text-foreground"
           >
+            Sales CRM
+          </Link>
+          <Link href="/dashboard" className={navLink}>
             Дашборд
           </Link>
-          <Link
-            href="/suppliers"
-            className="text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
-          >
+          <Link href="/suppliers" className={navLink}>
             Поставщики
           </Link>
           {profile.role === "admin" && (
-            <Link
-              href="/admin"
-              className="text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
-            >
+            <Link href="/admin" className={navLink}>
               Админ
             </Link>
           )}
         </nav>
         <div className="flex items-center gap-3">
-          <span className="text-xs text-zinc-500 dark:text-zinc-400">
+          <span className="text-xs text-muted-foreground">
             {profile.full_name || "Без имени"} · {profile.role}
           </span>
           <form action={signOut}>
-            <button
-              type="submit"
-              className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm dark:border-zinc-600"
-            >
+            <Button type="submit" variant="outline" size="sm">
               Выйти
-            </button>
+            </Button>
           </form>
         </div>
       </div>

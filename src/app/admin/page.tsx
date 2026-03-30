@@ -1,5 +1,46 @@
+import { AdminSalesChart } from "@/components/admin/AdminSalesChart";
+import type { SalesChartPoint } from "@/components/admin/AdminSalesChart";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { requireAdmin } from "@/lib/auth";
+import { addDaysISO, localISODate } from "@/lib/dates";
 import { createClient } from "@/lib/supabase/server";
+
+function buildLast7DaysSales(
+  rows: { report_date: string; confirmed_sum: number | string }[],
+): SalesChartPoint[] {
+  const byDate = new Map<string, number>();
+  for (const r of rows) {
+    const d = r.report_date;
+    const v = Number(r.confirmed_sum);
+    byDate.set(d, (byDate.get(d) ?? 0) + (Number.isFinite(v) ? v : 0));
+  }
+  const today = localISODate();
+  const out: SalesChartPoint[] = [];
+  for (let i = 6; i >= 0; i--) {
+    const date = addDaysISO(today, -i);
+    const dt = new Date(date + "T12:00:00");
+    out.push({
+      date,
+      label: dt.toLocaleDateString("ru-RU", { day: "numeric", month: "short" }),
+      total: byDate.get(date) ?? 0,
+    });
+  }
+  return out;
+}
 
 export default async function AdminPage() {
   await requireAdmin();
@@ -11,12 +52,12 @@ export default async function AdminPage() {
 
   const { data: reports, error: rErr } = await supabase
     .from("daily_reports")
-    .select("gep_planned, gep_done, cp_sent, confirmed_sum");
+    .select("gep_planned, gep_done, cp_sent, confirmed_sum, report_date");
 
   if (sErr || rErr) {
     return (
-      <div className="mx-auto max-w-5xl px-4 py-8">
-        <p className="text-red-600 dark:text-red-400">
+      <div className="mx-auto max-w-6xl px-4 py-8">
+        <p className="text-sm text-destructive">
           {sErr?.message ?? rErr?.message}
         </p>
       </div>
@@ -36,6 +77,8 @@ export default async function AdminPage() {
   };
 
   const repList = reports ?? [];
+  const chartData = buildLast7DaysSales(repList);
+
   const gepPlannedSum = repList.reduce((a, r) => a + r.gep_planned, 0);
   const gepDoneSum = repList.reduce((a, r) => a + r.gep_done, 0);
   const gepConversionPct =
@@ -70,103 +113,104 @@ export default async function AdminPage() {
   );
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8">
-      <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
-        Админ: аналитика
-      </h1>
-      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-        Воронка поставщиков: доля со статусом «qualified» от всех карточек.
-        Плюс агрегаты по всем ежедневным отчётам (KPI).
-      </p>
+    <div className="mx-auto max-w-6xl space-y-8 px-4 py-8">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Админ: аналитика</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Воронка поставщиков и агрегаты по ежедневным отчётам.
+        </p>
+      </div>
 
-      <section className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
-          <p className="text-xs uppercase tracking-wide text-zinc-500">
-            Конверсия в qualified
-          </p>
-          <p className="mt-1 text-3xl font-semibold text-zinc-900 dark:text-zinc-100">
-            {conversionPct}%
-          </p>
-          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-            {qualified} / {total}
-          </p>
-        </div>
-        <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
-          <p className="text-xs uppercase tracking-wide text-zinc-500">
-            По статусам
-          </p>
-          <ul className="mt-2 space-y-1 text-sm text-zinc-700 dark:text-zinc-300">
-            <li>Новые: {byStatus.new}</li>
-            <li>В работе: {byStatus.in_progress}</li>
-            <li>Квалифицированы: {byStatus.qualified}</li>
-          </ul>
-        </div>
-        <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
-          <p className="text-xs uppercase tracking-wide text-zinc-500">
-            ГЭП выполнение (сумма по отчётам)
-          </p>
-          <p className="mt-1 text-3xl font-semibold text-zinc-900 dark:text-zinc-100">
-            {gepConversionPct}%
-          </p>
-          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-            {gepDoneSum} / {gepPlannedSum} (факт / план)
-          </p>
-        </div>
-        <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
-          <p className="text-xs uppercase tracking-wide text-zinc-500">
-            КП и суммы
-          </p>
-          <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-300">
-            КП отправлено (всего): {cpTotal}
-          </p>
-          <p className="mt-1 text-sm text-zinc-700 dark:text-zinc-300">
-            Подтверждённые суммы: {sumConfirmed.toLocaleString("ru-RU")}
-          </p>
-        </div>
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Card className="border-border/80 shadow-sm">
+          <CardHeader className="pb-2">
+            <CardDescription>Конверсия в qualified</CardDescription>
+            <CardTitle className="text-3xl tabular-nums">{conversionPct}%</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              {qualified} / {total}
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="border-border/80 shadow-sm">
+          <CardHeader className="pb-2">
+            <CardDescription>По статусам</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-1 text-sm">
+            <p>Новые: {byStatus.new}</p>
+            <p>В работе: {byStatus.in_progress}</p>
+            <p>Квалифицированы: {byStatus.qualified}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-border/80 shadow-sm">
+          <CardHeader className="pb-2">
+            <CardDescription>ГЭП (сумма по отчётам)</CardDescription>
+            <CardTitle className="text-3xl tabular-nums">
+              {gepConversionPct}%
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              {gepDoneSum} / {gepPlannedSum} факт / план
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="border-border/80 shadow-sm">
+          <CardHeader className="pb-2">
+            <CardDescription>КП и суммы</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-1 text-sm">
+            <p>КП отправлено: {cpTotal}</p>
+            <p>
+              Подтверждённые суммы:{" "}
+              {sumConfirmed.toLocaleString("ru-RU", { maximumFractionDigits: 0 })}
+            </p>
+          </CardContent>
+        </Card>
       </section>
 
-      <section className="mt-10">
-        <h2 className="text-lg font-medium text-zinc-900 dark:text-zinc-100">
+      <AdminSalesChart data={chartData} />
+
+      <section>
+        <h2 className="text-lg font-semibold tracking-tight">
           Конверсия по менеджерам
         </h2>
-        <div className="mt-4 overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
-          <table className="min-w-full text-left text-sm">
-            <thead className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900">
-              <tr>
-                <th className="px-3 py-2 font-medium">Менеджер</th>
-                <th className="px-3 py-2 font-medium">Всего</th>
-                <th className="px-3 py-2 font-medium">Qualified</th>
-                <th className="px-3 py-2 font-medium">Конверсия</th>
-              </tr>
-            </thead>
-            <tbody>
+        <Card className="mt-4 border-border/80 shadow-sm">
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead>Менеджер</TableHead>
+                <TableHead>Всего</TableHead>
+                <TableHead>Qualified</TableHead>
+                <TableHead>Конверсия</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {perManager.length === 0 ? (
-                <tr>
-                  <td
+                <TableRow>
+                  <TableCell
                     colSpan={4}
-                    className="px-3 py-4 text-zinc-600 dark:text-zinc-400"
+                    className="text-muted-foreground"
                   >
                     Нет данных по поставщикам
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ) : (
                 perManager.map((row) => (
-                  <tr
-                    key={row.id}
-                    className="border-b border-zinc-100 dark:border-zinc-800"
-                  >
-                    <td className="px-3 py-2">
+                  <TableRow key={row.id}>
+                    <TableCell className="font-medium">
                       {nameById.get(row.id) ?? row.id.slice(0, 8)}
-                    </td>
-                    <td className="px-3 py-2">{row.total}</td>
-                    <td className="px-3 py-2">{row.qualified}</td>
-                    <td className="px-3 py-2">{row.conv}%</td>
-                  </tr>
+                    </TableCell>
+                    <TableCell>{row.total}</TableCell>
+                    <TableCell>{row.qualified}</TableCell>
+                    <TableCell>{row.conv}%</TableCell>
+                  </TableRow>
                 ))
               )}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </Card>
       </section>
     </div>
   );

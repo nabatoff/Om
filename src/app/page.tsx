@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
 import { getSessionUser } from "@/lib/auth";
 
 export default async function Home() {
@@ -6,36 +7,27 @@ export default async function Home() {
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-16">
-      <h1 className="text-3xl font-semibold text-zinc-900 dark:text-zinc-100">
+      <h1 className="text-3xl font-semibold tracking-tight">
         CRM отдела продаж
       </h1>
-      <p className="text-zinc-600 dark:text-zinc-400">
-        Next.js, Tailwind, Supabase: ежедневные отчёты, реестр поставщиков, RLS по
-        ролям.
+      <p className="text-muted-foreground">
+        Next.js, Tailwind, Supabase: ежедневные отчёты, реестр поставщиков, RLS
+        по ролям.
       </p>
       <div className="flex flex-wrap gap-3">
         {user ? (
-          <Link
-            href="/dashboard"
-            className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
-          >
-            Дашборд
-          </Link>
+          <Button asChild>
+            <Link href="/dashboard">Дашборд</Link>
+          </Button>
         ) : (
-          <Link
-            href="/login"
-            className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
-          >
-            Войти
-          </Link>
+          <Button asChild>
+            <Link href="/login">Войти</Link>
+          </Button>
         )}
         {user && (
-          <Link
-            href="/suppliers"
-            className="rounded-md border border-zinc-300 px-4 py-2 text-sm dark:border-zinc-600"
-          >
-            Поставщики
-          </Link>
+          <Button variant="outline" asChild>
+            <Link href="/suppliers">Поставщики</Link>
+          </Button>
         )}
       </div>
     </div>
