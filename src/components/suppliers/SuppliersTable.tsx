@@ -1,11 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { SupplierCardDialog } from "@/components/suppliers/SupplierCardDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -22,7 +24,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { createClient } from "@/lib/supabase/client";
-import { localISODate } from "@/lib/dates";
+import { localISODate, needsCallToday } from "@/lib/dates";
 import type { Tables } from "@/types/database";
 
 type Supplier = Tables<"suppliers">;
@@ -38,6 +40,97 @@ function isOverdue(next: string | null): boolean {
   return next < localISODate();
 }
 
+function SupplierNextContactControls({
+  supplier,
+  compact,
+  onUpdated,
+}: {
+  supplier: Supplier;
+  compact?: boolean;
+  onUpdated: (s: Supplier) => void;
+}) {
+  const [value, setValue] = useState(supplier.next_contact_date ?? "");
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    setSaving(true);
+    const supabase = createClient();
+    const payload =
+      value === ""
+        ? { next_contact_date: null as string | null }
+        : { next_contact_date: value };
+    const { data, error } = await supabase
+      .from("suppliers")
+      .update(payload)
+      .eq("id", supplier.id)
+      .select("*")
+      .single();
+    setSaving(false);
+    if (error) {
+      toast.error("Не удалось сохранить дату", { description: error.message });
+      return;
+    }
+    onUpdated(data as Supplier);
+    toast.success("Дата следующего звонка сохранена");
+  }
+
+  return (
+    <div
+      className={
+        compact
+          ? "flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center"
+          : "flex flex-wrap items-center gap-2"
+      }
+    >
+      <InputDate
+        value={value}
+        onChange={setValue}
+        className={compact ? "w-full max-w-[11rem]" : "max-w-[11rem]"}
+      />
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={() => setValue("")}
+        >
+          Очистить
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          onClick={() => void save()}
+          disabled={saving}
+        >
+          {saving ? "…" : "OK"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function InputDate({
+  value,
+  onChange,
+  className,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  className?: string;
+}) {
+  return (
+    <input
+      type="date"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className={
+        "h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring " +
+        (className ?? "")
+      }
+    />
+  );
+}
+
 type Props = {
   suppliers: Supplier[];
   currentUserId: string;
@@ -49,6 +142,11 @@ export function SuppliersTable({ suppliers: initial, currentUserId }: Props) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [dialogSupplier, setDialogSupplier] = useState<Supplier | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [filterCallToday, setFilterCallToday] = useState(false);
+
+  useEffect(() => {
+    setSuppliers(initial);
+  }, [initial]);
 
   const sorted = useMemo(
     () =>
@@ -63,6 +161,12 @@ export function SuppliersTable({ suppliers: initial, currentUserId }: Props) {
     [suppliers],
   );
 
+  const visible = useMemo(() => {
+    if (!filterCallToday) return sorted;
+    const today = localISODate();
+    return sorted.filter((s) => needsCallToday(s.next_contact_date, today));
+  }, [sorted, filterCallToday]);
+
   async function updateStatus(id: string, status: string) {
     setBusyId(id);
     const supabase = createClient();
@@ -72,12 +176,13 @@ export function SuppliersTable({ suppliers: initial, currentUserId }: Props) {
       .eq("id", id);
     setBusyId(null);
     if (error) {
-      toast.error(error.message);
+      toast.error("Не удалось обновить статус", { description: error.message });
       return;
     }
     setSuppliers((prev) =>
       prev.map((s) => (s.id === id ? { ...s, status } : s)),
     );
+    toast.success("Статус обновлён");
     router.refresh();
   }
 
@@ -90,7 +195,7 @@ export function SuppliersTable({ suppliers: initial, currentUserId }: Props) {
     setSuppliers((prev) =>
       prev.map((s) => (s.id === updated.id ? updated : s)),
     );
-    setDialogSupplier(updated);
+    setDialogSupplier((d) => (d?.id === updated.id ? updated : d));
     router.refresh();
   }
 
@@ -103,92 +208,197 @@ export function SuppliersTable({ suppliers: initial, currentUserId }: Props) {
   }
 
   return (
-    <>
-      <div className="rounded-xl border border-border/80 bg-card shadow-sm">
-        <Table>
-          <TableHeader>
-            <TableRow className="hover:bg-transparent">
-              <TableHead>Название</TableHead>
-              <TableHead>БИН</TableHead>
-              <TableHead>Категория</TableHead>
-              <TableHead>След. контакт</TableHead>
-              <TableHead>Статус</TableHead>
-              <TableHead className="w-[100px]" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {sorted.map((s) => {
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="filter-call"
+            checked={filterCallToday}
+            onCheckedChange={(v) => setFilterCallToday(v === true)}
+          />
+          <Label htmlFor="filter-call" className="cursor-pointer font-normal">
+            Нужно позвонить сегодня (просрочено или сегодня)
+          </Label>
+        </div>
+        {filterCallToday && (
+          <p className="text-sm text-muted-foreground">
+            Показано: {visible.length} из {suppliers.length}
+          </p>
+        )}
+      </div>
+
+      {visible.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          Нет карточек по этому фильтру.
+        </p>
+      ) : (
+        <>
+          {/* Mobile: cards */}
+          <div className="flex flex-col gap-3 md:hidden">
+            {visible.map((s) => {
               const overdue = isOverdue(s.next_contact_date);
+              const callToday = needsCallToday(s.next_contact_date);
               return (
-                <TableRow
+                <button
                   key={s.id}
+                  type="button"
+                  onClick={() => openCard(s)}
                   className={
-                    overdue
-                      ? "bg-destructive/10 text-destructive dark:bg-destructive/15"
-                      : undefined
+                    "w-full rounded-xl border border-border/80 bg-card p-4 text-left shadow-sm transition-colors hover:bg-muted/40 " +
+                    (overdue ? "border-destructive/40 bg-destructive/5" : "")
                   }
                 >
-                  <TableCell className="font-medium">
-                    <span className={overdue ? "text-destructive" : ""}>
-                      {s.name}
-                    </span>
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p
+                        className={
+                          "font-medium " +
+                          (overdue ? "text-destructive" : "text-foreground")
+                        }
+                      >
+                        {s.name}
+                      </p>
+                      <p className="mt-0.5 font-mono text-xs text-muted-foreground">
+                        {s.bin}
+                      </p>
+                    </div>
                     {overdue && (
-                      <Badge variant="overdue" className="ml-2 align-middle">
-                        Просрочено
-                      </Badge>
+                      <Badge variant="overdue">Просрочено</Badge>
                     )}
-                  </TableCell>
-                  <TableCell className="font-mono text-xs">{s.bin}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {s.category ?? "—"}
-                  </TableCell>
-                  <TableCell
-                    className={
-                      overdue
-                        ? "font-medium text-destructive"
-                        : "text-muted-foreground"
-                    }
+                    {callToday && !overdue && (
+                      <Badge variant="secondary">Сегодня</Badge>
+                    )}
+                  </div>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    {s.category ?? "Без категории"}
+                  </p>
+                  <div
+                    className="mt-3 space-y-2"
+                    onClick={(e) => e.stopPropagation()}
                   >
-                    {s.next_contact_date
-                      ? new Date(s.next_contact_date + "T12:00:00").toLocaleDateString(
-                          "ru-RU",
-                        )
-                      : "—"}
-                  </TableCell>
-                  <TableCell>
-                    <Select
-                      value={s.status}
-                      disabled={busyId === s.id}
-                      onValueChange={(v) => void updateStatus(s.id, v)}
-                    >
-                      <SelectTrigger className="h-8 w-[150px]">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {STATUSES.map((st) => (
-                          <SelectItem key={st.value} value={st.value}>
-                            {st.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => openCard(s)}
-                    >
-                      Карточка
-                    </Button>
-                  </TableCell>
-                </TableRow>
+                    <p className="text-xs font-medium text-muted-foreground">
+                      Следующий звонок
+                    </p>
+                    <SupplierNextContactControls
+                      key={`nc-${s.id}-${s.next_contact_date ?? ""}`}
+                      supplier={s}
+                      compact
+                      onUpdated={handleSupplierUpdated}
+                    />
+                    <div className="pt-1">
+                      <Select
+                        value={s.status}
+                        disabled={busyId === s.id}
+                        onValueChange={(v) => void updateStatus(s.id, v)}
+                      >
+                        <SelectTrigger className="h-10 w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {STATUSES.map((st) => (
+                            <SelectItem key={st.value} value={st.value}>
+                              {st.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <p className="mt-3 text-xs text-primary">
+                    Нажмите карточку для заметок и деталей →
+                  </p>
+                </button>
               );
             })}
-          </TableBody>
-        </Table>
-      </div>
+          </div>
+
+          {/* Desktop: table */}
+          <div className="hidden rounded-xl border border-border/80 bg-card shadow-sm md:block">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead>Название</TableHead>
+                  <TableHead>БИН</TableHead>
+                  <TableHead>Категория</TableHead>
+                  <TableHead className="min-w-[220px]">
+                    След. звонок
+                  </TableHead>
+                  <TableHead>Статус</TableHead>
+                  <TableHead className="w-[100px]" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {visible.map((s) => {
+                  const overdue = isOverdue(s.next_contact_date);
+                  return (
+                    <TableRow
+                      key={s.id}
+                      className={
+                        overdue
+                          ? "bg-destructive/10 text-destructive dark:bg-destructive/15"
+                          : undefined
+                      }
+                    >
+                      <TableCell className="font-medium">
+                        <span className={overdue ? "text-destructive" : ""}>
+                          {s.name}
+                        </span>
+                        {overdue && (
+                          <Badge variant="overdue" className="ml-2 align-middle">
+                            Просрочено
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">{s.bin}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {s.category ?? "—"}
+                      </TableCell>
+                      <TableCell
+                        className="align-top"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <SupplierNextContactControls
+                          key={`nc-${s.id}-${s.next_contact_date ?? ""}`}
+                          supplier={s}
+                          onUpdated={handleSupplierUpdated}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Select
+                          value={s.status}
+                          disabled={busyId === s.id}
+                          onValueChange={(v) => void updateStatus(s.id, v)}
+                        >
+                          <SelectTrigger className="h-8 w-[150px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {STATUSES.map((st) => (
+                              <SelectItem key={st.value} value={st.value}>
+                                {st.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openCard(s)}
+                        >
+                          Карточка
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        </>
+      )}
 
       <SupplierCardDialog
         supplier={dialogSupplier}
@@ -200,6 +410,6 @@ export function SuppliersTable({ suppliers: initial, currentUserId }: Props) {
         currentUserId={currentUserId}
         onSupplierUpdated={handleSupplierUpdated}
       />
-    </>
+    </div>
   );
 }

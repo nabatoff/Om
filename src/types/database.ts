@@ -122,6 +122,45 @@ export type Database = {
           },
         ];
       };
+      supplier_notes: {
+        Row: {
+          content: string;
+          created_at: string;
+          id: string;
+          manager_id: string;
+          supplier_id: string;
+        };
+        Insert: {
+          content: string;
+          created_at?: string;
+          id?: string;
+          manager_id: string;
+          supplier_id: string;
+        };
+        Update: {
+          content?: string;
+          created_at?: string;
+          id?: string;
+          manager_id?: string;
+          supplier_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "supplier_notes_manager_id_fkey";
+            columns: ["manager_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "supplier_notes_supplier_id_fkey";
+            columns: ["supplier_id"];
+            isOneToOne: false;
+            referencedRelation: "suppliers";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       suppliers: {
         Row: {
           bin: string;

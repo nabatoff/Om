@@ -1,3 +1,4 @@
+import { AdminGepBarChart } from "@/components/admin/AdminGepBarChart";
 import { AdminSalesChart } from "@/components/admin/AdminSalesChart";
 import type { SalesChartPoint } from "@/components/admin/AdminSalesChart";
 import {
@@ -16,7 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { requireAdmin } from "@/lib/auth";
-import { addDaysISO, localISODate } from "@/lib/dates";
+import { addDaysISO, currentWeekRangeISO, localISODate } from "@/lib/dates";
 import { createClient } from "@/lib/supabase/server";
 
 function buildLast7DaysSales(
@@ -54,11 +55,18 @@ export default async function AdminPage() {
     .from("daily_reports")
     .select("gep_planned, gep_done, cp_sent, confirmed_sum, report_date");
 
-  if (sErr || rErr) {
+  const week = currentWeekRangeISO();
+  const { data: weekReports, error: wErr } = await supabase
+    .from("daily_reports")
+    .select("manager_id, gep_done, report_date")
+    .gte("report_date", week.start)
+    .lte("report_date", week.end);
+
+  if (sErr || rErr || wErr) {
     return (
       <div className="mx-auto max-w-6xl px-4 py-8">
         <p className="text-sm text-destructive">
-          {sErr?.message ?? rErr?.message}
+          {sErr?.message ?? rErr?.message ?? wErr?.message}
         </p>
       </div>
     );
@@ -111,6 +119,28 @@ export default async function AdminPage() {
   const nameById = new Map(
     (profiles ?? []).map((p) => [p.id, p.full_name || p.id.slice(0, 8)]),
   );
+
+  const gepByManager = new Map<string, number>();
+  for (const r of weekReports ?? []) {
+    const mid = r.manager_id;
+    gepByManager.set(mid, (gepByManager.get(mid) ?? 0) + r.gep_done);
+  }
+  const gepBarData = [...gepByManager.entries()]
+    .map(([id, gep_done]) => ({
+      name: nameById.get(id) ?? id.slice(0, 8),
+      gep_done,
+    }))
+    .sort((a, b) => b.gep_done - a.gep_done);
+
+  const weekStartFmt = new Date(week.start + "T12:00:00").toLocaleDateString(
+    "ru-RU",
+    { day: "numeric", month: "short" },
+  );
+  const weekEndFmt = new Date(week.end + "T12:00:00").toLocaleDateString(
+    "ru-RU",
+    { day: "numeric", month: "short" },
+  );
+  const weekLabel = `${weekStartFmt} — ${weekEndFmt}`;
 
   return (
     <div className="mx-auto max-w-6xl space-y-8 px-4 py-8">
@@ -171,6 +201,8 @@ export default async function AdminPage() {
       </section>
 
       <AdminSalesChart data={chartData} />
+
+      <AdminGepBarChart data={gepBarData} weekLabel={weekLabel} />
 
       <section>
         <h2 className="text-lg font-semibold tracking-tight">

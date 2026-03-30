@@ -21,4 +21,4 @@ Next.js (App Router) + Tailwind + Supabase: ежедневные отчёты м
 
 RLS в базе: менеджер видит строки, где `manager_id = auth.uid()` (или свои отчёты); админ видит всё.
 
-Дополнительно в БД: `suppliers.next_contact_date`, таблица `supplier_comments` (заметки к карточке).
+Дополнительно в БД: `suppliers.next_contact_date`, таблица `supplier_notes` (заметки менеджера к карточке; RLS — видны только свои строки, админ — все). Таблица `supplier_comments` остаётся в схеме, в UI не используется.

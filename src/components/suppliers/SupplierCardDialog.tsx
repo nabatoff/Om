@@ -19,9 +19,9 @@ import type { Tables } from "@/types/database";
 
 type Supplier = Tables<"suppliers">;
 
-type CommentListItem = Pick<
-  Tables<"supplier_comments">,
-  "id" | "body" | "created_at" | "author_id"
+type NoteRow = Pick<
+  Tables<"supplier_notes">,
+  "id" | "content" | "created_at" | "manager_id"
 >;
 
 type Props = {
@@ -41,9 +41,9 @@ function SupplierCardDialogContent({
   currentUserId: string;
   onSupplierUpdated?: (s: Supplier) => void;
 }) {
-  const [comments, setComments] = useState<CommentListItem[]>([]);
-  const [loadingComments, setLoadingComments] = useState(true);
-  const [note, setNote] = useState("");
+  const [notes, setNotes] = useState<NoteRow[]>([]);
+  const [loadingNotes, setLoadingNotes] = useState(true);
+  const [noteText, setNoteText] = useState("");
   const [nextDate, setNextDate] = useState(
     () => supplier.next_contact_date ?? "",
   );
@@ -53,22 +53,22 @@ function SupplierCardDialogContent({
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      setLoadingComments(true);
+      setLoadingNotes(true);
       const supabase = createClient();
       const { data, error } = await supabase
-        .from("supplier_comments")
-        .select("id, body, created_at, author_id")
+        .from("supplier_notes")
+        .select("id, content, created_at, manager_id")
         .eq("supplier_id", supplier.id)
         .order("created_at", { ascending: false });
       if (!cancelled) {
-        setLoadingComments(false);
+        setLoadingNotes(false);
         if (error) {
           toast.error("Не удалось загрузить заметки", {
             description: error.message,
           });
-          setComments([]);
+          setNotes([]);
         } else {
-          setComments(data ?? []);
+          setNotes(data ?? []);
         }
       }
     }
@@ -79,30 +79,30 @@ function SupplierCardDialogContent({
   }, [supplier.id]);
 
   async function handleAddNote() {
-    const body = note.trim();
-    if (!body) {
+    const content = noteText.trim();
+    if (!content) {
       toast.error("Введите текст заметки");
       return;
     }
     setSavingNote(true);
     const supabase = createClient();
     const { data, error } = await supabase
-      .from("supplier_comments")
+      .from("supplier_notes")
       .insert({
         supplier_id: supplier.id,
-        author_id: currentUserId,
-        body,
+        manager_id: currentUserId,
+        content,
       })
-      .select("id, body, created_at, author_id")
+      .select("id, content, created_at, manager_id")
       .single();
     setSavingNote(false);
     if (error) {
       toast.error("Не удалось сохранить", { description: error.message });
       return;
     }
-    setNote("");
-    setComments((prev) => [data, ...prev]);
-    toast.success("Заметка добавлена");
+    setNoteText("");
+    setNotes((prev) => [data, ...prev]);
+    toast.success("Заметка сохранена");
   }
 
   async function handleSaveNextContact() {
@@ -124,8 +124,10 @@ function SupplierCardDialogContent({
       return;
     }
     onSupplierUpdated?.(data as Supplier);
-    toast.success("Дата следующего контакта сохранена");
+    toast.success("Дата следующего звонка обновлена");
   }
+
+  const preview = notes.slice(0, 3);
 
   return (
     <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
@@ -138,8 +140,45 @@ function SupplierCardDialogContent({
       </DialogHeader>
 
       <div className="grid gap-4">
+        <div>
+          <p className="text-sm font-medium text-foreground">
+            Последние заметки
+          </p>
+          {loadingNotes ? (
+            <p className="mt-2 text-sm text-muted-foreground">Загрузка…</p>
+          ) : preview.length === 0 ? (
+            <p className="mt-2 text-sm text-muted-foreground">
+              Пока нет ваших заметок по этой карточке
+            </p>
+          ) : (
+            <ul className="mt-2 space-y-2">
+              {preview.map((n) => (
+                <li
+                  key={n.id}
+                  className="rounded-lg border border-border/80 bg-muted/20 px-3 py-2 text-sm"
+                >
+                  <p className="whitespace-pre-wrap text-foreground">
+                    {n.content}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {new Date(n.created_at).toLocaleString("ru-RU", {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <Separator />
+
         <div className="grid gap-2">
-          <Label htmlFor="next_contact">Следующий контакт</Label>
+          <Label htmlFor="next_contact">Следующий звонок</Label>
           <div className="flex flex-wrap gap-2">
             <Input
               id="next_contact"
@@ -162,7 +201,7 @@ function SupplierCardDialogContent({
               onClick={() => void handleSaveNextContact()}
               disabled={savingDate}
             >
-              {savingDate ? "…" : "Сохранить дату"}
+              {savingDate ? "…" : "Сохранить"}
             </Button>
           </div>
         </div>
@@ -170,12 +209,12 @@ function SupplierCardDialogContent({
         <Separator />
 
         <div className="grid gap-2">
-          <Label htmlFor="note">Новая заметка</Label>
+          <Label htmlFor="note">Краткая заметка</Label>
           <Textarea
             id="note"
-            placeholder="Контекст звонка, договорённости…"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
+            placeholder="Итог звонка, договорённости…"
+            value={noteText}
+            onChange={(e) => setNoteText(e.target.value)}
             rows={3}
           />
           <Button
@@ -188,33 +227,31 @@ function SupplierCardDialogContent({
           </Button>
         </div>
 
-        <div>
-          <p className="text-sm font-medium text-foreground">История</p>
-          {loadingComments ? (
-            <p className="mt-2 text-sm text-muted-foreground">Загрузка…</p>
-          ) : comments.length === 0 ? (
-            <p className="mt-2 text-sm text-muted-foreground">
-              Пока нет заметок
-            </p>
-          ) : (
-            <ul className="mt-3 max-h-56 space-y-3 overflow-y-auto pr-1">
-              {comments.map((c) => (
-                <li
-                  key={c.id}
-                  className="rounded-lg border border-border/80 bg-muted/30 p-3 text-sm"
-                >
-                  <p className="whitespace-pre-wrap text-foreground">{c.body}</p>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {c.author_id === currentUserId
-                      ? "Вы"
-                      : `ID ${c.author_id.slice(0, 8)}…`}{" "}
-                    · {new Date(c.created_at).toLocaleString("ru-RU")}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+        {notes.length > 3 && (
+          <>
+            <Separator />
+            <div>
+              <p className="text-sm font-medium text-foreground">
+                Полная история
+              </p>
+              <ul className="mt-3 max-h-48 space-y-2 overflow-y-auto pr-1">
+                {notes.map((n) => (
+                  <li
+                    key={n.id}
+                    className="rounded-md border border-border/60 px-2 py-1.5 text-xs"
+                  >
+                    <span className="text-muted-foreground">
+                      {new Date(n.created_at).toLocaleString("ru-RU")}
+                    </span>
+                    <p className="mt-0.5 whitespace-pre-wrap text-foreground">
+                      {n.content}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </>
+        )}
       </div>
     </DialogContent>
   );
