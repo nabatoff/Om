@@ -18,7 +18,6 @@ export const dailyReportFormSchema = z
     report_date: z.string().min(1, "Выберите дату"),
     calls_count: nonNegInt,
     gep_planned: nonNegInt,
-    gep_done: nonNegInt,
     cp_sent: nonNegInt,
     confirmed_sum: z.string().trim().min(1, "Укажите подтверждённую сумму"),
   })

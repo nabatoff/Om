@@ -8,7 +8,7 @@ import {
 } from "@/lib/schemas/daily-report";
 import { localISODate } from "@/lib/dates";
 
-export type ActionResult = { ok: true } | { ok: false; error: string };
+export type ActionResult = { ok: true; gep_done: number } | { ok: false; error: string };
 
 export async function upsertDailyReport(
   input: unknown,
@@ -39,13 +39,30 @@ export async function upsertDailyReport(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Не авторизован" };
 
+  const { count, error: cErr } = await supabase
+    .from("gep_events")
+    .select("id", { count: "exact", head: true })
+    .eq("manager_id", user.id)
+    .eq("event_date", v.report_date);
+
+  if (cErr) return { ok: false, error: cErr.message };
+  const gepDone = count ?? 0;
+
+  if (gepDone > v.gep_planned) {
+    return {
+      ok: false,
+      error:
+        "План ГЭП меньше числа уже зафиксированных презентаций. Увеличьте план или удалите лишние события (обратитесь к админу).",
+    };
+  }
+
   const { error } = await supabase.from("daily_reports").upsert(
     {
       manager_id: user.id,
       report_date: v.report_date,
       calls_count: v.calls_count,
       gep_planned: v.gep_planned,
-      gep_done: v.gep_done,
+      gep_done: gepDone,
       cp_sent: v.cp_sent,
       confirmed_sum: sum,
     },
@@ -55,5 +72,5 @@ export async function upsertDailyReport(
   if (error) return { ok: false, error: error.message };
   revalidatePath("/dashboard");
   revalidatePath("/admin");
-  return { ok: true };
+  return { ok: true, gep_done: gepDone };
 }

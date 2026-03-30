@@ -36,6 +36,7 @@ type Supplier = Tables<"suppliers">;
 const STATUSES = [
   { value: "new", label: "Новый" },
   { value: "in_progress", label: "В работе" },
+  { value: "gep_done", label: "ГЭП проведён" },
   { value: "qualified", label: "Квалифицирован" },
 ] as const;
 

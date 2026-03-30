@@ -92,6 +92,7 @@ export default async function AdminPage() {
   const byStatus = {
     new: list.filter((s) => s.status === "new").length,
     in_progress: list.filter((s) => s.status === "in_progress").length,
+    gep_done: list.filter((s) => s.status === "gep_done").length,
     qualified: qualified,
   };
 
@@ -240,6 +241,7 @@ export default async function AdminPage() {
           <CardContent className="space-y-1 text-sm">
             <p>Новые: {byStatus.new}</p>
             <p>В работе: {byStatus.in_progress}</p>
+            <p>ГЭП проведён: {byStatus.gep_done}</p>
             <p>Квалифицированы: {byStatus.qualified}</p>
           </CardContent>
         </Card>

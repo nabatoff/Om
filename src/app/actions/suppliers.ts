@@ -29,7 +29,7 @@ export async function updateSupplierStatus(
   supplierId: string,
   status: string,
 ): Promise<ActionResult> {
-  const allowed = ["new", "in_progress", "qualified"];
+  const allowed = ["new", "in_progress", "gep_done", "qualified"];
   if (!allowed.includes(status)) {
     return { ok: false, error: "Недопустимый статус" };
   }

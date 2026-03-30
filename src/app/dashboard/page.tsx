@@ -56,12 +56,25 @@ export default async function DashboardPage() {
     .eq("report_date", today)
     .maybeSingle();
 
+  const { count: gepCount } = await supabase
+    .from("gep_events")
+    .select("id", { count: "exact", head: true })
+    .eq("manager_id", profile.id)
+    .eq("event_date", today);
+
+  const gepDoneFromEvents = gepCount ?? 0;
+
+  const { data: mySuppliers } = await supabase
+    .from("suppliers")
+    .select("id, name")
+    .eq("manager_id", profile.id)
+    .order("name", { ascending: true });
+
   const initialValues = todayReport
     ? {
         report_date: todayReport.report_date,
         calls_count: todayReport.calls_count,
         gep_planned: todayReport.gep_planned,
-        gep_done: todayReport.gep_done,
         cp_sent: todayReport.cp_sent,
         confirmed_sum: String(todayReport.confirmed_sum),
       }
@@ -72,8 +85,7 @@ export default async function DashboardPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Дашборд менеджера</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Цель по звонкам считается от вашего monthly_calls_target и прогресса за
-          месяц; бонус G5 снижает дневной лимит при ГЭП факт &gt; 2.
+          ГЭП факт — по журналу презентаций; не больше плана за день.
         </p>
       </div>
       {todayReport && (
@@ -81,7 +93,7 @@ export default async function DashboardPage() {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Сегодня в базе</CardTitle>
             <CardDescription>
-              Звонки {todayReport.calls_count} · ГЭП {todayReport.gep_done}/
+              Звонки {todayReport.calls_count} · ГЭП {gepDoneFromEvents}/
               {todayReport.gep_planned} · КП {todayReport.cp_sent} · сумма{" "}
               {Number(todayReport.confirmed_sum).toLocaleString("ru-RU")}
             </CardDescription>
@@ -92,6 +104,12 @@ export default async function DashboardPage() {
         defaultDate={today}
         initialValues={initialValues}
         initialRolling={initialRolling}
+        initialGepDone={gepDoneFromEvents}
+        initialHasReport={!!todayReport}
+        suppliers={(mySuppliers ?? []).map((s) => ({
+          id: s.id,
+          name: s.name,
+        }))}
       />
     </div>
   );

@@ -59,6 +59,45 @@ export type Database = {
           },
         ];
       };
+      gep_events: {
+        Row: {
+          created_at: string;
+          event_date: string;
+          id: string;
+          manager_id: string;
+          supplier_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          event_date: string;
+          id?: string;
+          manager_id: string;
+          supplier_id: string;
+        };
+        Update: {
+          created_at?: string;
+          event_date?: string;
+          id?: string;
+          manager_id?: string;
+          supplier_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "gep_events_manager_id_fkey";
+            columns: ["manager_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "gep_events_supplier_id_fkey";
+            columns: ["supplier_id"];
+            isOneToOne: false;
+            referencedRelation: "suppliers";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       profiles: {
         Row: {
           created_at: string;
@@ -350,4 +389,8 @@ export const Constants = {
 } as const;
 
 export type ProfileRole = "admin" | "manager";
-export type SupplierStatus = "new" | "in_progress" | "qualified";
+export type SupplierStatus =
+  | "new"
+  | "in_progress"
+  | "gep_done"
+  | "qualified";
