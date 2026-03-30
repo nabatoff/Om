@@ -3,12 +3,12 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
+import { insertSupplier } from "@/app/actions/suppliers";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
 import { addDaysISO, localISODate } from "@/lib/dates";
 
 export function AddSupplierForm() {
@@ -16,6 +16,7 @@ export function AddSupplierForm() {
   const [name, setName] = useState("");
   const [bin, setBin] = useState("");
   const [category, setCategory] = useState("");
+  const [skuCount, setSkuCount] = useState(0);
   const [nktMember, setNktMember] = useState(false);
   const [kzQuality, setKzQuality] = useState(false);
   const [nextContactDate, setNextContactDate] = useState(
@@ -26,33 +27,24 @@ export function AddSupplierForm() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      toast.error("Нет сессии");
-      setLoading(false);
-      return;
-    }
-    const { error } = await supabase.from("suppliers").insert({
-      name: name.trim(),
-      bin: bin.trim(),
-      category: category.trim() || null,
+    const res = await insertSupplier({
+      name,
+      bin,
+      category,
       nkt_member: nktMember,
       kz_quality_mark: kzQuality,
-      manager_id: user.id,
-      status: "new",
+      sku_count: skuCount,
       next_contact_date: nextContactDate || null,
     });
     setLoading(false);
-    if (error) {
-      toast.error("Не удалось добавить", { description: error.message });
+    if (!res.ok) {
+      toast.error("Не удалось добавить", { description: res.error });
       return;
     }
     setName("");
     setBin("");
     setCategory("");
+    setSkuCount(0);
     setNktMember(false);
     setKzQuality(false);
     setNextContactDate(addDaysISO(localISODate(), 7));
@@ -95,7 +87,18 @@ export function AddSupplierForm() {
                 onChange={(e) => setCategory(e.target.value)}
               />
             </div>
-            <div className="grid gap-2 sm:col-span-2">
+            <div className="grid gap-2">
+              <Label htmlFor="sup_sku">Кол-во SKU</Label>
+              <Input
+                id="sup_sku"
+                type="number"
+                min={0}
+                step={1}
+                value={skuCount}
+                onChange={(e) => setSkuCount(Number(e.target.value) || 0)}
+              />
+            </div>
+            <div className="grid gap-2">
               <Label htmlFor="sup_next">Следующий контакт</Label>
               <Input
                 id="sup_next"

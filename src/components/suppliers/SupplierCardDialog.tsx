@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { insertSupplierNote } from "@/app/actions/supplier-notes";
+import { updateSupplierNextContact } from "@/app/actions/suppliers";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -15,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { createClient } from "@/lib/supabase/client";
+import { isReadyForQualification } from "@/lib/crm-formulas";
 import type { Tables } from "@/types/database";
 
 type Supplier = Tables<"suppliers">;
@@ -28,17 +31,14 @@ type Props = {
   supplier: Supplier | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  currentUserId: string;
   onSupplierUpdated?: (s: Supplier) => void;
 };
 
 function SupplierCardDialogContent({
   supplier,
-  currentUserId,
   onSupplierUpdated,
 }: {
   supplier: Supplier;
-  currentUserId: string;
   onSupplierUpdated?: (s: Supplier) => void;
 }) {
   const [notes, setNotes] = useState<NoteRow[]>([]);
@@ -49,6 +49,8 @@ function SupplierCardDialogContent({
   );
   const [savingNote, setSavingNote] = useState(false);
   const [savingDate, setSavingDate] = useState(false);
+
+  const readyHint = isReadyForQualification(supplier);
 
   useEffect(() => {
     let cancelled = false;
@@ -85,45 +87,37 @@ function SupplierCardDialogContent({
       return;
     }
     setSavingNote(true);
-    const supabase = createClient();
-    const { data, error } = await supabase
-      .from("supplier_notes")
-      .insert({
-        supplier_id: supplier.id,
-        manager_id: currentUserId,
-        content,
-      })
-      .select("id, content, created_at, manager_id")
-      .single();
+    const res = await insertSupplierNote(supplier.id, content);
     setSavingNote(false);
-    if (error) {
-      toast.error("Не удалось сохранить", { description: error.message });
+    if (!res.ok) {
+      toast.error("Не удалось сохранить", { description: res.error });
       return;
     }
     setNoteText("");
-    setNotes((prev) => [data, ...prev]);
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("supplier_notes")
+      .select("id, content, created_at, manager_id")
+      .eq("supplier_id", supplier.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (data) setNotes((prev) => [data, ...prev]);
     toast.success("Заметка сохранена");
   }
 
   async function handleSaveNextContact() {
     setSavingDate(true);
-    const supabase = createClient();
-    const payload =
-      nextDate === ""
-        ? { next_contact_date: null as string | null }
-        : { next_contact_date: nextDate };
-    const { data, error } = await supabase
-      .from("suppliers")
-      .update(payload)
-      .eq("id", supplier.id)
-      .select("*")
-      .single();
+    const res = await updateSupplierNextContact(
+      supplier.id,
+      nextDate === "" ? null : nextDate,
+    );
     setSavingDate(false);
-    if (error) {
-      toast.error("Не удалось обновить дату", { description: error.message });
+    if (!res.ok) {
+      toast.error("Не удалось обновить дату", { description: res.error });
       return;
     }
-    onSupplierUpdated?.(data as Supplier);
+    if (res.data) onSupplierUpdated?.(res.data);
     toast.success("Дата следующего звонка обновлена");
   }
 
@@ -137,6 +131,12 @@ function SupplierCardDialogContent({
           БИН {supplier.bin}
           {supplier.category ? ` · ${supplier.category}` : ""}
         </DialogDescription>
+        {readyHint && (
+          <p className="mt-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-xs font-medium text-amber-800 dark:text-amber-200">
+            Готово к квалификации: НКТ + KZ + SKU &gt; 0 — рассмотрите статус
+            «Квалифицирован»
+          </p>
+        )}
       </DialogHeader>
 
       <div className="grid gap-4">
@@ -261,7 +261,6 @@ export function SupplierCardDialog({
   supplier,
   open,
   onOpenChange,
-  currentUserId,
   onSupplierUpdated,
 }: Props) {
   return (
@@ -270,7 +269,6 @@ export function SupplierCardDialog({
         <SupplierCardDialogContent
           key={supplier.id}
           supplier={supplier}
-          currentUserId={currentUserId}
           onSupplierUpdated={onSupplierUpdated}
         />
       ) : null}

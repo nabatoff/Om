@@ -64,6 +64,8 @@ export type Database = {
           created_at: string;
           full_name: string | null;
           id: string;
+          monthly_calls_target: number;
+          monthly_sales_target: number;
           role: string;
           updated_at: string;
         };
@@ -71,6 +73,8 @@ export type Database = {
           created_at?: string;
           full_name?: string | null;
           id: string;
+          monthly_calls_target?: number;
+          monthly_sales_target?: number;
           role?: string;
           updated_at?: string;
         };
@@ -78,6 +82,8 @@ export type Database = {
           created_at?: string;
           full_name?: string | null;
           id?: string;
+          monthly_calls_target?: number;
+          monthly_sales_target?: number;
           role?: string;
           updated_at?: string;
         };
@@ -172,6 +178,7 @@ export type Database = {
           name: string;
           next_contact_date: string | null;
           nkt_member: boolean;
+          sku_count: number;
           status: string;
           updated_at: string;
         };
@@ -185,6 +192,7 @@ export type Database = {
           name: string;
           next_contact_date?: string | null;
           nkt_member?: boolean;
+          sku_count?: number;
           status?: string;
           updated_at?: string;
         };
@@ -198,6 +206,7 @@ export type Database = {
           name?: string;
           next_contact_date?: string | null;
           nkt_member?: boolean;
+          sku_count?: number;
           status?: string;
           updated_at?: string;
         };
@@ -217,6 +226,10 @@ export type Database = {
     };
     Functions: {
       is_admin: { Args: Record<PropertyKey, never>; Returns: boolean };
+      working_days_remaining_in_month: {
+        Args: { p_ref: string };
+        Returns: number;
+      };
     };
     Enums: {
       [_ in never]: never;

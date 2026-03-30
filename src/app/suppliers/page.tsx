@@ -10,7 +10,7 @@ import { requireProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function SuppliersPage() {
-  const { profile } = await requireProfile();
+  await requireProfile();
   const supabase = await createClient();
   const { data: suppliers, error } = await supabase
     .from("suppliers")
@@ -43,10 +43,7 @@ export default async function SuppliersPage() {
           </CardDescription>
         </CardHeader>
         <div className="px-6 pb-6">
-          <SuppliersTable
-            suppliers={suppliers ?? []}
-            currentUserId={profile.id}
-          />
+          <SuppliersTable suppliers={suppliers ?? []} />
         </div>
       </Card>
     </div>

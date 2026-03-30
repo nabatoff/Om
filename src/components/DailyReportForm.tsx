@@ -1,8 +1,11 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm, type Resolver } from "react-hook-form";
+import { useCallback, useMemo, useState } from "react";
+import { useForm, useWatch, type Resolver } from "react-hook-form";
 import { toast } from "sonner";
+import { upsertDailyReport } from "@/app/actions/daily-report";
+import { getRollingTargetContext } from "@/app/actions/dashboard-metrics";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -13,22 +16,38 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
+import { todaysCallsTarget } from "@/lib/crm-formulas";
 import {
   dailyReportFormSchema,
   parseConfirmedSumInput,
   type DailyReportFormValues,
 } from "@/lib/schemas/daily-report";
+import { cn } from "@/lib/utils";
 
-type Props = {
-  managerId: string;
-  defaultDate: string;
+export type RollingContext = {
+  monthlyCallsTarget: number;
+  sumCallsBeforeThisDay: number;
+  workingDaysRemaining: number;
 };
 
-export function DailyReportForm({ managerId, defaultDate }: Props) {
+type Props = {
+  defaultDate: string;
+  initialValues?: Partial<DailyReportFormValues> & { confirmed_sum?: string };
+  initialRolling: RollingContext;
+};
+
+export function DailyReportForm({
+  defaultDate,
+  initialValues,
+  initialRolling,
+}: Props) {
+  const [rolling, setRolling] = useState<RollingContext>(initialRolling);
+  const [rollingLoading, setRollingLoading] = useState(false);
+
   const {
     register,
     handleSubmit,
+    control,
     formState: { errors, isSubmitting },
     reset,
   } = useForm<DailyReportFormValues>({
@@ -42,26 +61,42 @@ export function DailyReportForm({ managerId, defaultDate }: Props) {
       gep_done: 0,
       cp_sent: 0,
       confirmed_sum: "",
+      ...initialValues,
+      ...(initialValues?.confirmed_sum !== undefined
+        ? { confirmed_sum: String(initialValues.confirmed_sum) }
+        : {}),
     },
   });
 
+  const gepDone = useWatch({ control, name: "gep_done" }) ?? 0;
+
+  const refreshRolling = useCallback(async (date: string) => {
+    setRollingLoading(true);
+    const ctx = await getRollingTargetContext(date);
+    setRollingLoading(false);
+    if (ctx) setRolling(ctx);
+  }, []);
+
+  const dateField = register("report_date");
+
+  const todayTarget = useMemo(
+    () =>
+      todaysCallsTarget({
+        monthlyCallsTarget: rolling.monthlyCallsTarget,
+        sumCallsBeforeThisDayInMonth: rolling.sumCallsBeforeThisDay,
+        workingDaysRemaining: rolling.workingDaysRemaining,
+        gepDone: Number(gepDone) || 0,
+      }),
+    [rolling, gepDone],
+  );
+
+  const g5Active = (Number(gepDone) || 0) > 2;
+
   async function onSubmit(values: DailyReportFormValues) {
     const sum = parseConfirmedSumInput(values.confirmed_sum);
-    const supabase = createClient();
-    const { error } = await supabase.from("daily_reports").upsert(
-      {
-        manager_id: managerId,
-        report_date: values.report_date,
-        calls_count: values.calls_count,
-        gep_planned: values.gep_planned,
-        gep_done: values.gep_done,
-        cp_sent: values.cp_sent,
-        confirmed_sum: sum,
-      },
-      { onConflict: "manager_id,report_date" },
-    );
-    if (error) {
-      toast.error("Не удалось сохранить", { description: error.message });
+    const res = await upsertDailyReport({ ...values, confirmed_sum: values.confirmed_sum });
+    if (!res.ok) {
+      toast.error("Не удалось сохранить", { description: res.error });
       return;
     }
     toast.success("Отчёт сохранён", {
@@ -71,109 +106,153 @@ export function DailyReportForm({ managerId, defaultDate }: Props) {
       ...values,
       confirmed_sum: String(sum),
     });
+    await refreshRolling(values.report_date);
   }
 
   return (
-    <Card className="mt-6 max-w-xl border-border/80 shadow-sm">
-      <CardHeader className="space-y-1">
-        <CardTitle className="text-lg">Ежедневный отчёт</CardTitle>
-        <CardDescription>
-          Целые неотрицательные показатели; сумма продаж обязательна.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4">
-          <div className="grid gap-2">
-            <Label htmlFor="report_date">Дата</Label>
-            <Input id="report_date" type="date" {...register("report_date")} />
-            {errors.report_date && (
-              <p className="text-sm text-destructive">
-                {errors.report_date.message}
-              </p>
+    <div className="mt-6 space-y-4">
+      <Card className="border-border/80 bg-gradient-to-br from-card to-muted/20 shadow-sm">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Цель на сегодня (звонки)</CardTitle>
+          <CardDescription>
+            Rolling: (план месяца − звонки до этой даты) / рабочих дней до конца
+            месяца, затем лимит G5: 22 или 12 при ГЭП факт &gt; 2.
+            {rollingLoading && " · обновление…"}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p className="text-3xl font-semibold tabular-nums tracking-tight">
+            {todayTarget}{" "}
+            <span className="text-lg font-normal text-muted-foreground">
+              звонков
+            </span>
+          </p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            План месяца: {rolling.monthlyCallsTarget} · Уже в месяце до даты:{" "}
+            {rolling.sumCallsBeforeThisDay} · Рабочих дней осталось:{" "}
+            {rolling.workingDaysRemaining}
+            {g5Active && (
+              <span className="ml-2 font-medium text-amber-600 dark:text-amber-400">
+                Бонус G5 активен (лимит 12)
+              </span>
             )}
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card className="max-w-xl border-border/80 shadow-sm">
+        <CardHeader className="space-y-1">
+          <CardTitle className="text-lg">Ежедневный отчёт</CardTitle>
+          <CardDescription>
+            Неотрицательные целые; дата не в будущем; сумма обязательна.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="calls_count">Звонки</Label>
+              <Label htmlFor="report_date">Дата</Label>
               <Input
-                id="calls_count"
-                type="number"
-                min={0}
-                step={1}
-                {...register("calls_count", { valueAsNumber: true })}
+                id="report_date"
+                type="date"
+                {...dateField}
+                onChange={async (e) => {
+                  dateField.onChange(e);
+                  await refreshRolling(e.target.value);
+                }}
               />
-              {errors.calls_count && (
+              {errors.report_date && (
                 <p className="text-sm text-destructive">
-                  {errors.calls_count.message}
+                  {errors.report_date.message}
                 </p>
               )}
             </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-2">
+                <Label htmlFor="calls_count">Звонки</Label>
+                <Input
+                  id="calls_count"
+                  type="number"
+                  min={0}
+                  step={1}
+                  className={cn(
+                    g5Active &&
+                      "border-amber-500/70 bg-amber-50 text-amber-950 shadow-[0_0_0_1px_rgba(245,158,11,0.35)] dark:border-amber-500/50 dark:bg-amber-950/30 dark:text-amber-50",
+                  )}
+                  {...register("calls_count", { valueAsNumber: true })}
+                />
+                {errors.calls_count && (
+                  <p className="text-sm text-destructive">
+                    {errors.calls_count.message}
+                  </p>
+                )}
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="cp_sent">КП отправлено</Label>
+                <Input
+                  id="cp_sent"
+                  type="number"
+                  min={0}
+                  step={1}
+                  {...register("cp_sent", { valueAsNumber: true })}
+                />
+                {errors.cp_sent && (
+                  <p className="text-sm text-destructive">
+                    {errors.cp_sent.message}
+                  </p>
+                )}
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="gep_planned">ГЭП план</Label>
+                <Input
+                  id="gep_planned"
+                  type="number"
+                  min={0}
+                  step={1}
+                  {...register("gep_planned", { valueAsNumber: true })}
+                />
+                {errors.gep_planned && (
+                  <p className="text-sm text-destructive">
+                    {errors.gep_planned.message}
+                  </p>
+                )}
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="gep_done">ГЭП факт</Label>
+                <Input
+                  id="gep_done"
+                  type="number"
+                  min={0}
+                  step={1}
+                  {...register("gep_done", { valueAsNumber: true })}
+                />
+                {errors.gep_done && (
+                  <p className="text-sm text-destructive">
+                    {errors.gep_done.message}
+                  </p>
+                )}
+              </div>
+            </div>
             <div className="grid gap-2">
-              <Label htmlFor="cp_sent">КП отправлено</Label>
+              <Label htmlFor="confirmed_sum">Подтверждённая сумма</Label>
               <Input
-                id="cp_sent"
-                type="number"
-                min={0}
-                step={1}
-                {...register("cp_sent", { valueAsNumber: true })}
+                id="confirmed_sum"
+                type="text"
+                inputMode="decimal"
+                placeholder="0"
+                {...register("confirmed_sum")}
               />
-              {errors.cp_sent && (
+              {errors.confirmed_sum && (
                 <p className="text-sm text-destructive">
-                  {errors.cp_sent.message}
+                  {errors.confirmed_sum.message}
                 </p>
               )}
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="gep_planned">ГЭП план</Label>
-              <Input
-                id="gep_planned"
-                type="number"
-                min={0}
-                step={1}
-                {...register("gep_planned", { valueAsNumber: true })}
-              />
-              {errors.gep_planned && (
-                <p className="text-sm text-destructive">
-                  {errors.gep_planned.message}
-                </p>
-              )}
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="gep_done">ГЭП факт</Label>
-              <Input
-                id="gep_done"
-                type="number"
-                min={0}
-                step={1}
-                {...register("gep_done", { valueAsNumber: true })}
-              />
-              {errors.gep_done && (
-                <p className="text-sm text-destructive">
-                  {errors.gep_done.message}
-                </p>
-              )}
-            </div>
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="confirmed_sum">Подтверждённая сумма</Label>
-            <Input
-              id="confirmed_sum"
-              type="text"
-              inputMode="decimal"
-              placeholder="0"
-              {...register("confirmed_sum")}
-            />
-            {errors.confirmed_sum && (
-              <p className="text-sm text-destructive">
-                {errors.confirmed_sum.message}
-              </p>
-            )}
-          </div>
-          <Button type="submit" disabled={isSubmitting} className="w-fit">
-            {isSubmitting ? "Сохранение…" : "Сохранить отчёт"}
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+            <Button type="submit" disabled={isSubmitting} className="w-fit">
+              {isSubmitting ? "Сохранение…" : "Сохранить отчёт"}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

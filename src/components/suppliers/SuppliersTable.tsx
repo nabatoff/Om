@@ -23,8 +23,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { createClient } from "@/lib/supabase/client";
-import { localISODate, needsCallToday } from "@/lib/dates";
+import {
+  updateSupplierNextContact,
+  updateSupplierStatus,
+} from "@/app/actions/suppliers";
+import { isReadyForQualification } from "@/lib/crm-formulas";
+import { isContactToday, localISODate, needsCallToday } from "@/lib/dates";
 import type { Tables } from "@/types/database";
 
 type Supplier = Tables<"suppliers">;
@@ -54,23 +58,16 @@ function SupplierNextContactControls({
 
   async function save() {
     setSaving(true);
-    const supabase = createClient();
-    const payload =
-      value === ""
-        ? { next_contact_date: null as string | null }
-        : { next_contact_date: value };
-    const { data, error } = await supabase
-      .from("suppliers")
-      .update(payload)
-      .eq("id", supplier.id)
-      .select("*")
-      .single();
+    const res = await updateSupplierNextContact(
+      supplier.id,
+      value === "" ? null : value,
+    );
     setSaving(false);
-    if (error) {
-      toast.error("Не удалось сохранить дату", { description: error.message });
+    if (!res.ok) {
+      toast.error("Не удалось сохранить дату", { description: res.error });
       return;
     }
-    onUpdated(data as Supplier);
+    if (res.data) onUpdated(res.data);
     toast.success("Дата следующего звонка сохранена");
   }
 
@@ -133,10 +130,9 @@ function InputDate({
 
 type Props = {
   suppliers: Supplier[];
-  currentUserId: string;
 };
 
-export function SuppliersTable({ suppliers: initial, currentUserId }: Props) {
+export function SuppliersTable({ suppliers: initial }: Props) {
   const router = useRouter();
   const [suppliers, setSuppliers] = useState(initial);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -169,19 +165,21 @@ export function SuppliersTable({ suppliers: initial, currentUserId }: Props) {
 
   async function updateStatus(id: string, status: string) {
     setBusyId(id);
-    const supabase = createClient();
-    const { error } = await supabase
-      .from("suppliers")
-      .update({ status })
-      .eq("id", id);
+    const res = await updateSupplierStatus(id, status);
     setBusyId(null);
-    if (error) {
-      toast.error("Не удалось обновить статус", { description: error.message });
+    if (!res.ok) {
+      toast.error("Не удалось обновить статус", { description: res.error });
       return;
     }
-    setSuppliers((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, status } : s)),
-    );
+    if (res.data) {
+      setSuppliers((prev) =>
+        prev.map((s) => (s.id === id ? res.data! : s)),
+      );
+    } else {
+      setSuppliers((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, status } : s)),
+      );
+    }
     toast.success("Статус обновлён");
     router.refresh();
   }
@@ -237,7 +235,9 @@ export function SuppliersTable({ suppliers: initial, currentUserId }: Props) {
           <div className="flex flex-col gap-3 md:hidden">
             {visible.map((s) => {
               const overdue = isOverdue(s.next_contact_date);
-              const callToday = needsCallToday(s.next_contact_date);
+              const callToday = isContactToday(s.next_contact_date);
+              const urgent = needsCallToday(s.next_contact_date);
+              const ready = isReadyForQualification(s);
               return (
                 <button
                   key={s.id}
@@ -245,7 +245,9 @@ export function SuppliersTable({ suppliers: initial, currentUserId }: Props) {
                   onClick={() => openCard(s)}
                   className={
                     "w-full rounded-xl border border-border/80 bg-card p-4 text-left shadow-sm transition-colors hover:bg-muted/40 " +
-                    (overdue ? "border-destructive/40 bg-destructive/5" : "")
+                    (urgent
+                      ? "border-destructive/50 bg-destructive/10"
+                      : "")
                   }
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -262,15 +264,19 @@ export function SuppliersTable({ suppliers: initial, currentUserId }: Props) {
                         {s.bin}
                       </p>
                     </div>
-                    {overdue && (
-                      <Badge variant="overdue">Просрочено</Badge>
-                    )}
-                    {callToday && !overdue && (
-                      <Badge variant="secondary">Сегодня</Badge>
+                    {overdue && <Badge variant="overdue">Просрочено</Badge>}
+                    {callToday && <Badge variant="destructive">Сегодня</Badge>}
+                    {ready && (
+                      <Badge className="border-amber-500/50 bg-amber-500/15 text-amber-900 dark:text-amber-100">
+                        К квалификации
+                      </Badge>
                     )}
                   </div>
                   <p className="mt-2 text-sm text-muted-foreground">
                     {s.category ?? "Без категории"}
+                    {s.sku_count > 0 && (
+                      <span className="ml-2 text-xs">· SKU {s.sku_count}</span>
+                    )}
                   </p>
                   <div
                     className="mt-3 space-y-2"
@@ -320,6 +326,7 @@ export function SuppliersTable({ suppliers: initial, currentUserId }: Props) {
                   <TableHead>Название</TableHead>
                   <TableHead>БИН</TableHead>
                   <TableHead>Категория</TableHead>
+                  <TableHead className="w-[72px]">SKU</TableHead>
                   <TableHead className="min-w-[220px]">
                     След. звонок
                   </TableHead>
@@ -330,17 +337,20 @@ export function SuppliersTable({ suppliers: initial, currentUserId }: Props) {
               <TableBody>
                 {visible.map((s) => {
                   const overdue = isOverdue(s.next_contact_date);
+                  const todayRow = isContactToday(s.next_contact_date);
+                  const urgent = needsCallToday(s.next_contact_date);
+                  const ready = isReadyForQualification(s);
                   return (
                     <TableRow
                       key={s.id}
                       className={
-                        overdue
+                        urgent
                           ? "bg-destructive/10 text-destructive dark:bg-destructive/15"
                           : undefined
                       }
                     >
                       <TableCell className="font-medium">
-                        <span className={overdue ? "text-destructive" : ""}>
+                        <span className={urgent ? "text-destructive" : ""}>
                           {s.name}
                         </span>
                         {overdue && (
@@ -348,10 +358,25 @@ export function SuppliersTable({ suppliers: initial, currentUserId }: Props) {
                             Просрочено
                           </Badge>
                         )}
+                        {todayRow && !overdue && (
+                          <Badge variant="destructive" className="ml-2 align-middle">
+                            Сегодня
+                          </Badge>
+                        )}
+                        {ready && (
+                          <Badge
+                            className="ml-2 align-middle border-amber-500/50 bg-amber-500/15 text-amber-900 dark:text-amber-100"
+                          >
+                            К квалификации
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell className="font-mono text-xs">{s.bin}</TableCell>
                       <TableCell className="text-muted-foreground">
                         {s.category ?? "—"}
+                      </TableCell>
+                      <TableCell className="tabular-nums">
+                        {s.sku_count}
                       </TableCell>
                       <TableCell
                         className="align-top"
@@ -407,7 +432,6 @@ export function SuppliersTable({ suppliers: initial, currentUserId }: Props) {
           setDialogOpen(o);
           if (!o) setDialogSupplier(null);
         }}
-        currentUserId={currentUserId}
         onSupplierUpdated={handleSupplierUpdated}
       />
     </div>

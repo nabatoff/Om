@@ -32,3 +32,7 @@ export function needsCallToday(next: string | null, today = localISODate()): boo
   if (!next) return false;
   return next <= today;
 }
+
+export function isContactToday(next: string | null, today = localISODate()): boolean {
+  return next === today;
+}

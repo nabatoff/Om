@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { localISODate } from "@/lib/dates";
 
 const nonNegInt = z.coerce
   .number("Введите число")
@@ -22,6 +23,14 @@ export const dailyReportFormSchema = z
     confirmed_sum: z.string().trim().min(1, "Укажите подтверждённую сумму"),
   })
   .superRefine((data, ctx) => {
+    const today = localISODate();
+    if (data.report_date > today) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Дата отчёта не может быть в будущем",
+        path: ["report_date"],
+      });
+    }
     try {
       const n = parseConfirmedSumInput(data.confirmed_sum);
       if (n < 0) {
