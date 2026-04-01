@@ -11,7 +11,7 @@ export default async function Home() {
         CRM отдела продаж
       </h1>
       <p className="text-muted-foreground">
-        Next.js, Tailwind, Supabase: ежедневные отчёты, реестр поставщиков, RLS
+        Next.js, Tailwind, Supabase: ежедневные отчеты, реестр клиентов, RLS
         по ролям.
       </p>
       <div className="flex flex-wrap gap-3">
@@ -26,7 +26,7 @@ export default async function Home() {
         )}
         {user && (
           <Button variant="outline" asChild>
-            <Link href="/suppliers">Поставщики</Link>
+            <Link href="/suppliers">Клиенты</Link>
           </Button>
         )}
       </div>

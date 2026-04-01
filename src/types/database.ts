@@ -12,46 +12,117 @@ export type Database = {
   };
   public: {
     Tables: {
-      daily_reports: {
+      client_month_metrics: {
         Row: {
-          calls_count: number;
-          confirmed_sum: number;
-          cp_sent: number;
+          client_id: string;
           created_at: string;
-          gep_done: number;
-          gep_planned: number;
+          delivered_amount: number;
           id: string;
-          manager_id: string;
-          report_date: string;
+          month: string;
+          potential_amount: number;
           updated_at: string;
         };
         Insert: {
-          calls_count?: number;
-          confirmed_sum?: number;
-          cp_sent?: number;
+          client_id: string;
           created_at?: string;
-          gep_done?: number;
-          gep_planned?: number;
+          delivered_amount?: number;
           id?: string;
-          manager_id: string;
-          report_date: string;
+          month: string;
+          potential_amount?: number;
           updated_at?: string;
         };
         Update: {
-          calls_count?: number;
-          confirmed_sum?: number;
-          cp_sent?: number;
+          client_id?: string;
           created_at?: string;
-          gep_done?: number;
-          gep_planned?: number;
+          delivered_amount?: number;
           id?: string;
-          manager_id?: string;
-          report_date?: string;
+          month?: string;
+          potential_amount?: number;
           updated_at?: string;
         };
         Relationships: [
           {
-            foreignKeyName: "daily_reports_manager_id_fkey";
+            foreignKeyName: "client_month_metrics_client_id_fkey";
+            columns: ["client_id"];
+            isOneToOne: false;
+            referencedRelation: "clients";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      clients: {
+        Row: {
+          bin: string;
+          bitrix_url: string | null;
+          client_category: string | null;
+          company_name: string;
+          created_at: string;
+          current_work_comment: string | null;
+          em_plan: number;
+          id: string;
+          manager_id: string;
+          missing_requirement: Enums<"missing_requirement"> | null;
+          missing_requirement_comment: string | null;
+          nkt_status: Enums<"nkt_status">;
+          nkt_submitted_at: string | null;
+          omarket_status: Enums<"omarket_status"> | null;
+          sales_department_description: string | null;
+          sales_legal_entity: string | null;
+          sales_volume_2025: number;
+          sku_count: number;
+          status: Enums<"client_status">;
+          updated_at: string;
+          yearly_plan: number;
+        };
+        Insert: {
+          bin: string;
+          bitrix_url?: string | null;
+          client_category?: string | null;
+          company_name: string;
+          created_at?: string;
+          current_work_comment?: string | null;
+          em_plan?: number;
+          id?: string;
+          manager_id: string;
+          missing_requirement?: Enums<"missing_requirement"> | null;
+          missing_requirement_comment?: string | null;
+          nkt_status?: Enums<"nkt_status">;
+          nkt_submitted_at?: string | null;
+          omarket_status?: Enums<"omarket_status"> | null;
+          sales_department_description?: string | null;
+          sales_legal_entity?: string | null;
+          sales_volume_2025?: number;
+          sku_count?: number;
+          status: Enums<"client_status">;
+          updated_at?: string;
+          yearly_plan?: number;
+        };
+        Update: {
+          bin?: string;
+          bitrix_url?: string | null;
+          client_category?: string | null;
+          company_name?: string;
+          created_at?: string;
+          current_work_comment?: string | null;
+          em_plan?: number;
+          id?: string;
+          manager_id?: string;
+          missing_requirement?: Enums<"missing_requirement"> | null;
+          missing_requirement_comment?: string | null;
+          nkt_status?: Enums<"nkt_status">;
+          nkt_submitted_at?: string | null;
+          omarket_status?: Enums<"omarket_status"> | null;
+          sales_department_description?: string | null;
+          sales_legal_entity?: string | null;
+          sales_volume_2025?: number;
+          sku_count?: number;
+          status?: Enums<"client_status">;
+          updated_at?: string;
+          yearly_plan?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "clients_manager_id_fkey";
             columns: ["manager_id"];
             isOneToOne: false;
             referencedRelation: "profiles";
@@ -59,41 +130,61 @@ export type Database = {
           },
         ];
       };
-      gep_events: {
+      manager_daily_kpi: {
         Row: {
+          actual_calls: number;
+          carry_to_next_day: number;
+          confirmed_orders_sum: number;
+          cp_sent: number;
           created_at: string;
-          event_date: string;
+          gep_done: number;
+          gep_scheduled: number;
           id: string;
           manager_id: string;
-          supplier_id: string;
+          planned_calls: number;
+          qualified_count: number;
+          repeat_meetings: number;
+          report_date: string;
+          updated_at: string;
         };
         Insert: {
+          actual_calls?: number;
+          carry_to_next_day?: number;
+          confirmed_orders_sum?: number;
+          cp_sent?: number;
           created_at?: string;
-          event_date: string;
+          gep_done?: number;
+          gep_scheduled?: number;
           id?: string;
           manager_id: string;
-          supplier_id: string;
+          planned_calls?: number;
+          qualified_count?: number;
+          repeat_meetings?: number;
+          report_date: string;
+          updated_at?: string;
         };
         Update: {
+          actual_calls?: number;
+          carry_to_next_day?: number;
+          confirmed_orders_sum?: number;
+          cp_sent?: number;
           created_at?: string;
-          event_date?: string;
+          gep_done?: number;
+          gep_scheduled?: number;
           id?: string;
           manager_id?: string;
-          supplier_id?: string;
+          planned_calls?: number;
+          qualified_count?: number;
+          repeat_meetings?: number;
+          report_date?: string;
+          updated_at?: string;
         };
         Relationships: [
           {
-            foreignKeyName: "gep_events_manager_id_fkey";
+            foreignKeyName: "manager_daily_kpi_manager_id_fkey";
             columns: ["manager_id"];
             isOneToOne: false;
             referencedRelation: "profiles";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "gep_events_supplier_id_fkey";
-            columns: ["supplier_id"];
-            isOneToOne: false;
-            referencedRelation: "suppliers";
             referencedColumns: ["id"];
           },
         ];
@@ -101,177 +192,63 @@ export type Database = {
       profiles: {
         Row: {
           created_at: string;
+          default_daily_calls_plan: number;
           full_name: string | null;
           id: string;
+          is_active: boolean;
           monthly_calls_target: number;
           monthly_sales_target: number;
           role: string;
+          team: string | null;
           updated_at: string;
         };
         Insert: {
           created_at?: string;
+          default_daily_calls_plan?: number;
           full_name?: string | null;
           id: string;
+          is_active?: boolean;
           monthly_calls_target?: number;
           monthly_sales_target?: number;
           role?: string;
+          team?: string | null;
           updated_at?: string;
         };
         Update: {
           created_at?: string;
+          default_daily_calls_plan?: number;
           full_name?: string | null;
           id?: string;
+          is_active?: boolean;
           monthly_calls_target?: number;
           monthly_sales_target?: number;
           role?: string;
+          team?: string | null;
           updated_at?: string;
         };
         Relationships: [];
-      };
-      supplier_comments: {
-        Row: {
-          author_id: string;
-          body: string;
-          created_at: string;
-          id: string;
-          supplier_id: string;
-        };
-        Insert: {
-          author_id: string;
-          body: string;
-          created_at?: string;
-          id?: string;
-          supplier_id: string;
-        };
-        Update: {
-          author_id?: string;
-          body?: string;
-          created_at?: string;
-          id?: string;
-          supplier_id?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "supplier_comments_author_id_fkey";
-            columns: ["author_id"];
-            isOneToOne: false;
-            referencedRelation: "profiles";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "supplier_comments_supplier_id_fkey";
-            columns: ["supplier_id"];
-            isOneToOne: false;
-            referencedRelation: "suppliers";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
-      supplier_notes: {
-        Row: {
-          content: string;
-          created_at: string;
-          id: string;
-          manager_id: string;
-          supplier_id: string;
-        };
-        Insert: {
-          content: string;
-          created_at?: string;
-          id?: string;
-          manager_id: string;
-          supplier_id: string;
-        };
-        Update: {
-          content?: string;
-          created_at?: string;
-          id?: string;
-          manager_id?: string;
-          supplier_id?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "supplier_notes_manager_id_fkey";
-            columns: ["manager_id"];
-            isOneToOne: false;
-            referencedRelation: "profiles";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "supplier_notes_supplier_id_fkey";
-            columns: ["supplier_id"];
-            isOneToOne: false;
-            referencedRelation: "suppliers";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
-      suppliers: {
-        Row: {
-          bin: string;
-          category: string | null;
-          created_at: string;
-          id: string;
-          kz_quality_mark: boolean;
-          manager_id: string | null;
-          name: string;
-          next_contact_date: string | null;
-          nkt_member: boolean;
-          sku_count: number;
-          status: string;
-          updated_at: string;
-        };
-        Insert: {
-          bin: string;
-          category?: string | null;
-          created_at?: string;
-          id?: string;
-          kz_quality_mark?: boolean;
-          manager_id?: string | null;
-          name: string;
-          next_contact_date?: string | null;
-          nkt_member?: boolean;
-          sku_count?: number;
-          status?: string;
-          updated_at?: string;
-        };
-        Update: {
-          bin?: string;
-          category?: string | null;
-          created_at?: string;
-          id?: string;
-          kz_quality_mark?: boolean;
-          manager_id?: string | null;
-          name?: string;
-          next_contact_date?: string | null;
-          nkt_member?: boolean;
-          sku_count?: number;
-          status?: string;
-          updated_at?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "suppliers_manager_id_fkey";
-            columns: ["manager_id"];
-            isOneToOne: false;
-            referencedRelation: "profiles";
-            referencedColumns: ["id"];
-          },
-        ];
       };
     };
     Views: {
       [_ in never]: never;
     };
     Functions: {
-      is_admin: { Args: Record<PropertyKey, never>; Returns: boolean };
+      is_admin: { Args: never; Returns: boolean };
       working_days_remaining_in_month: {
         Args: { p_ref: string };
         Returns: number;
       };
     };
     Enums: {
-      [_ in never]: never;
+      client_status: "ktp" | "distr" | "dealer" | "resale";
+      missing_requirement:
+        | "responsible"
+        | "tech_conditions"
+        | "photos"
+        | "no_preorders"
+        | "docs";
+      nkt_status: "draft" | "on_moderation" | "kz_badge";
+      omarket_status: "cards_created" | "wg_set" | "initial_setup";
     };
     CompositeTypes: {
       [_ in never]: never;
@@ -384,13 +361,23 @@ export type Enums<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      client_status: ["ktp", "distr", "dealer", "resale"],
+      missing_requirement: [
+        "responsible",
+        "tech_conditions",
+        "photos",
+        "no_preorders",
+        "docs",
+      ],
+      nkt_status: ["draft", "on_moderation", "kz_badge"],
+      omarket_status: ["cards_created", "wg_set", "initial_setup"],
+    },
   },
 } as const;
 
 export type ProfileRole = "admin" | "manager";
-export type SupplierStatus =
-  | "new"
-  | "in_progress"
-  | "gep_done"
-  | "qualified";
+export type ClientStatus = Enums<"client_status">;
+export type NktStatus = Enums<"nkt_status">;
+export type OMarketStatus = Enums<"omarket_status">;
+export type MissingRequirement = Enums<"missing_requirement">;

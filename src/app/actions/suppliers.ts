@@ -2,125 +2,95 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { clientSchema, monthMetricSchema } from "@/lib/schemas/crm";
 import type { Tables } from "@/types/database";
 
-export type ActionResult = { ok: true; data?: Tables<"suppliers"> } | { ok: false; error: string };
+type Client = Tables<"clients">;
+type ActionResult = { ok: true; data?: Client } | { ok: false; error: string };
 
-async function canAccessSupplier(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  userId: string,
-  supplierId: string,
-): Promise<boolean> {
-  const { data: prof } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", userId)
-    .single();
-  if (prof?.role === "admin") return true;
-  const { data: s } = await supabase
-    .from("suppliers")
-    .select("manager_id")
-    .eq("id", supplierId)
-    .single();
-  return s?.manager_id === userId;
+function asNull(v?: string) {
+  return v && v.trim() ? v.trim() : null;
 }
 
-export async function updateSupplierStatus(
-  supplierId: string,
-  status: string,
-): Promise<ActionResult> {
-  const allowed = ["new", "in_progress", "gep_done", "qualified"];
-  if (!allowed.includes(status)) {
-    return { ok: false, error: "Недопустимый статус" };
+export async function insertSupplier(input: unknown): Promise<ActionResult> {
+  const parsed = clientSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Ошибка валидации" };
   }
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Не авторизован" };
-  const ok = await canAccessSupplier(supabase, user.id, supplierId);
-  if (!ok) return { ok: false, error: "Нет доступа" };
 
+  const v = parsed.data;
   const { data, error } = await supabase
-    .from("suppliers")
-    .update({ status })
-    .eq("id", supplierId)
-    .select("*")
-    .single();
-  if (error) return { ok: false, error: error.message };
-  revalidatePath("/suppliers");
-  revalidatePath("/admin");
-  return { ok: true, data: data as Tables<"suppliers"> };
-}
-
-export async function updateSupplierNextContact(
-  supplierId: string,
-  nextContactDate: string | null,
-): Promise<ActionResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Не авторизован" };
-  const ok = await canAccessSupplier(supabase, user.id, supplierId);
-  if (!ok) return { ok: false, error: "Нет доступа" };
-
-  const { data, error } = await supabase
-    .from("suppliers")
-    .update({ next_contact_date: nextContactDate })
-    .eq("id", supplierId)
-    .select("*")
-    .single();
-  if (error) return { ok: false, error: error.message };
-  revalidatePath("/suppliers");
-  return { ok: true, data: data as Tables<"suppliers"> };
-}
-
-const addSupplierSchema = {
-  name: (s: string) => s.trim().length > 0,
-  bin: (s: string) => s.trim().length > 0,
-};
-
-export async function insertSupplier(form: {
-  name: string;
-  bin: string;
-  category: string;
-  nkt_member: boolean;
-  kz_quality_mark: boolean;
-  sku_count: number;
-  next_contact_date: string | null;
-}): Promise<ActionResult> {
-  if (!addSupplierSchema.name(form.name) || !addSupplierSchema.bin(form.bin)) {
-    return { ok: false, error: "Название и БИН обязательны" };
-  }
-  if (form.sku_count < 0 || !Number.isInteger(form.sku_count)) {
-    return { ok: false, error: "Кол-во SKU — целое ≥ 0" };
-  }
-
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "Не авторизован" };
-
-  const { data, error } = await supabase
-    .from("suppliers")
+    .from("clients")
     .insert({
-      name: form.name.trim(),
-      bin: form.bin.trim(),
-      category: form.category.trim() || null,
-      nkt_member: form.nkt_member,
-      kz_quality_mark: form.kz_quality_mark,
-      sku_count: form.sku_count,
       manager_id: user.id,
-      status: "new",
-      next_contact_date: form.next_contact_date,
+      company_name: v.company_name.trim(),
+      bin: v.bin.trim(),
+      bitrix_url: asNull(v.bitrix_url),
+      client_category: asNull(v.client_category),
+      sales_volume_2025: v.sales_volume_2025,
+      status: v.status,
+      yearly_plan: v.yearly_plan,
+      em_plan: v.em_plan,
+      sales_department_description: asNull(v.sales_department_description),
+      nkt_status: v.nkt_status,
+      nkt_submitted_at: v.nkt_submitted_at || null,
+      omarket_status: v.omarket_status ?? null,
+      current_work_comment: asNull(v.current_work_comment),
+      missing_requirement: v.missing_requirement ?? null,
+      missing_requirement_comment: asNull(v.missing_requirement_comment),
+      sales_legal_entity: asNull(v.sales_legal_entity),
+      sku_count: v.sku_count,
     })
     .select("*")
     .single();
 
   if (error) return { ok: false, error: error.message };
   revalidatePath("/suppliers");
+  revalidatePath("/dashboard");
   revalidatePath("/admin");
-  return { ok: true, data: data as Tables<"suppliers"> };
+  return { ok: true, data };
+}
+
+export async function updateSupplierStatus(
+  clientId: string,
+  status: Client["status"],
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("clients")
+    .update({ status })
+    .eq("id", clientId)
+    .select("*")
+    .single();
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/suppliers");
+  return { ok: true, data };
+}
+
+export async function upsertClientMonthMetric(input: unknown) {
+  const parsed = monthMetricSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false as const, error: parsed.error.issues[0]?.message ?? "Ошибка валидации" };
+  }
+  const v = parsed.data;
+  const supabase = await createClient();
+  const { error } = await supabase.from("client_month_metrics").upsert(
+    {
+      client_id: v.client_id,
+      month: v.month,
+      delivered_amount: v.delivered_amount,
+      potential_amount: v.potential_amount,
+    },
+    { onConflict: "client_id,month" },
+  );
+  if (error) return { ok: false as const, error: error.message };
+  revalidatePath("/suppliers");
+  revalidatePath("/dashboard");
+  revalidatePath("/admin");
+  return { ok: true as const };
 }

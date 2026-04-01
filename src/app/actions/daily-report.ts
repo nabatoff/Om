@@ -2,36 +2,30 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import {
-  dailyReportFormSchema,
-  parseConfirmedSumInput,
-} from "@/lib/schemas/daily-report";
-import { localISODate } from "@/lib/dates";
+import { dailyKpiSchema } from "@/lib/schemas/crm";
 
-export type ActionResult = { ok: true; gep_done: number } | { ok: false; error: string };
+export type ActionResult =
+  | { ok: true; planned_calls: number; carry_to_next_day: number }
+  | { ok: false; error: string };
+
+function isoDate(d: Date) {
+  return d.toISOString().slice(0, 10);
+}
+
+function previousDate(iso: string) {
+  const d = new Date(`${iso}T00:00:00`);
+  d.setDate(d.getDate() - 1);
+  return isoDate(d);
+}
 
 export async function upsertDailyReport(
   input: unknown,
 ): Promise<ActionResult> {
-  const parsed = dailyReportFormSchema.safeParse(input);
+  const parsed = dailyKpiSchema.safeParse(input);
   if (!parsed.success) {
-    const msg = parsed.error.flatten().fieldErrors;
-    const first = Object.values(msg).flat()[0];
-    return { ok: false, error: first ?? "Ошибка валидации" };
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Ошибка валидации" };
   }
   const v = parsed.data;
-  let sum: number;
-  try {
-    sum = parseConfirmedSumInput(v.confirmed_sum);
-    if (sum < 0) return { ok: false, error: "Сумма не может быть отрицательной" };
-  } catch {
-    return { ok: false, error: "Некорректная сумма" };
-  }
-
-  const today = localISODate();
-  if (v.report_date > today) {
-    return { ok: false, error: "Дата отчёта не может быть в будущем" };
-  }
 
   const supabase = await createClient();
   const {
@@ -39,32 +33,39 @@ export async function upsertDailyReport(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Не авторизован" };
 
-  const { count, error: cErr } = await supabase
-    .from("gep_events")
-    .select("id", { count: "exact", head: true })
+  const { data: profile, error: pErr } = await supabase
+    .from("profiles")
+    .select("default_daily_calls_plan")
+    .eq("id", user.id)
+    .single();
+  if (pErr) return { ok: false, error: pErr.message };
+
+  const basePlan = profile?.default_daily_calls_plan ?? 22;
+  const prevDate = previousDate(v.report_date);
+  const { data: prevDay } = await supabase
+    .from("manager_daily_kpi")
+    .select("carry_to_next_day")
     .eq("manager_id", user.id)
-    .eq("event_date", v.report_date);
+    .eq("report_date", prevDate)
+    .maybeSingle();
 
-  if (cErr) return { ok: false, error: cErr.message };
-  const gepDone = count ?? 0;
+  const gepBonus = v.gep_done > 2 ? 10 : 0;
+  const plannedCalls = Math.max(0, basePlan - gepBonus + (prevDay?.carry_to_next_day ?? 0));
+  const carryToNextDay = Math.max(0, plannedCalls - v.actual_calls);
 
-  if (gepDone > v.gep_planned) {
-    return {
-      ok: false,
-      error:
-        "План ГЭП меньше числа уже зафиксированных презентаций. Увеличьте план или удалите лишние события (обратитесь к админу).",
-    };
-  }
-
-  const { error } = await supabase.from("daily_reports").upsert(
+  const { error } = await supabase.from("manager_daily_kpi").upsert(
     {
       manager_id: user.id,
       report_date: v.report_date,
-      calls_count: v.calls_count,
-      gep_planned: v.gep_planned,
-      gep_done: gepDone,
+      planned_calls: plannedCalls,
+      actual_calls: v.actual_calls,
+      qualified_count: v.qualified_count,
+      gep_scheduled: v.gep_scheduled,
+      gep_done: v.gep_done,
       cp_sent: v.cp_sent,
-      confirmed_sum: sum,
+      repeat_meetings: v.repeat_meetings,
+      confirmed_orders_sum: v.confirmed_orders_sum,
+      carry_to_next_day: carryToNextDay,
     },
     { onConflict: "manager_id,report_date" },
   );
@@ -72,5 +73,5 @@ export async function upsertDailyReport(
   if (error) return { ok: false, error: error.message };
   revalidatePath("/dashboard");
   revalidatePath("/admin");
-  return { ok: true, gep_done: gepDone };
+  return { ok: true, planned_calls: plannedCalls, carry_to_next_day: carryToNextDay };
 }

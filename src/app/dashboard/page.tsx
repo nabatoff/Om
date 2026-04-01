@@ -1,116 +1,66 @@
 import { DailyReportForm } from "@/components/DailyReportForm";
-import type { RollingContext } from "@/components/DailyReportForm";
 import {
   Card,
   CardDescription,
+  CardContent,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
 import { requireProfile } from "@/lib/auth";
-import {
-  monthStartISO,
-  sumCallsBeforeDateInMonth,
-  workingDaysRemainingInMonth,
-} from "@/lib/crm-formulas";
 import { localISODate } from "@/lib/dates";
+import { getDashboardCards } from "@/app/actions/dashboard-metrics";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function DashboardPage() {
   const { profile } = await requireProfile();
   const supabase = await createClient();
   const today = localISODate();
-
-  const { data: fullProfile } = await supabase
-    .from("profiles")
-    .select("monthly_calls_target")
-    .eq("id", profile.id)
-    .single();
-
-  const monthlyCallsTarget = fullProfile?.monthly_calls_target ?? 660;
-
-  const start = monthStartISO(today);
-  const [y, m] = today.split("-").map(Number);
-  const lastD = new Date(y, m, 0).getDate();
-  const end = `${y}-${String(m).padStart(2, "0")}-${String(lastD).padStart(2, "0")}`;
-
-  const { data: monthRows } = await supabase
-    .from("daily_reports")
-    .select("report_date, calls_count, gep_planned, gep_done, cp_sent, confirmed_sum")
-    .eq("manager_id", profile.id)
-    .gte("report_date", start)
-    .lte("report_date", end);
-
-  const sumBefore = sumCallsBeforeDateInMonth(monthRows ?? [], today);
-  const workingDaysRemaining = workingDaysRemainingInMonth(today);
-
-  const initialRolling: RollingContext = {
-    monthlyCallsTarget,
-    sumCallsBeforeThisDay: sumBefore,
-    workingDaysRemaining,
-  };
+  const cards = await getDashboardCards();
 
   const { data: todayReport } = await supabase
-    .from("daily_reports")
+    .from("manager_daily_kpi")
     .select("*")
     .eq("manager_id", profile.id)
     .eq("report_date", today)
     .maybeSingle();
-
-  const { count: gepCount } = await supabase
-    .from("gep_events")
-    .select("id", { count: "exact", head: true })
-    .eq("manager_id", profile.id)
-    .eq("event_date", today);
-
-  const gepDoneFromEvents = gepCount ?? 0;
-
-  const { data: mySuppliers } = await supabase
-    .from("suppliers")
-    .select("id, name")
-    .eq("manager_id", profile.id)
-    .order("name", { ascending: true });
-
-  const initialValues = todayReport
-    ? {
-        report_date: todayReport.report_date,
-        calls_count: todayReport.calls_count,
-        gep_planned: todayReport.gep_planned,
-        cp_sent: todayReport.cp_sent,
-        confirmed_sum: String(todayReport.confirmed_sum),
-      }
-    : undefined;
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 px-4 py-8">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Дашборд менеджера</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          ГЭП факт — по журналу презентаций; не больше плана за день.
+          KPI по клиентам и ежедневный отчет.
         </p>
       </div>
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Card className="border-border/80 shadow-sm">
+          <CardHeader className="pb-2"><CardDescription>Поставщики 10млн+</CardDescription></CardHeader>
+          <CardContent><CardTitle>{cards?.suppliers10mCount ?? 0}</CardTitle></CardContent>
+        </Card>
+        <Card className="border-border/80 shadow-sm">
+          <CardHeader className="pb-2"><CardDescription>Поставщики SKU 100+</CardDescription></CardHeader>
+          <CardContent><CardTitle>{cards?.suppliersSku100Count ?? 0}</CardTitle></CardContent>
+        </Card>
+        <Card className="border-border/80 shadow-sm">
+          <CardHeader className="pb-2"><CardDescription>План 10млн+ (%)</CardDescription></CardHeader>
+          <CardContent><CardTitle>{cards?.plan10mPercent ?? 0}%</CardTitle></CardContent>
+        </Card>
+        <Card className="border-border/80 shadow-sm">
+          <CardHeader className="pb-2"><CardDescription>План SKU 100+ (%)</CardDescription></CardHeader>
+          <CardContent><CardTitle>{cards?.planSku100Percent ?? 0}%</CardTitle></CardContent>
+        </Card>
+      </section>
       {todayReport && (
         <Card className="border-border/80 bg-muted/30 shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Сегодня в базе</CardTitle>
             <CardDescription>
-              Звонки {todayReport.calls_count} · ГЭП {gepDoneFromEvents}/
-              {todayReport.gep_planned} · КП {todayReport.cp_sent} · сумма{" "}
-              {Number(todayReport.confirmed_sum).toLocaleString("ru-RU")}
+              План звонков {todayReport.planned_calls} · Факт {todayReport.actual_calls} · ГЭП {todayReport.gep_done} · перенос {todayReport.carry_to_next_day}
             </CardDescription>
           </CardHeader>
         </Card>
       )}
-      <DailyReportForm
-        defaultDate={today}
-        initialValues={initialValues}
-        initialRolling={initialRolling}
-        initialGepDone={gepDoneFromEvents}
-        initialHasReport={!!todayReport}
-        suppliers={(mySuppliers ?? []).map((s) => ({
-          id: s.id,
-          name: s.name,
-        }))}
-      />
+      <DailyReportForm defaultDate={today} />
     </div>
   );
 }

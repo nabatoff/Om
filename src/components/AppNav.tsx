@@ -43,7 +43,7 @@ export function AppNav({ profile }: Props) {
             Дашборд
           </Link>
           <Link href="/suppliers" className={navLink}>
-            Поставщики
+            Клиенты
           </Link>
           {profile.role === "admin" && (
             <Link href="/admin" className={navLink}>

@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 
 export type ReportDateState = {
   hasReport: boolean;
-  gep_planned: number;
+  gep_scheduled: number;
   gep_done: number;
 } | null;
 
@@ -18,31 +18,23 @@ export async function getReportDateState(
   if (!user) return null;
 
   const { data: report } = await supabase
-    .from("daily_reports")
-    .select("gep_planned, gep_done")
+    .from("manager_daily_kpi")
+    .select("gep_scheduled, gep_done")
     .eq("manager_id", user.id)
     .eq("report_date", reportDate)
     .maybeSingle();
 
-  const { count } = await supabase
-    .from("gep_events")
-    .select("id", { count: "exact", head: true })
-    .eq("manager_id", user.id)
-    .eq("event_date", reportDate);
-
-  const fromEvents = count ?? 0;
-
   if (report) {
     return {
       hasReport: true,
-      gep_planned: report.gep_planned,
-      gep_done: fromEvents,
+      gep_scheduled: report.gep_scheduled,
+      gep_done: report.gep_done,
     };
   }
 
   return {
     hasReport: false,
-    gep_planned: 0,
-    gep_done: fromEvents,
+    gep_scheduled: 0,
+    gep_done: 0,
   };
 }

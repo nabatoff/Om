@@ -6,133 +6,234 @@ import { toast } from "sonner";
 import { insertSupplier } from "@/app/actions/suppliers";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { addDaysISO, localISODate } from "@/lib/dates";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 
 export function AddSupplierForm() {
   const router = useRouter();
-  const [name, setName] = useState("");
+  const [companyName, setCompanyName] = useState("");
   const [bin, setBin] = useState("");
-  const [category, setCategory] = useState("");
+  const [bitrixUrl, setBitrixUrl] = useState("");
+  const [clientCategory, setClientCategory] = useState("");
+  const [salesVolume2025, setSalesVolume2025] = useState(0);
+  const [status, setStatus] = useState<"ktp" | "distr" | "dealer" | "resale">("ktp");
+  const [yearlyPlan, setYearlyPlan] = useState(0);
+  const [emPlan, setEmPlan] = useState(0);
+  const [salesDepartmentDescription, setSalesDepartmentDescription] = useState("");
+  const [nktStatus, setNktStatus] = useState<"draft" | "on_moderation" | "kz_badge">("draft");
+  const [nktSubmittedAt, setNktSubmittedAt] = useState("");
+  const [omarketStatus, setOmarketStatus] = useState<"cards_created" | "wg_set" | "initial_setup">("cards_created");
+  const [currentWorkComment, setCurrentWorkComment] = useState("");
+  const [missingRequirement, setMissingRequirement] = useState<"responsible" | "tech_conditions" | "photos" | "no_preorders" | "docs">("responsible");
+  const [missingRequirementComment, setMissingRequirementComment] = useState("");
+  const [salesLegalEntity, setSalesLegalEntity] = useState("");
   const [skuCount, setSkuCount] = useState(0);
-  const [nktMember, setNktMember] = useState(false);
-  const [kzQuality, setKzQuality] = useState(false);
-  const [nextContactDate, setNextContactDate] = useState(
-    addDaysISO(localISODate(), 7),
-  );
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     const res = await insertSupplier({
-      name,
+      company_name: companyName,
       bin,
-      category,
-      nkt_member: nktMember,
-      kz_quality_mark: kzQuality,
+      bitrix_url: bitrixUrl,
+      client_category: clientCategory,
+      sales_volume_2025: salesVolume2025,
+      status,
+      yearly_plan: yearlyPlan,
+      em_plan: emPlan,
+      sales_department_description: salesDepartmentDescription,
+      nkt_status: nktStatus,
+      nkt_submitted_at: nktSubmittedAt,
+      omarket_status: omarketStatus,
+      current_work_comment: currentWorkComment,
+      missing_requirement: missingRequirement,
+      missing_requirement_comment: missingRequirementComment,
+      sales_legal_entity: salesLegalEntity,
       sku_count: skuCount,
-      next_contact_date: nextContactDate || null,
     });
     setLoading(false);
     if (!res.ok) {
       toast.error("Не удалось добавить", { description: res.error });
       return;
     }
-    setName("");
+    setCompanyName("");
     setBin("");
-    setCategory("");
+    setBitrixUrl("");
+    setClientCategory("");
+    setSalesVolume2025(0);
+    setYearlyPlan(0);
+    setEmPlan(0);
+    setSalesDepartmentDescription("");
+    setNktSubmittedAt("");
+    setCurrentWorkComment("");
+    setMissingRequirementComment("");
+    setSalesLegalEntity("");
     setSkuCount(0);
-    setNktMember(false);
-    setKzQuality(false);
-    setNextContactDate(addDaysISO(localISODate(), 7));
-    toast.success("Поставщик добавлен");
+    toast.success("Клиент добавлен");
     router.refresh();
   }
 
   return (
-    <Card className="max-w-2xl border-border/80 shadow-sm">
+    <Card className="border-border/80 shadow-sm">
       <CardHeader>
-        <CardTitle className="text-base">Новый поставщик</CardTitle>
+        <CardTitle className="text-base">Новый клиент</CardTitle>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit} className="grid gap-4">
-          <div className="grid gap-4 sm:grid-cols-2">
+        <form onSubmit={handleSubmit} className="grid gap-4 lg:grid-cols-2">
             <div className="grid gap-2">
-              <Label htmlFor="sup_name">Название</Label>
+              <Label htmlFor="company_name">Название компании</Label>
               <Input
-                id="sup_name"
+                id="company_name"
                 required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="sup_bin">БИН</Label>
+              <Label htmlFor="bin">БИН</Label>
               <Input
-                id="sup_bin"
+                id="bin"
                 required
                 value={bin}
                 onChange={(e) => setBin(e.target.value)}
                 className="font-mono text-sm"
               />
             </div>
-            <div className="grid gap-2 sm:col-span-2">
-              <Label htmlFor="sup_cat">Категория</Label>
+            <div className="grid gap-2">
+              <Label htmlFor="bitrix_url">Ссылка на Bitrix</Label>
               <Input
-                id="sup_cat"
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
+                id="bitrix_url"
+                value={bitrixUrl}
+                onChange={(e) => setBitrixUrl(e.target.value)}
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="sup_sku">Кол-во SKU</Label>
+              <Label htmlFor="client_category">Категория клиента</Label>
               <Input
-                id="sup_sku"
+                id="client_category"
+                value={clientCategory}
+                onChange={(e) => setClientCategory(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="sales_volume_2025">Объем продаж на ГЗ за 2025</Label>
+              <Input
+                id="sales_volume_2025"
                 type="number"
                 min={0}
-                step={1}
-                value={skuCount}
-                onChange={(e) => setSkuCount(Number(e.target.value) || 0)}
+                value={salesVolume2025}
+                onChange={(e) => setSalesVolume2025(Number(e.target.value) || 0)}
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="sup_next">Следующий контакт</Label>
+              <Label>Статус клиента</Label>
+              <Select value={status} onValueChange={(v) => setStatus(v as typeof status)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ktp">КТП</SelectItem>
+                  <SelectItem value="distr">Дистр</SelectItem>
+                  <SelectItem value="dealer">Дилер</SelectItem>
+                  <SelectItem value="resale">Перепродажа</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="yearly_plan">Годовой план</Label>
               <Input
-                id="sup_next"
-                type="date"
-                value={nextContactDate}
-                onChange={(e) => setNextContactDate(e.target.value)}
+                id="yearly_plan"
+                type="number"
+                min={0}
+                value={yearlyPlan}
+                onChange={(e) => setYearlyPlan(Number(e.target.value) || 0)}
               />
             </div>
-          </div>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="nkt"
-                checked={nktMember}
-                onCheckedChange={(v) => setNktMember(v === true)}
+            <div className="grid gap-2">
+              <Label htmlFor="em_plan">План на ЭМ</Label>
+              <Input
+                id="em_plan"
+                type="number"
+                min={0}
+                value={emPlan}
+                onChange={(e) => setEmPlan(Number(e.target.value) || 0)}
               />
-              <Label htmlFor="nkt" className="font-normal">
-                НКТ
-              </Label>
             </div>
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="kz"
-                checked={kzQuality}
-                onCheckedChange={(v) => setKzQuality(v === true)}
+            <div className="grid gap-2">
+              <Label htmlFor="sales_department_description">Описание отдела продаж</Label>
+              <Textarea
+                id="sales_department_description"
+                value={salesDepartmentDescription}
+                onChange={(e) => setSalesDepartmentDescription(e.target.value)}
               />
-              <Label htmlFor="kz" className="font-normal">
-                Знак качества KZ
-              </Label>
             </div>
-          </div>
-          <Button type="submit" disabled={loading} className="w-fit">
+            <div className="grid gap-2">
+              <Label>Статус в НКТ</Label>
+              <Select value={nktStatus} onValueChange={(v) => setNktStatus(v as typeof nktStatus)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="draft">Черновик</SelectItem>
+                  <SelectItem value="on_moderation">На модерации</SelectItem>
+                  <SelectItem value="kz_badge">Есть значок KZ</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="nkt_submitted_at">Дата подачи в НКТ</Label>
+              <Input id="nkt_submitted_at" type="date" value={nktSubmittedAt} onChange={(e) => setNktSubmittedAt(e.target.value)} />
+            </div>
+            <div className="grid gap-2">
+              <Label>Статус в OMarket</Label>
+              <Select value={omarketStatus} onValueChange={(v) => setOmarketStatus(v as typeof omarketStatus)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cards_created">Карточки созданы</SelectItem>
+                  <SelectItem value="wg_set">WG выставлены</SelectItem>
+                  <SelectItem value="initial_setup">Первичная настройка</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="current_work_comment">Какая сейчас работа проводится</Label>
+              <Textarea id="current_work_comment" value={currentWorkComment} onChange={(e) => setCurrentWorkComment(e.target.value)} />
+            </div>
+            <div className="grid gap-2">
+              <Label>Чего не хватает</Label>
+              <Select value={missingRequirement} onValueChange={(v) => setMissingRequirement(v as typeof missingRequirement)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="responsible">Ответственный</SelectItem>
+                  <SelectItem value="tech_conditions">Техусловия</SelectItem>
+                  <SelectItem value="photos">Фото</SelectItem>
+                  <SelectItem value="no_preorders">Нет предзаказов</SelectItem>
+                  <SelectItem value="docs">Получение доков</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="missing_requirement_comment">Комментарий по нехватке</Label>
+              <Input id="missing_requirement_comment" value={missingRequirementComment} onChange={(e) => setMissingRequirementComment(e.target.value)} />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="sales_legal_entity">Через какое юр.лицо продажи</Label>
+              <Input id="sales_legal_entity" value={salesLegalEntity} onChange={(e) => setSalesLegalEntity(e.target.value)} />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="sku_count">Кол-во SKU</Label>
+              <Input id="sku_count" type="number" min={0} step={1} value={skuCount} onChange={(e) => setSkuCount(Number(e.target.value) || 0)} />
+            </div>
+          <div className="lg:col-span-2">
+          <Button type="submit" disabled={loading}>
             {loading ? "Добавление…" : "Добавить"}
           </Button>
+          </div>
         </form>
       </CardContent>
     </Card>
