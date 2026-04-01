@@ -52,7 +52,7 @@ export type Database = {
       };
       clients: {
         Row: {
-          bin: string;
+          bin: string | null;
           bitrix_url: string | null;
           client_category: string | null;
           company_name: string;
@@ -75,7 +75,7 @@ export type Database = {
           yearly_plan: number;
         };
         Insert: {
-          bin: string;
+          bin?: string | null;
           bitrix_url?: string | null;
           client_category?: string | null;
           company_name: string;
@@ -98,7 +98,7 @@ export type Database = {
           yearly_plan?: number;
         };
         Update: {
-          bin?: string;
+          bin?: string | null;
           bitrix_url?: string | null;
           client_category?: string | null;
           company_name?: string;
@@ -123,6 +123,45 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "clients_manager_id_fkey";
+            columns: ["manager_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      client_gep_events: {
+        Row: {
+          client_id: string;
+          created_at: string;
+          event_date: string;
+          id: string;
+          manager_id: string;
+        };
+        Insert: {
+          client_id: string;
+          created_at?: string;
+          event_date: string;
+          id?: string;
+          manager_id: string;
+        };
+        Update: {
+          client_id?: string;
+          created_at?: string;
+          event_date?: string;
+          id?: string;
+          manager_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "client_gep_events_client_id_fkey";
+            columns: ["client_id"];
+            isOneToOne: false;
+            referencedRelation: "clients";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "client_gep_events_manager_id_fkey";
             columns: ["manager_id"];
             isOneToOne: false;
             referencedRelation: "profiles";

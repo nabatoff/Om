@@ -5,7 +5,13 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { insertSupplier } from "@/app/actions/suppliers";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -19,6 +25,7 @@ import { Textarea } from "@/components/ui/textarea";
 
 export function AddSupplierForm() {
   const router = useRouter();
+  const [open, setOpen] = useState(false);
   const [companyName, setCompanyName] = useState("");
   const [bin, setBin] = useState("");
   const [bitrixUrl, setBitrixUrl] = useState("");
@@ -78,16 +85,20 @@ export function AddSupplierForm() {
     setMissingRequirementComment("");
     setSalesLegalEntity("");
     setSkuCount(0);
+    setOpen(false);
     toast.success("Клиент добавлен");
     router.refresh();
   }
 
   return (
-    <Card className="border-border/80 shadow-sm">
-      <CardHeader>
-        <CardTitle className="text-base">Новый клиент</CardTitle>
-      </CardHeader>
-      <CardContent>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button type="button">Добавить клиента</Button>
+      </DialogTrigger>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
+        <DialogHeader>
+          <DialogTitle>Новый клиент</DialogTitle>
+        </DialogHeader>
         <form onSubmit={handleSubmit} className="grid gap-4 lg:grid-cols-2">
             <div className="grid gap-2">
               <Label htmlFor="company_name">Название компании</Label>
@@ -235,7 +246,7 @@ export function AddSupplierForm() {
           </Button>
           </div>
         </form>
-      </CardContent>
-    </Card>
+      </DialogContent>
+    </Dialog>
   );
 }

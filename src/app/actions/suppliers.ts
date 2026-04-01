@@ -56,6 +56,32 @@ export async function insertSupplier(input: unknown): Promise<ActionResult> {
   return { ok: true, data };
 }
 
+export async function createQuickClientByName(companyName: string) {
+  const name = companyName.trim();
+  if (!name) return { ok: false as const, error: "Название клиента обязательно" };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Не авторизован" };
+
+  const { data, error } = await supabase
+    .from("clients")
+    .insert({
+      manager_id: user.id,
+      company_name: name,
+      bin: null,
+      status: "ktp",
+    })
+    .select("id, company_name")
+    .single();
+  if (error) return { ok: false as const, error: error.message };
+
+  revalidatePath("/suppliers");
+  revalidatePath("/dashboard");
+  return { ok: true as const, data };
+}
+
 export async function updateSupplierStatus(
   clientId: string,
   status: Client["status"],

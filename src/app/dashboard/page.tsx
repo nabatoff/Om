@@ -16,6 +16,9 @@ export default async function DashboardPage() {
   const supabase = await createClient();
   const today = localISODate();
   const cards = await getDashboardCards();
+  const [y, m] = today.split("-").map(Number);
+  const monthStart = `${y}-${String(m).padStart(2, "0")}-01`;
+  const monthEnd = `${y}-${String(m).padStart(2, "0")}-${String(new Date(y, m, 0).getDate()).padStart(2, "0")}`;
 
   const { data: todayReport } = await supabase
     .from("manager_daily_kpi")
@@ -23,6 +26,20 @@ export default async function DashboardPage() {
     .eq("manager_id", profile.id)
     .eq("report_date", today)
     .maybeSingle();
+  const { data: monthRows } = await supabase
+    .from("manager_daily_kpi")
+    .select(
+      "report_date, planned_calls, actual_calls, qualified_count, gep_scheduled, gep_done, cp_sent, repeat_meetings, confirmed_orders_sum, carry_to_next_day",
+    )
+    .eq("manager_id", profile.id)
+    .gte("report_date", monthStart)
+    .lte("report_date", monthEnd)
+    .order("report_date", { ascending: true });
+  const { data: clients } = await supabase
+    .from("clients")
+    .select("id, company_name")
+    .eq("manager_id", profile.id)
+    .order("company_name", { ascending: true });
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 px-4 py-8">
@@ -60,7 +77,11 @@ export default async function DashboardPage() {
           </CardHeader>
         </Card>
       )}
-      <DailyReportForm defaultDate={today} />
+      <DailyReportForm
+        defaultDate={today}
+        monthRows={monthRows ?? []}
+        clients={(clients ?? []).map((c) => ({ id: c.id, name: c.company_name }))}
+      />
     </div>
   );
 }
