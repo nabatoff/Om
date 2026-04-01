@@ -57,7 +57,17 @@ export function AdminManagerDailyChart({ managerName, data }: Props) {
                 axisLine={false}
               />
               <Tooltip
-                formatter={(value: number, name: string) => [`${value.toFixed(1)}%`, name]}
+                formatter={(value, name) => {
+                  const num =
+                    value == null
+                      ? 0
+                      : typeof value === "number"
+                        ? value
+                        : Number(value);
+                  const display =
+                    Number.isFinite(num) ? `${num.toFixed(1)}%` : "—";
+                  return [display, String(name ?? "")];
+                }}
                 contentStyle={{
                   borderRadius: "8px",
                   border: "1px solid var(--border)",
