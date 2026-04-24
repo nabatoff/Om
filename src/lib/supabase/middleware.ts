@@ -30,7 +30,18 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  await supabase.auth.getUser();
+  // Fail-safe for Vercel Edge: do not let auth refresh block the whole request.
+  // If Supabase is slow/unreachable, continue without hard failing middleware.
+  try {
+    await Promise.race([
+      supabase.auth.getUser(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("supabase_auth_timeout")), 2500),
+      ),
+    ]);
+  } catch {
+    return supabaseResponse;
+  }
 
   return supabaseResponse;
 }
