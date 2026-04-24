@@ -21,8 +21,27 @@ export async function getProfile(): Promise<ProfileRow | null> {
     .from("profiles")
     .select("*")
     .eq("id", user.id)
-    .single();
-  return data;
+    .maybeSingle();
+  if (data) return data;
+
+  // Self-heal missing profile to avoid login/dashboard redirect loops.
+  const fullName =
+    typeof user.user_metadata?.full_name === "string"
+      ? user.user_metadata.full_name
+      : null;
+  const { error: insertError } = await supabase.from("profiles").insert({
+    id: user.id,
+    full_name: fullName,
+    role: "manager",
+  });
+  if (insertError) return null;
+
+  const { data: created } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("id", user.id)
+    .maybeSingle();
+  return created ?? null;
 }
 
 export async function requireUser() {
