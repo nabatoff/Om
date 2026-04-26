@@ -66,6 +66,11 @@ function AuthProviderInner({ children }: { children: ReactNode }) {
       return;
     }
     if (data) {
+      if (data.is_active === false) {
+        await sb.auth.signOut();
+        setProfile(null);
+        return;
+      }
       setProfile(data as Profile);
       return;
     }
@@ -137,7 +142,10 @@ function AuthProviderInner({ children }: { children: ReactNode }) {
     return user?.email?.split('@')[0] || 'Пользователь';
   }, [profile, user]);
 
-  const isAdmin = useMemo(() => profile?.role === 'admin', [profile?.role]);
+  const isAdmin = useMemo(
+    () => profile?.role === 'admin' && profile?.is_active !== false,
+    [profile?.role, profile?.is_active],
+  );
 
   const value: AuthCtx = {
     session,

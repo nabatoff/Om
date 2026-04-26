@@ -38,6 +38,7 @@ import { isSupabaseConfigured } from './lib/supabase';
 import { useAuth } from './context/AuthContext';
 import { LoginView } from './components/LoginView';
 import { StaffManager } from './components/StaffManager';
+import { ManagerMeetingsPanel } from './components/ManagerMeetingsPanel';
 
 const DAILY_CALL_GOAL = 22;
 
@@ -112,7 +113,7 @@ const App = () => {
   }, [refresh]);
 
   useEffect(() => {
-    if (!isAdmin && (currentView === 'admin' || currentView === 'orders')) {
+    if (!isAdmin && currentView === 'admin') {
       setCurrentView('manager');
     }
   }, [isAdmin, currentView]);
@@ -215,15 +216,25 @@ const App = () => {
     });
   }, [allReports, filterManager, filterDateFrom, filterDateTo]);
 
+  /** Админ: как в аналитике. Менеджер: RLS отдаёт только свои отчёты; фильтр по датам. */
+  const reportsForOrders = useMemo(() => {
+    if (isAdmin) return filteredReports;
+    return allReports.filter((r) => {
+      const matchDateFrom = !filterDateFrom || r.date >= filterDateFrom;
+      const matchDateTo = !filterDateTo || r.date <= filterDateTo;
+      return matchDateFrom && matchDateTo;
+    });
+  }, [isAdmin, filteredReports, allReports, filterDateFrom, filterDateTo]);
+
   const allFilteredOrders = useMemo(() => {
     const orders: (UiOrder & { manager: string; date: string })[] = [];
-    filteredReports.forEach((report) => {
+    reportsForOrders.forEach((report) => {
       report.confirmedOrders.forEach((order) => {
         orders.push({ ...order, manager: report.manager, date: report.date });
       });
     });
     return orders;
-  }, [filteredReports]);
+  }, [reportsForOrders]);
 
   if (supabaseOk && !authReady) {
     return (
@@ -294,23 +305,21 @@ const App = () => {
                 <FileText size={14} /> ОТЧЕТ
               </button>
               {isAdmin && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setCurrentView('admin')}
-                    className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${currentView === 'admin' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                  >
-                    <List size={14} /> АДМИНКА
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCurrentView('orders')}
-                    className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${currentView === 'orders' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                  >
-                    <ShoppingBag size={14} /> ЗАКАЗЫ
-                  </button>
-                </>
+                <button
+                  type="button"
+                  onClick={() => setCurrentView('admin')}
+                  className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${currentView === 'admin' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  <List size={14} /> АДМИНКА
+                </button>
               )}
+              <button
+                type="button"
+                onClick={() => setCurrentView('orders')}
+                className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${currentView === 'orders' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              >
+                <ShoppingBag size={14} /> ЗАКАЗЫ
+              </button>
             </div>
           </div>
         </div>
@@ -388,18 +397,28 @@ const App = () => {
           </div>
         )}
 
-        {isAdmin && currentView === 'orders' && (
-          <OrdersHistoryDashboard
-            orders={allFilteredOrders}
-            filterManager={filterManager}
-            setFilterManager={setFilterManager}
-            filterDateFrom={filterDateFrom}
-            setFilterDateFrom={setFilterDateFrom}
-            filterDateTo={filterDateTo}
-            setFilterDateTo={setFilterDateTo}
-            managerOptions={managerFilterOptions}
-            openOrderDetails={(entity, bin, amounts) => setOrderDetailModal({ isOpen: true, entity, bin, amounts })}
-          />
+        {currentView === 'orders' && (
+          <div className="space-y-8">
+            {!isAdmin && (
+              <ManagerMeetingsPanel
+                allReports={allReports}
+                findEvidence={findSpecificConductedEvidence}
+                managerName={managerName}
+              />
+            )}
+            <OrdersHistoryDashboard
+              isAdmin={isAdmin}
+              orders={allFilteredOrders}
+              filterManager={filterManager}
+              setFilterManager={setFilterManager}
+              filterDateFrom={filterDateFrom}
+              setFilterDateFrom={setFilterDateFrom}
+              filterDateTo={filterDateTo}
+              setFilterDateTo={setFilterDateTo}
+              managerOptions={managerFilterOptions}
+              openOrderDetails={(entity, bin, amounts) => setOrderDetailModal({ isOpen: true, entity, bin, amounts })}
+            />
+          </div>
         )}
       </div>
 
@@ -1000,6 +1019,7 @@ const AdminDashboard = ({
 };
 
 const OrdersHistoryDashboard = ({
+  isAdmin,
   orders,
   filterManager,
   setFilterManager,
@@ -1010,6 +1030,7 @@ const OrdersHistoryDashboard = ({
   managerOptions,
   openOrderDetails,
 }: {
+  isAdmin: boolean;
   orders: (UiOrder & { date: string })[];
   filterManager: string;
   setFilterManager: SetState<string>;
@@ -1022,15 +1043,39 @@ const OrdersHistoryDashboard = ({
 }) => {
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-500 text-left">
-      <AdminFilters
-        manager={filterManager}
-        setManager={setFilterManager}
-        from={filterDateFrom}
-        setFrom={setFilterDateFrom}
-        to={filterDateTo}
-        setTo={setFilterDateTo}
-        managerOptions={managerOptions}
-      />
+      {isAdmin ? (
+        <AdminFilters
+          manager={filterManager}
+          setManager={setFilterManager}
+          from={filterDateFrom}
+          setFrom={setFilterDateFrom}
+          to={filterDateTo}
+          setTo={setFilterDateTo}
+          managerOptions={managerOptions}
+        />
+      ) : (
+        <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm flex flex-wrap gap-6 items-end">
+          <div className="flex-1 min-w-[150px] space-y-1.5 text-left">
+            <label className="text-[10px] font-black text-gray-400 uppercase">Дата с</label>
+            <input
+              type="date"
+              className="w-full px-4 py-2.5 bg-gray-50 border rounded-xl text-sm"
+              value={filterDateFrom}
+              onChange={(e) => setFilterDateFrom(e.target.value)}
+            />
+          </div>
+          <div className="flex-1 min-w-[150px] space-y-1.5 text-left">
+            <label className="text-[10px] font-black text-gray-400 uppercase">Дата по</label>
+            <input
+              type="date"
+              className="w-full px-4 py-2.5 bg-gray-50 border rounded-xl text-sm"
+              value={filterDateTo}
+              onChange={(e) => setFilterDateTo(e.target.value)}
+            />
+          </div>
+        </div>
+      )}
+      <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest">Подтверждённые заказы</h2>
       <div className="bg-white border border-gray-200 rounded-3xl shadow-sm overflow-x-auto text-left">
         <table className="w-full text-left border-collapse min-w-[1000px]">
           <thead>
