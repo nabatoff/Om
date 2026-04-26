@@ -34,6 +34,9 @@ import {
   createClientRow,
   saveReportToDb,
 } from './lib/crmApi';
+import { buildClientCrmHistory } from './lib/crmClientHistory';
+import { ClientDirectoryPanel } from './components/ClientDirectoryPanel';
+import { ClientHistoryModal } from './components/ClientHistoryModal';
 import { isSupabaseConfigured } from './lib/supabase';
 import { useAuth } from './context/AuthContext';
 import { LoginView } from './components/LoginView';
@@ -45,7 +48,7 @@ const DAILY_CALL_GOAL = 22;
 const App = () => {
   const { session, ready: authReady, managerName, signOut, isAdmin } = useAuth();
   const sessionUserId = session?.user?.id;
-  const [currentView, setCurrentView] = useState<'manager' | 'admin' | 'orders'>('manager');
+  const [currentView, setCurrentView] = useState<'manager' | 'admin' | 'orders' | 'clients'>('manager');
   const [clients, setClients] = useState<UiClient[]>([]);
   const [allReports, setAllReports] = useState<FullReport[]>([]);
   const [formStats, setFormStats] = useState<FormStats>({
@@ -77,6 +80,7 @@ const App = () => {
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
   const [newClientData, setNewClientData] = useState({ name: '', bin: '' });
   const [onClientCreatedCallback, setOnClientCreatedCallback] = useState<((c: UiClient) => void) | null>(null);
+  const [clientHistoryFor, setClientHistoryFor] = useState<UiClient | null>(null);
   const [filterManager, setFilterManager] = useState('Все');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
@@ -114,6 +118,12 @@ const App = () => {
 
   useEffect(() => {
     if (!isAdmin && currentView === 'admin') {
+      setCurrentView('manager');
+    }
+  }, [isAdmin, currentView]);
+
+  useEffect(() => {
+    if (!isAdmin && currentView === 'clients') {
       setCurrentView('manager');
     }
   }, [isAdmin, currentView]);
@@ -236,6 +246,12 @@ const App = () => {
     return orders;
   }, [reportsForOrders]);
 
+  const clientHistoryAggregated = useMemo(
+    () =>
+      clientHistoryFor ? buildClientCrmHistory(clientHistoryFor.bin, allReports) : { conducted: [], orders: [] },
+    [clientHistoryFor, allReports],
+  );
+
   if (supabaseOk && !authReady) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-500 text-sm">Сессия…</div>
@@ -311,6 +327,15 @@ const App = () => {
                   className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${currentView === 'admin' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                 >
                   <List size={14} /> АДМИНКА
+                </button>
+              )}
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={() => setCurrentView('clients')}
+                  className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${currentView === 'clients' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  <Users size={14} /> КЛИЕНТЫ
                 </button>
               )}
               <button
@@ -395,6 +420,18 @@ const App = () => {
             )}
             {adminSubView === 'staff' && <StaffManager />}
           </div>
+        )}
+
+        {isAdmin && currentView === 'clients' && (
+          <ClientDirectoryPanel
+            clients={clients}
+            onSelectClient={(c) => setClientHistoryFor(c)}
+            onAddClient={() => {
+              setNewClientData({ name: '', bin: '' });
+              setOnClientCreatedCallback(null);
+              setIsClientModalOpen(true);
+            }}
+          />
         )}
 
         {currentView === 'orders' && (
@@ -513,6 +550,15 @@ const App = () => {
 
       {orderDetailModal.isOpen && (
         <OrderItemsModal modal={orderDetailModal} onClose={() => setOrderDetailModal({ ...orderDetailModal, isOpen: false })} />
+      )}
+
+      {clientHistoryFor && (
+        <ClientHistoryModal
+          client={clientHistoryFor}
+          conducted={clientHistoryAggregated.conducted}
+          orders={clientHistoryAggregated.orders}
+          onClose={() => setClientHistoryFor(null)}
+        />
       )}
     </div>
   );
