@@ -1,7 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { UserPlus, RefreshCw, Shield, Briefcase, AlertCircle } from 'lucide-react';
 import { getSupabase } from '../lib/supabase';
-import { STAFF_EMAIL_DOMAIN } from '../lib/staffAuth';
 import type { Profile } from '../context/AuthContext';
 
 type Row = Pick<Profile, 'id' | 'full_name' | 'role' | 'is_active'> & { login_code: string | null; created_at?: string | null };
@@ -70,14 +69,10 @@ export function StaffManager() {
 
   return (
     <div className="space-y-8 text-left max-w-4xl">
-      <p className="text-xs text-gray-500">
-        Сотрудник входит: поле «Код» = этот идентификатор, пароль = заданный ниже. Технический email в auth: <code
-          className="bg-gray-100 px-1 rounded"
-        >
-          {'код@'}
-          {STAFF_EMAIL_DOMAIN}
-        </code>{' '}
-        (вводить не нужно).
+      <p className="text-xs text-gray-600 leading-relaxed">
+        Придумай уникальный <strong>логин</strong> (латиница, цифры, знак <code className="bg-gray-100 px-1 rounded">_</code>, 2–32
+        символа) — его сотрудник будет вводить на странице входа <strong>вместе с паролем</strong>. Это не e-mail: почта в системе
+        не используется.
       </p>
       {loadErr && (
         <div className="text-sm text-amber-700 bg-amber-50 p-3 rounded-xl flex gap-2">
@@ -94,7 +89,7 @@ export function StaffManager() {
         {formErr && <div className="text-sm text-red-600 bg-red-50 p-2 rounded-lg">{formErr}</div>}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-1">
-            <label className="text-[10px] font-black text-gray-400 uppercase">Код (логин)</label>
+            <label className="text-[10px] font-black text-gray-400 uppercase">Логин</label>
             <input
               className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-4 py-2.5 text-sm font-bold"
               value={form.login_code}
@@ -169,7 +164,7 @@ export function StaffManager() {
           <table className="w-full text-sm border-collapse min-w-[600px]">
             <thead>
               <tr className="text-[10px] font-black text-gray-400 uppercase border-b">
-                <th className="text-left py-2">Код</th>
+                <th className="text-left py-2">Логин</th>
                 <th className="text-left py-2">ФИО</th>
                 <th className="text-left py-2">Роль</th>
                 <th className="text-left py-2">Активен</th>

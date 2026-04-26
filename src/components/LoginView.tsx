@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { LogIn, ShieldCheck, Fingerprint } from 'lucide-react';
+import { LogIn, ShieldCheck, User } from 'lucide-react';
 import { getSupabase } from '../lib/supabase';
-import { isValidStaffCode, staffCodeToEmail } from '../lib/staffAuth';
+import { isValidStaffLogin, staffLoginToServiceEmail } from '../lib/staffAuth';
 
 export function LoginView() {
-  const [code, setCode] = useState('');
+  const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -12,21 +12,19 @@ export function LoginView() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr(null);
-    if (!isValidStaffCode(code)) {
-      setErr('Код: 2–32 символа, латиница, цифры, подчёркивание _');
+    if (!isValidStaffLogin(login)) {
+      setErr('Логин: 2–32 символа, латиница, цифры, подчёркивание _');
       return;
     }
     setPending(true);
     try {
-      let email: string;
-      try {
-        email = staffCodeToEmail(code);
-      } catch (e) {
-        setErr(e instanceof Error ? e.message : 'Неверный код');
-        return;
-      }
+      const email = staffLoginToServiceEmail(login);
       const { error } = await getSupabase().auth.signInWithPassword({ email, password });
-      if (error) setErr(error.message === 'Invalid login credentials' ? 'Неверный код или пароль' : error.message);
+      if (error) {
+        setErr(error.message === 'Invalid login credentials' ? 'Неверный логин или пароль' : error.message);
+      }
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Неверный логин');
     } finally {
       setPending(false);
     }
@@ -45,7 +43,7 @@ export function LoginView() {
           </div>
         </div>
         <p className="text-xs text-slate-500 text-center mb-4">
-          Аккаунты выдаёт администратор. Регистрация с этой страницы отключена.
+          Войти по <strong>логину</strong> и паролю, которые выдал администратор. Саморегистрации нет.
         </p>
         <form onSubmit={submit} className="space-y-4 text-left">
           {err && (
@@ -53,19 +51,20 @@ export function LoginView() {
           )}
           <div className="space-y-1.5">
             <label className="text-[10px] font-black text-slate-500 uppercase flex items-center gap-1.5">
-              <Fingerprint size={12} />
-              Код
+              <User size={12} />
+              Логин
             </label>
             <input
               type="text"
+              name="username"
               autoComplete="username"
               required
               minLength={2}
               maxLength={32}
               className="w-full font-mono bg-slate-900/80 border border-slate-800 rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500/50"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder="ivan_m"
+              value={login}
+              onChange={(e) => setLogin(e.target.value)}
+              placeholder="например ivan_01"
             />
           </div>
           <div className="space-y-1.5">

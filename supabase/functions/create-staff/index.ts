@@ -57,7 +57,7 @@ Deno.serve(async (req: Request) => {
   const role = body.role === "admin" ? "admin" : "manager";
 
   if (code.length < 2 || code.length > 32) {
-    return new Response(JSON.stringify({ error: "Код: 2–32 символа (a–z, 0–9, _)" }), { status: 400, headers: { ...cors, "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ error: "Логин: 2–32 символа (a–z, 0–9, _)" }), { status: 400, headers: { ...cors, "Content-Type": "application/json" } });
   }
   if (password.length < 6) {
     return new Response(JSON.stringify({ error: "Пароль минимум 6 символов" }), { status: 400, headers: { ...cors, "Content-Type": "application/json" } });
