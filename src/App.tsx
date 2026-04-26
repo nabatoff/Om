@@ -39,7 +39,7 @@ import { LoginView } from './components/LoginView';
 const DAILY_CALL_GOAL = 22;
 
 const App = () => {
-  const { session, ready: authReady, managerName, signOut } = useAuth();
+  const { session, ready: authReady, managerName, signOut, isAdmin } = useAuth();
   const sessionUserId = session?.user?.id;
   const [currentView, setCurrentView] = useState<'manager' | 'admin' | 'orders'>('manager');
   const [clients, setClients] = useState<UiClient[]>([]);
@@ -107,6 +107,12 @@ const App = () => {
     void refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    if (!isAdmin && (currentView === 'admin' || currentView === 'orders')) {
+      setCurrentView('manager');
+    }
+  }, [isAdmin, currentView]);
+
   const managerFilterOptions = useMemo(() => {
     const set = new Set<string>();
     allReports.forEach((r) => {
@@ -144,7 +150,7 @@ const App = () => {
       setAssignedMeetings([]);
       setConductedMeetings([]);
       setConfirmedOrders([]);
-      setCurrentView('admin');
+      setCurrentView(isAdmin ? 'admin' : 'manager');
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Сохранение не удалось');
     } finally {
@@ -271,23 +277,30 @@ const App = () => {
             </button>
             <div className="flex bg-gray-100 p-1 rounded-xl flex-1 md:flex-none min-w-0">
               <button
+                type="button"
                 onClick={() => setCurrentView('manager')}
                 className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${currentView === 'manager' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
               >
                 <FileText size={14} /> ОТЧЕТ
               </button>
-              <button
-                onClick={() => setCurrentView('admin')}
-                className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${currentView === 'admin' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-              >
-                <List size={14} /> АДМИНКА
-              </button>
-              <button
-                onClick={() => setCurrentView('orders')}
-                className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${currentView === 'orders' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-              >
-                <ShoppingBag size={14} /> ЗАКАЗЫ
-              </button>
+              {isAdmin && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentView('admin')}
+                    className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${currentView === 'admin' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                  >
+                    <List size={14} /> АДМИНКА
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentView('orders')}
+                    className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${currentView === 'orders' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                  >
+                    <ShoppingBag size={14} /> ЗАКАЗЫ
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -321,7 +334,7 @@ const App = () => {
           />
         )}
 
-        {currentView === 'admin' && (
+        {isAdmin && currentView === 'admin' && (
           <AdminDashboard
             reports={filteredReports}
             filterManager={filterManager}
@@ -338,7 +351,7 @@ const App = () => {
           />
         )}
 
-        {currentView === 'orders' && (
+        {isAdmin && currentView === 'orders' && (
           <OrdersHistoryDashboard
             orders={allFilteredOrders}
             filterManager={filterManager}

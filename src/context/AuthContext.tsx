@@ -22,6 +22,8 @@ type AuthCtx = {
   user: User | null;
   profile: Profile | null;
   ready: boolean;
+  /** Соответствует `profiles.role = 'admin'` (см. `is_admin()` в БД) */
+  isAdmin: boolean;
   managerName: string;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
@@ -35,6 +37,7 @@ const UNCONFIG: AuthCtx = {
   user: null,
   profile: null,
   ready: true,
+  isAdmin: false,
   managerName: '',
   signIn: async () => ({ error: new Error('Supabase не настроен') }),
   signUp: async () => ({ error: new Error('Supabase не настроен') }),
@@ -139,11 +142,14 @@ function AuthProviderInner({ children }: { children: ReactNode }) {
     return user?.email?.split('@')[0] || 'Пользователь';
   }, [profile, user]);
 
+  const isAdmin = useMemo(() => profile?.role === 'admin', [profile?.role]);
+
   const value: AuthCtx = {
     session,
     user,
     profile,
     ready,
+    isAdmin,
     managerName,
     signIn,
     signUp,
