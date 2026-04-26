@@ -19,6 +19,8 @@ import {
   Fingerprint,
   AlertTriangle,
   LogOut,
+  LayoutGrid,
+  UserCog,
 } from 'lucide-react';
 import {
   type FormStats,
@@ -35,6 +37,7 @@ import {
 import { isSupabaseConfigured } from './lib/supabase';
 import { useAuth } from './context/AuthContext';
 import { LoginView } from './components/LoginView';
+import { StaffManager } from './components/StaffManager';
 
 const DAILY_CALL_GOAL = 22;
 
@@ -79,6 +82,7 @@ const App = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [booting, setBooting] = useState(true);
+  const [adminSubView, setAdminSubView] = useState<'dashboard' | 'staff'>('dashboard');
 
   const supabaseOk = isSupabaseConfigured();
 
@@ -112,6 +116,12 @@ const App = () => {
       setCurrentView('manager');
     }
   }, [isAdmin, currentView]);
+
+  useEffect(() => {
+    if (currentView !== 'admin') {
+      setAdminSubView('dashboard');
+    }
+  }, [currentView]);
 
   const managerFilterOptions = useMemo(() => {
     const set = new Set<string>();
@@ -335,20 +345,47 @@ const App = () => {
         )}
 
         {isAdmin && currentView === 'admin' && (
-          <AdminDashboard
-            reports={filteredReports}
-            filterManager={filterManager}
-            setFilterManager={setFilterManager}
-            filterDateFrom={filterDateFrom}
-            setFilterDateFrom={setFilterDateFrom}
-            filterDateTo={filterDateTo}
-            setFilterDateTo={setFilterDateTo}
-            managerOptions={managerFilterOptions}
-            openDetails={(list, title, _type, manager, rDate) =>
-              setDetailsModal({ isOpen: true, list, title, type: 'conversion', manager, reportDate: rDate })
-            }
-            findEvidence={findSpecificConductedEvidence}
-          />
+          <div className="space-y-6">
+            <div className="flex flex-wrap gap-2 bg-white border border-gray-200 rounded-2xl p-2 w-full md:w-auto">
+              <button
+                type="button"
+                onClick={() => setAdminSubView('dashboard')}
+                className={`flex-1 min-w-[140px] flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                  adminSubView === 'dashboard' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
+                }`}
+              >
+                <LayoutGrid size={14} />
+                Аналитика
+              </button>
+              <button
+                type="button"
+                onClick={() => setAdminSubView('staff')}
+                className={`flex-1 min-w-[140px] flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                  adminSubView === 'staff' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
+                }`}
+              >
+                <UserCog size={14} />
+                Сотрудники
+              </button>
+            </div>
+            {adminSubView === 'dashboard' && (
+              <AdminDashboard
+                reports={filteredReports}
+                filterManager={filterManager}
+                setFilterManager={setFilterManager}
+                filterDateFrom={filterDateFrom}
+                setFilterDateFrom={setFilterDateFrom}
+                filterDateTo={filterDateTo}
+                setFilterDateTo={setFilterDateTo}
+                managerOptions={managerFilterOptions}
+                openDetails={(list, title, _type, manager, rDate) =>
+                  setDetailsModal({ isOpen: true, list, title, type: 'conversion', manager, reportDate: rDate })
+                }
+                findEvidence={findSpecificConductedEvidence}
+              />
+            )}
+            {adminSubView === 'staff' && <StaffManager />}
+          </div>
         )}
 
         {isAdmin && currentView === 'orders' && (

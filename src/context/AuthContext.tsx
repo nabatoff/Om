@@ -15,6 +15,7 @@ export type Profile = {
   full_name: string | null;
   role: string | null;
   is_active: boolean | null;
+  login_code: string | null;
 };
 
 type AuthCtx = {
@@ -26,7 +27,6 @@ type AuthCtx = {
   isAdmin: boolean;
   managerName: string;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 };
 
@@ -40,7 +40,6 @@ const UNCONFIG: AuthCtx = {
   isAdmin: false,
   managerName: '',
   signIn: async () => ({ error: new Error('Supabase не настроен') }),
-  signUp: async () => ({ error: new Error('Supabase не настроен') }),
   signOut: async () => {},
 };
 
@@ -58,7 +57,7 @@ function AuthProviderInner({ children }: { children: ReactNode }) {
     const sb = getSupabase();
     const { data, error } = await sb
       .from('profiles')
-      .select('id, full_name, role, is_active')
+      .select('id, full_name, role, is_active, login_code')
       .eq('id', uid)
       .maybeSingle();
     if (error) {
@@ -77,13 +76,14 @@ function AuthProviderInner({ children }: { children: ReactNode }) {
       id: uid,
       full_name: name,
       is_active: true,
+      login_code: null,
     });
     if (insErr) {
       console.error(insErr);
-      setProfile({ id: uid, full_name: s.email ?? null, role: null, is_active: true });
+      setProfile({ id: uid, full_name: s.email ?? null, role: null, is_active: true, login_code: null });
       return;
     }
-    setProfile({ id: uid, full_name: name, role: null, is_active: true });
+    setProfile({ id: uid, full_name: name, role: null, is_active: true, login_code: null });
   }, []);
 
   useEffect(() => {
@@ -124,11 +124,6 @@ function AuthProviderInner({ children }: { children: ReactNode }) {
     return { error: error ? new Error(error.message) : null };
   }, []);
 
-  const signUp = useCallback(async (email: string, password: string) => {
-    const { error } = await getSupabase().auth.signUp({ email, password });
-    return { error: error ? new Error(error.message) : null };
-  }, []);
-
   const signOut = useCallback(async () => {
     await getSupabase().auth.signOut();
     setSession(null);
@@ -152,7 +147,6 @@ function AuthProviderInner({ children }: { children: ReactNode }) {
     isAdmin,
     managerName,
     signIn,
-    signUp,
     signOut,
   };
 
