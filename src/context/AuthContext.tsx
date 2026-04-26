@@ -98,12 +98,18 @@ function AuthProviderInner({ children }: { children: ReactNode }) {
         setReady(true);
         return;
       }
-      const { data: { session: s } } = await getSupabase().auth.getSession();
-      if (cancelled) return;
-      setSession(s);
-      setUser(s?.user ?? null);
-      if (s?.user) await loadProfile(s.user.id);
-      setReady(true);
+      try {
+        const { data } = await getSupabase().auth.getSession();
+        if (cancelled) return;
+        const s = data.session;
+        setSession(s);
+        setUser(s?.user ?? null);
+        if (s?.user) void loadProfile(s.user.id);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        if (!cancelled) setReady(true);
+      }
     })();
     return () => {
       cancelled = true;
@@ -116,7 +122,7 @@ function AuthProviderInner({ children }: { children: ReactNode }) {
       async (_event, s) => {
         setSession(s);
         setUser(s?.user ?? null);
-        if (s?.user) await loadProfile(s.user.id);
+        if (s?.user) void loadProfile(s.user.id);
         else setProfile(null);
         setReady(true);
       },
