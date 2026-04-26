@@ -1,9 +1,11 @@
 import { redirect } from "next/navigation";
+import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
 import type { Tables } from "@/types/database";
 export type ProfileRow = Tables<"profiles">;
 
 export async function getSessionUser() {
+  if (!isSupabaseConfigured()) return null;
   const supabase = await createClient();
   const {
     data: { user },
@@ -12,6 +14,7 @@ export async function getSessionUser() {
 }
 
 export async function getProfile(): Promise<ProfileRow | null> {
+  if (!isSupabaseConfigured()) return null;
   const supabase = await createClient();
   const {
     data: { user },

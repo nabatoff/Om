@@ -61,16 +61,18 @@ export type Database = {
           em_plan: number;
           id: string;
           manager_id: string;
-          missing_requirement: Enums<"missing_requirement"> | null;
+          missing_requirement:
+            | Database["public"]["Enums"]["missing_requirement"]
+            | null;
           missing_requirement_comment: string | null;
-          nkt_status: Enums<"nkt_status">;
+          nkt_status: Database["public"]["Enums"]["nkt_status"];
           nkt_submitted_at: string | null;
-          omarket_status: Enums<"omarket_status"> | null;
+          omarket_status: Database["public"]["Enums"]["omarket_status"] | null;
           sales_department_description: string | null;
           sales_legal_entity: string | null;
           sales_volume_2025: number;
           sku_count: number;
-          status: Enums<"client_status">;
+          status: Database["public"]["Enums"]["client_status"];
           updated_at: string;
           yearly_plan: number;
         };
@@ -84,16 +86,18 @@ export type Database = {
           em_plan?: number;
           id?: string;
           manager_id: string;
-          missing_requirement?: Enums<"missing_requirement"> | null;
+          missing_requirement?:
+            | Database["public"]["Enums"]["missing_requirement"]
+            | null;
           missing_requirement_comment?: string | null;
-          nkt_status?: Enums<"nkt_status">;
+          nkt_status?: Database["public"]["Enums"]["nkt_status"];
           nkt_submitted_at?: string | null;
-          omarket_status?: Enums<"omarket_status"> | null;
+          omarket_status?: Database["public"]["Enums"]["omarket_status"] | null;
           sales_department_description?: string | null;
           sales_legal_entity?: string | null;
           sales_volume_2025?: number;
           sku_count?: number;
-          status: Enums<"client_status">;
+          status: Database["public"]["Enums"]["client_status"];
           updated_at?: string;
           yearly_plan?: number;
         };
@@ -107,16 +111,18 @@ export type Database = {
           em_plan?: number;
           id?: string;
           manager_id?: string;
-          missing_requirement?: Enums<"missing_requirement"> | null;
+          missing_requirement?:
+            | Database["public"]["Enums"]["missing_requirement"]
+            | null;
           missing_requirement_comment?: string | null;
-          nkt_status?: Enums<"nkt_status">;
+          nkt_status?: Database["public"]["Enums"]["nkt_status"];
           nkt_submitted_at?: string | null;
-          omarket_status?: Enums<"omarket_status"> | null;
+          omarket_status?: Database["public"]["Enums"]["omarket_status"] | null;
           sales_department_description?: string | null;
           sales_legal_entity?: string | null;
           sales_volume_2025?: number;
           sku_count?: number;
-          status?: Enums<"client_status">;
+          status?: Database["public"]["Enums"]["client_status"];
           updated_at?: string;
           yearly_plan?: number;
         };
@@ -130,38 +136,88 @@ export type Database = {
           },
         ];
       };
-      client_gep_events: {
+      crm_conducted_meetings: {
         Row: {
           client_id: string;
-          created_at: string;
-          event_date: string;
           id: string;
-          manager_id: string;
+          meeting_date: string;
+          meeting_kind: Database["public"]["Enums"]["crm_meeting_kind"];
+          report_id: string;
+          result: string;
+          sort_order: number;
         };
         Insert: {
           client_id: string;
-          created_at?: string;
-          event_date: string;
           id?: string;
-          manager_id: string;
+          meeting_date: string;
+          meeting_kind: Database["public"]["Enums"]["crm_meeting_kind"];
+          report_id: string;
+          result?: string;
+          sort_order?: number;
         };
         Update: {
           client_id?: string;
-          created_at?: string;
-          event_date?: string;
           id?: string;
-          manager_id?: string;
+          meeting_date?: string;
+          meeting_kind?: Database["public"]["Enums"]["crm_meeting_kind"];
+          report_id?: string;
+          result?: string;
+          sort_order?: number;
         };
         Relationships: [
           {
-            foreignKeyName: "client_gep_events_client_id_fkey";
+            foreignKeyName: "crm_conducted_meetings_client_id_fkey";
             columns: ["client_id"];
             isOneToOne: false;
             referencedRelation: "clients";
             referencedColumns: ["id"];
           },
           {
-            foreignKeyName: "client_gep_events_manager_id_fkey";
+            foreignKeyName: "crm_conducted_meetings_report_id_fkey";
+            columns: ["report_id"];
+            isOneToOne: false;
+            referencedRelation: "crm_daily_reports";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      crm_daily_reports: {
+        Row: {
+          calls_total: number;
+          created_at: string;
+          id: string;
+          manager_id: string;
+          new_in_work: number;
+          processed_total: number;
+          report_date: string;
+          updated_at: string;
+          validated_total: number;
+        };
+        Insert: {
+          calls_total?: number;
+          created_at?: string;
+          id?: string;
+          manager_id: string;
+          new_in_work?: number;
+          processed_total?: number;
+          report_date: string;
+          updated_at?: string;
+          validated_total?: number;
+        };
+        Update: {
+          calls_total?: number;
+          created_at?: string;
+          id?: string;
+          manager_id?: string;
+          new_in_work?: number;
+          processed_total?: number;
+          report_date?: string;
+          updated_at?: string;
+          validated_total?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "crm_daily_reports_manager_id_fkey";
             columns: ["manager_id"];
             isOneToOne: false;
             referencedRelation: "profiles";
@@ -169,61 +225,109 @@ export type Database = {
           },
         ];
       };
-      manager_daily_kpi: {
+      crm_order_groups: {
         Row: {
-          actual_calls: number;
-          carry_to_next_day: number;
-          confirmed_orders_sum: number;
-          cp_sent: number;
-          created_at: string;
-          gep_done: number;
-          gep_scheduled: number;
+          client_id: string;
           id: string;
-          manager_id: string;
-          planned_calls: number;
-          qualified_count: number;
-          repeat_meetings: number;
-          report_date: string;
-          updated_at: string;
+          report_id: string;
+          sort_order: number;
         };
         Insert: {
-          actual_calls?: number;
-          carry_to_next_day?: number;
-          confirmed_orders_sum?: number;
-          cp_sent?: number;
-          created_at?: string;
-          gep_done?: number;
-          gep_scheduled?: number;
+          client_id: string;
           id?: string;
-          manager_id: string;
-          planned_calls?: number;
-          qualified_count?: number;
-          repeat_meetings?: number;
-          report_date: string;
-          updated_at?: string;
+          report_id: string;
+          sort_order?: number;
         };
         Update: {
-          actual_calls?: number;
-          carry_to_next_day?: number;
-          confirmed_orders_sum?: number;
-          cp_sent?: number;
-          created_at?: string;
-          gep_done?: number;
-          gep_scheduled?: number;
+          client_id?: string;
           id?: string;
-          manager_id?: string;
-          planned_calls?: number;
-          qualified_count?: number;
-          repeat_meetings?: number;
-          report_date?: string;
-          updated_at?: string;
+          report_id?: string;
+          sort_order?: number;
         };
         Relationships: [
           {
-            foreignKeyName: "manager_daily_kpi_manager_id_fkey";
-            columns: ["manager_id"];
+            foreignKeyName: "crm_order_groups_client_id_fkey";
+            columns: ["client_id"];
             isOneToOne: false;
-            referencedRelation: "profiles";
+            referencedRelation: "clients";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "crm_order_groups_report_id_fkey";
+            columns: ["report_id"];
+            isOneToOne: false;
+            referencedRelation: "crm_daily_reports";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      crm_order_lines: {
+        Row: {
+          amount: number;
+          id: string;
+          line_index: number;
+          order_group_id: string;
+        };
+        Insert: {
+          amount?: number;
+          id?: string;
+          line_index: number;
+          order_group_id: string;
+        };
+        Update: {
+          amount?: number;
+          id?: string;
+          line_index?: number;
+          order_group_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "crm_order_lines_order_group_id_fkey";
+            columns: ["order_group_id"];
+            isOneToOne: false;
+            referencedRelation: "crm_order_groups";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      crm_planned_meetings: {
+        Row: {
+          client_id: string;
+          id: string;
+          meeting_date: string;
+          meeting_kind: Database["public"]["Enums"]["crm_meeting_kind"];
+          report_id: string;
+          sort_order: number;
+        };
+        Insert: {
+          client_id: string;
+          id?: string;
+          meeting_date: string;
+          meeting_kind: Database["public"]["Enums"]["crm_meeting_kind"];
+          report_id: string;
+          sort_order?: number;
+        };
+        Update: {
+          client_id?: string;
+          id?: string;
+          meeting_date?: string;
+          meeting_kind?: Database["public"]["Enums"]["crm_meeting_kind"];
+          report_id?: string;
+          sort_order?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "crm_planned_meetings_client_id_fkey";
+            columns: ["client_id"];
+            isOneToOne: false;
+            referencedRelation: "clients";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "crm_planned_meetings_report_id_fkey";
+            columns: ["report_id"];
+            isOneToOne: false;
+            referencedRelation: "crm_daily_reports";
             referencedColumns: ["id"];
           },
         ];
@@ -280,6 +384,7 @@ export type Database = {
     };
     Enums: {
       client_status: "ktp" | "distr" | "dealer" | "resale";
+      crm_meeting_kind: "new" | "repeat";
       missing_requirement:
         | "responsible"
         | "tech_conditions"
@@ -402,6 +507,7 @@ export const Constants = {
   public: {
     Enums: {
       client_status: ["ktp", "distr", "dealer", "resale"],
+      crm_meeting_kind: ["new", "repeat"],
       missing_requirement: [
         "responsible",
         "tech_conditions",
@@ -420,3 +526,4 @@ export type ClientStatus = Enums<"client_status">;
 export type NktStatus = Enums<"nkt_status">;
 export type OMarketStatus = Enums<"omarket_status">;
 export type MissingRequirement = Enums<"missing_requirement">;
+export type CrmMeetingKind = Enums<"crm_meeting_kind">;

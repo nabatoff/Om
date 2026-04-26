@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
+import { isSupabaseConfigured } from "@/lib/supabase/env";
 
 export function LoginForm() {
   const router = useRouter();
@@ -20,6 +21,10 @@ export function LoginForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!isSupabaseConfigured()) {
+      setError("Нет настроек Supabase в .env.local");
+      return;
+    }
     setError(null);
     setLoading(true);
     const supabase = createClient();
@@ -51,6 +56,32 @@ export function LoginForm() {
     }
     router.push("/dashboard");
     router.refresh();
+  }
+
+  if (!isSupabaseConfigured()) {
+    return (
+      <Card className="mt-6 border-amber-500/30 bg-amber-500/5 shadow-sm">
+        <CardContent className="pt-6 text-sm">
+          <p className="font-medium text-foreground">Не заданы переменные Supabase</p>
+          <p className="text-muted-foreground mt-2">
+            Скопируй <code className="rounded bg-muted px-1">.env.example</code> в{" "}
+            <code className="rounded bg-muted px-1">.env.local</code> и заполни{" "}
+            <code className="rounded bg-muted px-1">NEXT_PUBLIC_SUPABASE_URL</code> и{" "}
+            <code className="rounded bg-muted px-1">NEXT_PUBLIC_SUPABASE_ANON_KEY</code>{" "}
+            из{" "}
+            <a
+              className="text-primary underline"
+              href="https://supabase.com/dashboard/project/_/settings/api"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Settings → API
+            </a>
+            .
+          </p>
+        </CardContent>
+      </Card>
+    );
   }
 
   return (

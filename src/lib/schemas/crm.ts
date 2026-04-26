@@ -61,27 +61,61 @@ export const monthMetricSchema = z.object({
   potential_amount: nonNegNumber,
 });
 
-export const dailyKpiSchema = z
+const kindEnum = z.enum(["new", "repeat"]);
+
+export const crmDailySaveSchema = z
   .object({
     report_date: z.string().min(1),
-    actual_calls: nonNegInt,
-    qualified_count: nonNegInt,
-    gep_scheduled: nonNegInt,
-    gep_done: nonNegInt,
-    cp_sent: nonNegInt,
-    repeat_meetings: nonNegInt,
-    confirmed_orders_sum: nonNegNumber,
+    processed_total: nonNegInt,
+    new_in_work: nonNegInt,
+    calls_total: nonNegInt,
+    validated_total: nonNegInt,
+    assigned_meetings: z.array(
+      z.object({
+        client_id: z.string().uuid(),
+        date: z.string().min(1),
+        kind: kindEnum,
+      }),
+    ),
+    conducted_meetings: z.array(
+      z.object({
+        client_id: z.string().uuid(),
+        date: z.string().min(1),
+        kind: kindEnum,
+        result: z.string(),
+      }),
+    ),
+    confirmed_orders: z.array(
+      z.object({
+        client_id: z.string().uuid(),
+        order_count: z.coerce.number().int().min(1),
+        amounts: z
+          .array(z.coerce.number().min(0))
+          .min(1, "Нужна хотя бы одна сумма"),
+      }),
+    ),
   })
   .superRefine((v, ctx) => {
     if (v.report_date > localISODate()) {
       ctx.addIssue({
         code: "custom",
         path: ["report_date"],
-        message: "Дата отчета не может быть в будущем",
+        message: "Дата отчёта не может быть в будущем",
       });
+    }
+  })
+  .superRefine((v, ctx) => {
+    for (const [i, o] of v.confirmed_orders.entries()) {
+      if (o.amounts.length !== o.order_count) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["confirmed_orders", i, "amounts"],
+          message: "Число сумм должно совпадать с количеством заказов",
+        });
+      }
     }
   });
 
 export type ClientInput = z.infer<typeof clientSchema>;
 export type MonthMetricInput = z.infer<typeof monthMetricSchema>;
-export type DailyKpiInput = z.infer<typeof dailyKpiSchema>;
+export type CrmDailySaveInput = z.infer<typeof crmDailySaveSchema>;
