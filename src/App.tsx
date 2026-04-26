@@ -31,6 +31,7 @@ import {
   createClientRow,
   saveReportToDb,
 } from './lib/crmApi';
+import { isSupabaseConfigured } from './lib/supabase';
 
 const DAILY_CALL_GOAL = 22;
 const MANAGERS = ['Алексей С.', 'Мария К.', 'Иван П.', 'Елена В.'] as const;
@@ -76,7 +77,7 @@ const App = () => {
   const [saving, setSaving] = useState(false);
   const [booting, setBooting] = useState(true);
 
-  const supabaseOk = Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);
+  const supabaseOk = isSupabaseConfigured();
 
   const refresh = useCallback(async () => {
     if (!supabaseOk) {
@@ -207,7 +208,7 @@ const App = () => {
             className={`rounded-2xl p-4 text-xs font-bold ${loadError ? 'bg-amber-50 text-amber-900 border border-amber-200' : 'bg-red-50 text-red-800 border border-red-200'}`}
           >
             {!supabaseOk
-              ? 'Скопируй .env: VITE_SUPABASE_URL и VITE_SUPABASE_ANON_KEY (см. env.example) и перезапусти dev.'
+              ? 'Нет env для Supabase. Локально: .env.local с VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY. Vercel: те же имена (или NEXT_PUBLIC_*) в Environment Variables → Production + Redeploy.'
               : loadError}
           </div>
         )}

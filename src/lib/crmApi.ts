@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { getSupabase } from './supabase';
 
 export type UiClient = { name: string; bin: string };
 export type FormStats = {
@@ -115,13 +115,13 @@ const reportSelect = `
 `;
 
 export async function fetchClientsApi(): Promise<UiClient[]> {
-  const { data, error } = await supabase.from('crm_clients').select('name, bin').order('name');
+  const { data, error } = await getSupabase().from('crm_clients').select('name, bin').order('name');
   if (error) throw error;
   return (data || []).map((c) => ({ name: c.name, bin: String(c.bin).trim() }));
 }
 
 export async function fetchReportsApi(): Promise<FullReport[]> {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from('crm_reports')
     .select(reportSelect)
     .order('report_date', { ascending: false });
@@ -130,7 +130,7 @@ export async function fetchReportsApi(): Promise<FullReport[]> {
 }
 
 export async function createClientRow(c: UiClient): Promise<UiClient> {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from('crm_clients')
     .insert({ name: c.name, bin: c.bin })
     .select('name, bin')
@@ -149,7 +149,7 @@ export type SaveReportPayload = {
 };
 
 export async function saveReportToDb(payload: SaveReportPayload): Promise<void> {
-  const { data: rep, error: repErr } = await supabase
+  const { data: rep, error: repErr } = await getSupabase()
     .from('crm_reports')
     .insert({
       report_date: payload.reportDate,
@@ -165,7 +165,7 @@ export async function saveReportToDb(payload: SaveReportPayload): Promise<void> 
   const reportId = rep.id as string;
 
   if (payload.assignedMeetings.length) {
-    const { error } = await supabase.from('crm_assigned_meetings').insert(
+    const { error } = await getSupabase().from('crm_assigned_meetings').insert(
       payload.assignedMeetings.map((m, i) => ({
         report_id: reportId,
         entity_name: m.entityName,
@@ -179,7 +179,7 @@ export async function saveReportToDb(payload: SaveReportPayload): Promise<void> 
   }
 
   if (payload.conductedMeetings.length) {
-    const { error } = await supabase.from('crm_conducted_meetings').insert(
+    const { error } = await getSupabase().from('crm_conducted_meetings').insert(
       payload.conductedMeetings.map((m, i) => ({
         report_id: reportId,
         entity_name: m.entityName,
@@ -194,7 +194,7 @@ export async function saveReportToDb(payload: SaveReportPayload): Promise<void> 
   }
 
   if (payload.confirmedOrders.length) {
-    const { error } = await supabase.from('crm_confirmed_orders').insert(
+    const { error } = await getSupabase().from('crm_confirmed_orders').insert(
       payload.confirmedOrders.map((o, i) => ({
         report_id: reportId,
         entity_name: o.entityName,
