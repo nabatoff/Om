@@ -976,6 +976,24 @@ const DashboardBadge = ({ icon, count, color }: { icon: ReactNode; count: number
   </div>
 );
 
+/** Уникальные контрагенты по отчёту (план + факт + сделки). */
+function reportCounterpartiesList(report: FullReport): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const push = (name: string | undefined) => {
+    const n = (name || '').trim();
+    if (!n) return;
+    const k = n.toLowerCase();
+    if (seen.has(k)) return;
+    seen.add(k);
+    out.push(n);
+  };
+  for (const m of report.assignedMeetings) push(m.entityName);
+  for (const m of report.conductedMeetings) push(m.entityName);
+  for (const o of report.confirmedOrders) push(o.entityName);
+  return out;
+}
+
 const AdminDashboard = ({
   reports,
   filterManager,
@@ -1011,11 +1029,12 @@ const AdminDashboard = ({
         managerOptions={managerOptions}
       />
       <div className="bg-white border border-gray-200 rounded-3xl shadow-sm overflow-x-auto text-left">
-        <table className="w-full text-left border-collapse min-w-[1000px]">
+        <table className="w-full text-left border-collapse min-w-[1100px]">
           <thead>
             <tr className="bg-gray-50/50 text-[10px] font-black text-gray-400 uppercase border-b border-gray-100">
               <th className="py-6 px-8">Дата отчета</th>
               <th className="py-6 px-4">Менеджер</th>
+              <th className="py-6 px-4 min-w-[180px] max-w-xs">Контрагент</th>
               <th className="py-6 px-4 text-center">План</th>
               <th className="py-6 px-4 text-center">Факт</th>
               <th className="py-6 px-4 text-center">Реализация</th>
@@ -1028,12 +1047,26 @@ const AdminDashboard = ({
               const conducted = report.conductedMeetings?.length || 0;
               const conversion = report.assignedMeetings?.filter((p) => findEvidence(p, report.manager)).length || 0;
               const revenue = report.confirmedOrders.reduce((a, b) => a + b.totalAmount, 0);
+              const cpList = reportCounterpartiesList(report);
+              const cpTitle = cpList.join('; ');
+              const cpText =
+                cpList.length === 0
+                  ? '—'
+                  : cpList.length <= 2
+                    ? cpList.join(', ')
+                    : `${cpList.slice(0, 2).join(', ')} +${cpList.length - 2}`;
               return (
                 <tr key={report.id} className="hover:bg-gray-50/50">
                   <td className="py-5 px-8 text-gray-500 font-medium">
                     {new Date(report.date + 'T12:00:00').toLocaleDateString('ru-RU')}
                   </td>
                   <td className="py-5 px-4 font-bold text-gray-800">{report.manager}</td>
+                  <td
+                    className="py-5 px-4 text-sm text-gray-700 align-top"
+                    title={cpList.length ? cpTitle : undefined}
+                  >
+                    <span className="line-clamp-3 break-words">{cpText}</span>
+                  </td>
                   <td className="py-5 px-4 text-center">
                     <DashboardBadge icon={<Clock size={12} />} count={plans} color="indigo" />
                   </td>
