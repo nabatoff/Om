@@ -23,6 +23,34 @@ export function staffLoginToServiceEmail(login: string): string {
   return `${n}@${STAFF_EMAIL_DOMAIN}`;
 }
 
+/**
+ * GoTrue 400 + grant_type=password: обычно неверные креды, бан, несовпадение @домена с create-staff.
+ * Покажи `serviceEmail` в UI — по нему ищи пользователя в Auth.
+ */
+export function formatAuthSignInError(
+  e: { message: string; code?: string; status?: number | undefined },
+  serviceEmail: string
+): string {
+  const m = e.message;
+  if (
+    m === 'Invalid login credentials' ||
+    m.toLowerCase().includes('invalid login credentials') ||
+    e.code === 'invalid_credentials'
+  ) {
+    return `Неверный логин или пароль, либо в Auth нет пользователя с email ${serviceEmail} (создание: Edge create-staff, домен = STAFF_EMAIL_DOMAIN, сейчас в клиенте: @${STAFF_EMAIL_DOMAIN})`;
+  }
+  if (/\b(banned|ban)\b/i.test(m) || m.includes('banned') || m.includes('забанен')) {
+    return 'Аккаунт заблокирован (ban в Auth). Нужен разбан админом + is_active в profiles.';
+  }
+  if (/email not confirmed|confirm your email|подтверд/i.test(m)) {
+    return 'Email не подтверждён (редко: при создании вручную). Попроси админа подтвердить в Dashboard или пересоздать через create-staff.';
+  }
+  if (/too many requests|rate|429/i.test(m)) {
+    return 'Слишком много попыток. Подожди минуту и попробуй снова.';
+  }
+  return m;
+}
+
 /** @deprecated используй алиасы *StaffLogin* */
 export const normalizeStaffCode = normalizeStaffLogin;
 export const isValidStaffCode = isValidStaffLogin;
