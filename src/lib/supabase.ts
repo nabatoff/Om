@@ -11,6 +11,10 @@ if (!url || !key) {
 
 const client: SupabaseClient | null = url && key ? createClient(url, key) : null;
 
+export function getSupabaseOptional() {
+  return client;
+}
+
 export function getSupabase(): SupabaseClient {
   if (!client) {
     throw new Error(

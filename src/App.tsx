@@ -18,6 +18,7 @@ import {
   UserPlus,
   Fingerprint,
   AlertTriangle,
+  LogOut,
 } from 'lucide-react';
 import {
   type FormStats,
@@ -32,13 +33,15 @@ import {
   saveReportToDb,
 } from './lib/crmApi';
 import { isSupabaseConfigured } from './lib/supabase';
+import { useAuth } from './context/AuthContext';
+import { LoginView } from './components/LoginView';
 
 const DAILY_CALL_GOAL = 22;
-const MANAGERS = ['Алексей С.', 'Мария К.', 'Иван П.', 'Елена В.'] as const;
 
 const App = () => {
+  const { session, ready: authReady, managerName, signOut } = useAuth();
+  const sessionUserId = session?.user?.id;
   const [currentView, setCurrentView] = useState<'manager' | 'admin' | 'orders'>('manager');
-  const [currentManager, setCurrentManager] = useState<string>(MANAGERS[0]);
   const [clients, setClients] = useState<UiClient[]>([]);
   const [allReports, setAllReports] = useState<FullReport[]>([]);
   const [formStats, setFormStats] = useState<FormStats>({
@@ -84,6 +87,10 @@ const App = () => {
       setBooting(false);
       return;
     }
+    if (!sessionUserId) {
+      setBooting(false);
+      return;
+    }
     setLoadError(null);
     try {
       const [c, r] = await Promise.all([fetchClientsApi(), fetchReportsApi()]);
@@ -94,11 +101,19 @@ const App = () => {
     } finally {
       setBooting(false);
     }
-  }, [supabaseOk]);
+  }, [supabaseOk, sessionUserId]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  const managerFilterOptions = useMemo(() => {
+    const set = new Set<string>();
+    allReports.forEach((r) => {
+      if (r.manager) set.add(r.manager);
+    });
+    return ['Все', ...Array.from(set).sort((a, b) => a.localeCompare(b, 'ru'))];
+  }, [allReports]);
 
   const saveReport = async () => {
     const allEntries = [...assignedMeetings, ...conductedMeetings, ...confirmedOrders];
@@ -118,7 +133,7 @@ const App = () => {
       const reportDate = new Date().toISOString().split('T')[0];
       await saveReportToDb({
         reportDate,
-        manager: currentManager,
+        manager: managerName,
         stats: { ...formStats },
         assignedMeetings,
         conductedMeetings,
@@ -194,6 +209,14 @@ const App = () => {
     return orders;
   }, [filteredReports]);
 
+  if (supabaseOk && !authReady) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-500 text-sm">Сессия…</div>
+    );
+  }
+  if (supabaseOk && !session) {
+    return <LoginView />;
+  }
   if (booting) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-500 text-sm">Загрузка…</div>
@@ -234,18 +257,18 @@ const App = () => {
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap w-full md:w-auto">
-            <label className="text-[10px] font-black text-gray-400 uppercase sr-only">Менеджер (отчёт)</label>
-            <select
-              className="px-3 py-2 bg-gray-100 rounded-xl text-xs font-bold"
-              value={currentManager}
-              onChange={(e) => setCurrentManager(e.target.value)}
+            <div className="text-left px-3 py-2">
+              <p className="text-[10px] font-black text-gray-400 uppercase">Менеджер (отчёт)</p>
+              <p className="text-sm font-bold text-gray-800">{managerName}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void signOut()}
+              className="px-3 py-2 border border-gray-200 rounded-xl text-gray-500 hover:text-red-600 hover:border-red-200 text-xs font-bold flex items-center gap-1.5"
             >
-              {MANAGERS.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
+              <LogOut size={16} />
+              Выйти
+            </button>
             <div className="flex bg-gray-100 p-1 rounded-xl flex-1 md:flex-none min-w-0">
               <button
                 onClick={() => setCurrentView('manager')}
@@ -307,6 +330,7 @@ const App = () => {
             setFilterDateFrom={setFilterDateFrom}
             filterDateTo={filterDateTo}
             setFilterDateTo={setFilterDateTo}
+            managerOptions={managerFilterOptions}
             openDetails={(list, title, _type, manager, rDate) =>
               setDetailsModal({ isOpen: true, list, title, type: 'conversion', manager, reportDate: rDate })
             }
@@ -323,6 +347,7 @@ const App = () => {
             setFilterDateFrom={setFilterDateFrom}
             filterDateTo={filterDateTo}
             setFilterDateTo={setFilterDateTo}
+            managerOptions={managerFilterOptions}
             openOrderDetails={(entity, bin, amounts) => setOrderDetailModal({ isOpen: true, entity, bin, amounts })}
           />
         )}
@@ -844,6 +869,7 @@ const AdminDashboard = ({
   setFilterDateFrom,
   filterDateTo,
   setFilterDateTo,
+  managerOptions,
   openDetails,
   findEvidence,
 }: {
@@ -854,10 +880,10 @@ const AdminDashboard = ({
   setFilterDateFrom: SetState<string>;
   filterDateTo: string;
   setFilterDateTo: SetState<string>;
+  managerOptions: string[];
   openDetails: (list: UiAssigned[], title: string, type: string, manager: string, rDate: string) => void;
   findEvidence: (a: UiAssigned, m: string) => { evidence: UiConducted; reportDate: string } | null;
 }) => {
-  const MANAGERS_LIST = ['Все', 'Алексей С.', 'Мария К.', 'Иван П.', 'Елена В.'];
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-500">
       <AdminFilters
@@ -867,7 +893,7 @@ const AdminDashboard = ({
         setFrom={setFilterDateFrom}
         to={filterDateTo}
         setTo={setFilterDateTo}
-        managerOptions={MANAGERS_LIST}
+        managerOptions={managerOptions}
       />
       <div className="bg-white border border-gray-200 rounded-3xl shadow-sm overflow-x-auto text-left">
         <table className="w-full text-left border-collapse min-w-[1000px]">
@@ -931,6 +957,7 @@ const OrdersHistoryDashboard = ({
   setFilterDateFrom,
   filterDateTo,
   setFilterDateTo,
+  managerOptions,
   openOrderDetails,
 }: {
   orders: (UiOrder & { date: string })[];
@@ -940,9 +967,9 @@ const OrdersHistoryDashboard = ({
   setFilterDateFrom: SetState<string>;
   filterDateTo: string;
   setFilterDateTo: SetState<string>;
+  managerOptions: string[];
   openOrderDetails: (entity: string, bin: string, amounts: number[]) => void;
 }) => {
-  const MANAGERS_LIST = ['Все', 'Алексей С.', 'Мария К.', 'Иван П.', 'Елена В.'];
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-500 text-left">
       <AdminFilters
@@ -952,7 +979,7 @@ const OrdersHistoryDashboard = ({
         setFrom={setFilterDateFrom}
         to={filterDateTo}
         setTo={setFilterDateTo}
-        managerOptions={MANAGERS_LIST}
+        managerOptions={managerOptions}
       />
       <div className="bg-white border border-gray-200 rounded-3xl shadow-sm overflow-x-auto text-left">
         <table className="w-full text-left border-collapse min-w-[1000px]">
