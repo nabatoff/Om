@@ -81,9 +81,12 @@ const App = () => {
   const [newClientData, setNewClientData] = useState({ name: '', bin: '' });
   const [onClientCreatedCallback, setOnClientCreatedCallback] = useState<((c: UiClient) => void) | null>(null);
   const [clientHistoryFor, setClientHistoryFor] = useState<UiClient | null>(null);
-  const [filterManager, setFilterManager] = useState('Все');
-  const [filterDateFrom, setFilterDateFrom] = useState('');
-  const [filterDateTo, setFilterDateTo] = useState('');
+  const [adminFilterManager, setAdminFilterManager] = useState('Все');
+  const [adminFilterDateFrom, setAdminFilterDateFrom] = useState('');
+  const [adminFilterDateTo, setAdminFilterDateTo] = useState('');
+  const [ordersFilterManager, setOrdersFilterManager] = useState('Все');
+  const [ordersFilterDateFrom, setOrdersFilterDateFrom] = useState('');
+  const [ordersFilterDateTo, setOrdersFilterDateTo] = useState('');
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [booting, setBooting] = useState(true);
@@ -160,7 +163,6 @@ const App = () => {
       const reportDate = new Date().toISOString().split('T')[0];
       await saveReportToDb({
         reportDate,
-        manager: managerName,
         stats: { ...formStats },
         assignedMeetings,
         conductedMeetings,
@@ -208,7 +210,11 @@ const App = () => {
     for (const report of allReports) {
       if (report.manager !== manager) continue;
       const evidence = report.conductedMeetings.find(
-        (cm) => cm.bin === plannedMeeting.bin && cm.type === plannedMeeting.type && cm.date >= plannedMeeting.date,
+        (cm) =>
+          cm.bin === plannedMeeting.bin &&
+          cm.type === plannedMeeting.type &&
+          cm.entityName.trim().toLowerCase() === plannedMeeting.entityName.trim().toLowerCase() &&
+          cm.date >= plannedMeeting.date,
       );
       if (evidence) {
         return { evidence, reportDate: report.date } as { evidence: UiConducted; reportDate: string };
@@ -219,22 +225,29 @@ const App = () => {
 
   const filteredReports = useMemo(() => {
     return allReports.filter((report) => {
-      const matchManager = filterManager === 'Все' || report.manager === filterManager;
-      const matchDateFrom = !filterDateFrom || report.date >= filterDateFrom;
-      const matchDateTo = !filterDateTo || report.date <= filterDateTo;
+      const matchManager = adminFilterManager === 'Все' || report.manager === adminFilterManager;
+      const matchDateFrom = !adminFilterDateFrom || report.date >= adminFilterDateFrom;
+      const matchDateTo = !adminFilterDateTo || report.date <= adminFilterDateTo;
       return matchManager && matchDateFrom && matchDateTo;
     });
-  }, [allReports, filterManager, filterDateFrom, filterDateTo]);
+  }, [allReports, adminFilterManager, adminFilterDateFrom, adminFilterDateTo]);
 
   /** Админ: как в аналитике. Менеджер: RLS отдаёт только свои отчёты; фильтр по датам. */
   const reportsForOrders = useMemo(() => {
-    if (isAdmin) return filteredReports;
+    if (isAdmin) {
+      return allReports.filter((r) => {
+        const matchManager = ordersFilterManager === 'Все' || r.manager === ordersFilterManager;
+        const matchDateFrom = !ordersFilterDateFrom || r.date >= ordersFilterDateFrom;
+        const matchDateTo = !ordersFilterDateTo || r.date <= ordersFilterDateTo;
+        return matchManager && matchDateFrom && matchDateTo;
+      });
+    }
     return allReports.filter((r) => {
-      const matchDateFrom = !filterDateFrom || r.date >= filterDateFrom;
-      const matchDateTo = !filterDateTo || r.date <= filterDateTo;
+      const matchDateFrom = !ordersFilterDateFrom || r.date >= ordersFilterDateFrom;
+      const matchDateTo = !ordersFilterDateTo || r.date <= ordersFilterDateTo;
       return matchDateFrom && matchDateTo;
     });
-  }, [isAdmin, filteredReports, allReports, filterDateFrom, filterDateTo]);
+  }, [isAdmin, allReports, ordersFilterManager, ordersFilterDateFrom, ordersFilterDateTo]);
 
   const allFilteredOrders = useMemo(() => {
     const orders: (UiOrder & { manager: string; date: string })[] = [];
@@ -293,10 +306,7 @@ const App = () => {
               <ShieldCheck size={24} />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-gray-800 tracking-tight">CRM Модуль</h1>
-              <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest leading-none">
-                База контрагентов и аналитика · Supabase
-              </p>
+              <h1 className="text-xl font-bold text-gray-800 tracking-tight">Модуль отчетов</h1>
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap w-full md:w-auto">
@@ -405,12 +415,12 @@ const App = () => {
             {adminSubView === 'dashboard' && (
               <AdminDashboard
                 reports={filteredReports}
-                filterManager={filterManager}
-                setFilterManager={setFilterManager}
-                filterDateFrom={filterDateFrom}
-                setFilterDateFrom={setFilterDateFrom}
-                filterDateTo={filterDateTo}
-                setFilterDateTo={setFilterDateTo}
+                filterManager={adminFilterManager}
+                setFilterManager={setAdminFilterManager}
+                filterDateFrom={adminFilterDateFrom}
+                setFilterDateFrom={setAdminFilterDateFrom}
+                filterDateTo={adminFilterDateTo}
+                setFilterDateTo={setAdminFilterDateTo}
                 managerOptions={managerFilterOptions}
                 openDetails={(list, title, _type, manager, rDate) =>
                   setDetailsModal({ isOpen: true, list, title, type: 'conversion', manager, reportDate: rDate })
@@ -446,12 +456,12 @@ const App = () => {
             <OrdersHistoryDashboard
               isAdmin={isAdmin}
               orders={allFilteredOrders}
-              filterManager={filterManager}
-              setFilterManager={setFilterManager}
-              filterDateFrom={filterDateFrom}
-              setFilterDateFrom={setFilterDateFrom}
-              filterDateTo={filterDateTo}
-              setFilterDateTo={setFilterDateTo}
+              filterManager={ordersFilterManager}
+              setFilterManager={setOrdersFilterManager}
+              filterDateFrom={ordersFilterDateFrom}
+              setFilterDateFrom={setOrdersFilterDateFrom}
+              filterDateTo={ordersFilterDateTo}
+              setFilterDateTo={setOrdersFilterDateTo}
               managerOptions={managerFilterOptions}
               openOrderDetails={(entity, bin, amounts) => setOrderDetailModal({ isOpen: true, entity, bin, amounts })}
             />
@@ -976,21 +986,22 @@ const DashboardBadge = ({ icon, count, color }: { icon: ReactNode; count: number
   </div>
 );
 
-/** Уникальные контрагенты по отчёту (план + факт + сделки). */
+/** Уникальные контрагенты по отчёту (план + факт + сделки), дедуп по (bin,name). */
 function reportCounterpartiesList(report: FullReport): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
-  const push = (name: string | undefined) => {
+  const push = (name: string | undefined, bin: string | undefined) => {
     const n = (name || '').trim();
     if (!n) return;
-    const k = n.toLowerCase();
+    const b = (bin || '').trim();
+    const k = `${b}|${n.toLowerCase()}`;
     if (seen.has(k)) return;
     seen.add(k);
-    out.push(n);
+    out.push(b ? `${n} (${b})` : n);
   };
-  for (const m of report.assignedMeetings) push(m.entityName);
-  for (const m of report.conductedMeetings) push(m.entityName);
-  for (const o of report.confirmedOrders) push(o.entityName);
+  for (const m of report.assignedMeetings) push(m.entityName, m.bin);
+  for (const m of report.conductedMeetings) push(m.entityName, m.bin);
+  for (const o of report.confirmedOrders) push(o.entityName, o.bin);
   return out;
 }
 
@@ -1110,7 +1121,7 @@ const OrdersHistoryDashboard = ({
   openOrderDetails,
 }: {
   isAdmin: boolean;
-  orders: (UiOrder & { date: string })[];
+  orders: (UiOrder & { date: string; manager: string })[];
   filterManager: string;
   setFilterManager: SetState<string>;
   filterDateFrom: string;
@@ -1160,6 +1171,7 @@ const OrdersHistoryDashboard = ({
           <thead>
             <tr className="bg-gray-50/50 text-[10px] font-black text-gray-400 border-b border-gray-100">
               <th className="py-6 px-8">Дата</th>
+              {isAdmin && <th className="py-6 px-4">Менеджер</th>}
               <th className="py-6 px-4">БИН/ИИН</th>
               <th className="py-6 px-4">Контрагент</th>
               <th className="py-6 px-4 text-center">Кол-во</th>
@@ -1172,6 +1184,7 @@ const OrdersHistoryDashboard = ({
                 <td className="py-5 px-8 text-gray-500 whitespace-nowrap">
                   {new Date(order.date + 'T12:00:00').toLocaleDateString('ru-RU')}
                 </td>
+                {isAdmin && <td className="py-5 px-4 font-bold text-gray-800 whitespace-nowrap">{order.manager}</td>}
                 <td className="py-5 px-4 font-mono text-gray-400 text-[11px]">{order.bin}</td>
                 <td className="py-5 px-4 font-black text-gray-800">{order.entityName}</td>
                 <td className="py-5 px-4 text-center">

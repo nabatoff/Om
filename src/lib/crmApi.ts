@@ -135,13 +135,20 @@ export async function createClientRow(c: UiClient): Promise<UiClient> {
     .insert({ name: c.name, bin: c.bin })
     .select('name, bin')
     .single();
-  if (error) throw error;
+  if (error) {
+    if (error.code === '23505') {
+      throw new Error('Контрагент с таким БИН уже существует');
+    }
+    if (error.code === '23514') {
+      throw new Error('БИН должен состоять ровно из 12 цифр');
+    }
+    throw error;
+  }
   return { name: data.name, bin: String(data.bin).trim() };
 }
 
 export type SaveReportPayload = {
   reportDate: string;
-  manager: string;
   stats: FormStats;
   assignedMeetings: UiAssigned[];
   conductedMeetings: UiConducted[];
@@ -149,62 +156,6 @@ export type SaveReportPayload = {
 };
 
 export async function saveReportToDb(payload: SaveReportPayload): Promise<void> {
-  const { data: rep, error: repErr } = await getSupabase()
-    .from('crm_reports')
-    .insert({
-      report_date: payload.reportDate,
-      manager: payload.manager,
-      processed_total: payload.stats.processedTotal,
-      new_in_work: payload.stats.newInWork,
-      calls_total: payload.stats.callsTotal,
-      validated_total: payload.stats.validatedTotal,
-    })
-    .select('id')
-    .single();
-  if (repErr) throw repErr;
-  const reportId = rep.id as string;
-
-  if (payload.assignedMeetings.length) {
-    const { error } = await getSupabase().from('crm_assigned_meetings').insert(
-      payload.assignedMeetings.map((m, i) => ({
-        report_id: reportId,
-        entity_name: m.entityName,
-        bin: m.bin,
-        meeting_date: m.date,
-        meeting_type: m.type,
-        sort_order: i,
-      })),
-    );
-    if (error) throw error;
-  }
-
-  if (payload.conductedMeetings.length) {
-    const { error } = await getSupabase().from('crm_conducted_meetings').insert(
-      payload.conductedMeetings.map((m, i) => ({
-        report_id: reportId,
-        entity_name: m.entityName,
-        bin: m.bin,
-        meeting_date: m.date,
-        meeting_type: m.type,
-        result: m.result,
-        sort_order: i,
-      })),
-    );
-    if (error) throw error;
-  }
-
-  if (payload.confirmedOrders.length) {
-    const { error } = await getSupabase().from('crm_confirmed_orders').insert(
-      payload.confirmedOrders.map((o, i) => ({
-        report_id: reportId,
-        entity_name: o.entityName,
-        bin: o.bin,
-        order_count: o.orderCount,
-        amounts: o.amounts,
-        total_amount: o.totalAmount,
-        sort_order: i,
-      })),
-    );
-    if (error) throw error;
-  }
+  const { error } = await getSupabase().rpc('save_crm_report', { payload });
+  if (error) throw error;
 }

@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -52,22 +53,42 @@ function AuthProviderInner({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [ready, setReady] = useState(false);
+  const profileRequestId = useRef(0);
+  const profileRetryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const loadProfile = useCallback(async (uid: string) => {
+  const loadProfile = useCallback(async (uid: string, attempt = 0) => {
+    const reqId = ++profileRequestId.current;
+    if (profileRetryTimer.current) {
+      clearTimeout(profileRetryTimer.current);
+      profileRetryTimer.current = null;
+    }
     const sb = getSupabase();
     const { data, error } = await sb
       .from('profiles')
       .select('id, full_name, role, is_active, login_code')
       .eq('id', uid)
       .maybeSingle();
+    if (reqId !== profileRequestId.current) return;
     if (error) {
       console.error(error);
       setProfile(null);
+      if (attempt < 2) {
+        profileRetryTimer.current = setTimeout(() => {
+          void loadProfile(uid, attempt + 1);
+        }, 800 * (attempt + 1));
+      }
       return;
     }
     if (data) {
       if (data.is_active === false) {
-        await sb.auth.signOut();
+        try {
+          await sb.auth.signOut();
+        } catch (e) {
+          console.error(e);
+        }
+        if (reqId !== profileRequestId.current) return;
+        setSession(null);
+        setUser(null);
         setProfile(null);
         return;
       }
@@ -83,6 +104,7 @@ function AuthProviderInner({ children }: { children: ReactNode }) {
       is_active: true,
       login_code: null,
     });
+    if (reqId !== profileRequestId.current) return;
     if (insErr) {
       console.error(insErr);
       setProfile({ id: uid, full_name: s.email ?? null, role: null, is_active: true, login_code: null });
@@ -102,6 +124,7 @@ function AuthProviderInner({ children }: { children: ReactNode }) {
         const { data } = await getSupabase().auth.getSession();
         if (cancelled) return;
         const s = data.session;
+        profileRequestId.current += 1;
         setSession(s);
         setUser(s?.user ?? null);
         if (s?.user) void loadProfile(s.user.id);
@@ -120,6 +143,7 @@ function AuthProviderInner({ children }: { children: ReactNode }) {
     if (!getSupabaseOptional()) return;
     const { data: { subscription } } = getSupabase().auth.onAuthStateChange(
       async (_event, s) => {
+        profileRequestId.current += 1;
         setSession(s);
         setUser(s?.user ?? null);
         if (s?.user) void loadProfile(s.user.id);
@@ -136,10 +160,25 @@ function AuthProviderInner({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
-    await getSupabase().auth.signOut();
+    try {
+      await getSupabase().auth.signOut();
+    } catch (e) {
+      console.error(e);
+    }
+    profileRequestId.current += 1;
+    if (profileRetryTimer.current) {
+      clearTimeout(profileRetryTimer.current);
+      profileRetryTimer.current = null;
+    }
     setSession(null);
     setUser(null);
     setProfile(null);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (profileRetryTimer.current) clearTimeout(profileRetryTimer.current);
+    };
   }, []);
 
   const managerName = useMemo(() => {
