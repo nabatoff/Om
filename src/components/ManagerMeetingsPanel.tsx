@@ -151,8 +151,8 @@ export function ManagerMeetingsPanel({
           </div>
         </section>
 
-        <section className="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
+        <section className="bg-white border border-gray-200 rounded-3xl p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
             <h3 className="text-xs font-black text-gray-800 uppercase tracking-widest flex items-center gap-2">
               <Calendar size={16} className="text-blue-500" />
               Календарь
@@ -161,7 +161,7 @@ export function ManagerMeetingsPanel({
               <button type="button" onClick={() => shiftMonth(-1)} className="p-1.5 rounded-lg hover:bg-gray-100" aria-label="Пред. месяц">
                 <ChevronLeft size={18} className="text-gray-500" />
               </button>
-              <span className="text-sm font-bold text-gray-700 capitalize min-w-[140px] text-center">{monthLabel}</span>
+              <span className="text-xs font-bold text-gray-700 capitalize min-w-[120px] text-center">{monthLabel}</span>
               <button type="button" onClick={() => shiftMonth(1)} className="p-1.5 rounded-lg hover:bg-gray-100" aria-label="След. месяц">
                 <ChevronRight size={18} className="text-gray-500" />
               </button>
@@ -178,39 +178,41 @@ export function ManagerMeetingsPanel({
               </button>
             </div>
           </div>
-          <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-black text-gray-400 mb-1">
-            {['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'].map((d) => (
-              <div key={d}>
-                {d}
-              </div>
-            ))}
-          </div>
-          <div className="grid grid-cols-7 gap-1">
-            {cells.map((d, i) => {
-              if (d == null) return <div key={`e-${i}`} className="aspect-square" />;
-              const ymd = localYmd(new Date(view.y, view.m, d));
-              const n = byDay.get(ymd) || 0;
-              const isToday = ymd === todayYmd;
-              const isSelected = ymd === selectedYmd;
-              return (
-                <button
-                  type="button"
-                  key={d}
-                  onClick={() => setSelectedYmd(ymd)}
-                  title={n > 0 ? `Встреч: ${n}` : 'Нет встреч'}
-                  className={`aspect-square rounded-lg flex flex-col items-center justify-center text-xs border ${
-                    isSelected
-                      ? 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-300'
-                      : isToday
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-100 bg-gray-50/80'
-                  }`}
-                >
-                  <span className={`font-bold ${isSelected ? 'text-indigo-700' : isToday ? 'text-blue-700' : 'text-gray-700'}`}>{d}</span>
-                  {n > 0 && <span className="text-[9px] font-black text-blue-600">{n}</span>}
-                </button>
-              );
-            })}
+          <div className="max-w-[380px] mx-auto">
+            <div className="grid grid-cols-7 gap-1 text-center text-[9px] font-black text-gray-400 mb-1">
+              {['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'].map((d) => (
+                <div key={d}>
+                  {d}
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-7 gap-1">
+              {cells.map((d, i) => {
+                if (d == null) return <div key={`e-${i}`} className="aspect-square" />;
+                const ymd = localYmd(new Date(view.y, view.m, d));
+                const n = byDay.get(ymd) || 0;
+                const isToday = ymd === todayYmd;
+                const isSelected = ymd === selectedYmd;
+                return (
+                  <button
+                    type="button"
+                    key={d}
+                    onClick={() => setSelectedYmd(ymd)}
+                    title={n > 0 ? `Встреч: ${n}` : 'Нет встреч'}
+                    className={`aspect-square rounded-md flex flex-col items-center justify-center text-[11px] border ${
+                      isSelected
+                        ? 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-300'
+                        : isToday
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-gray-100 bg-gray-50/80'
+                    }`}
+                  >
+                    <span className={`font-bold ${isSelected ? 'text-indigo-700' : isToday ? 'text-blue-700' : 'text-gray-700'}`}>{d}</span>
+                    {n > 0 && <span className="text-[8px] font-black text-blue-600 leading-none">{n}</span>}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </section>
       </div>
