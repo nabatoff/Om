@@ -555,11 +555,6 @@ const App = () => {
                 filterDateTo={adminFilterDateTo}
                 setFilterDateTo={setAdminFilterDateTo}
                 managerOptions={managerFilterOptions}
-                openDetails={(list, title, _type, manager, rDate) =>
-                  setDetailsModal({ isOpen: true, list, title, type: 'conversion', manager, reportDate: rDate })
-                }
-                findEvidence={findSpecificConductedEvidence}
-                onDeleteReport={removeReport}
               />
             )}
             {adminSubView === 'kpi' && (
@@ -1377,25 +1372,6 @@ const DashboardBadge = ({ icon, count, color }: { icon: ReactNode; count: number
   </div>
 );
 
-/** Уникальные контрагенты по отчёту (план + факт + сделки), дедуп по (bin,name). */
-function reportCounterpartiesList(report: FullReport): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  const push = (name: string | undefined, bin: string | undefined) => {
-    const n = (name || '').trim();
-    if (!n) return;
-    const b = (bin || '').trim();
-    const k = `${b}|${n.toLowerCase()}`;
-    if (seen.has(k)) return;
-    seen.add(k);
-    out.push(b ? `${n} (${b})` : n);
-  };
-  for (const m of report.assignedMeetings) push(m.entityName, m.bin);
-  for (const m of report.conductedMeetings) push(m.entityName, m.bin);
-  for (const o of report.confirmedOrders) push(o.entityName, o.bin);
-  return out;
-}
-
 const AdminDashboard = ({
   reports,
   filterManager,
@@ -1405,9 +1381,6 @@ const AdminDashboard = ({
   filterDateTo,
   setFilterDateTo,
   managerOptions,
-  openDetails,
-  findEvidence,
-  onDeleteReport,
 }: {
   reports: FullReport[];
   filterManager: string;
@@ -1417,10 +1390,117 @@ const AdminDashboard = ({
   filterDateTo: string;
   setFilterDateTo: SetState<string>;
   managerOptions: string[];
-  openDetails: (list: UiAssigned[], title: string, type: string, manager: string, rDate: string) => void;
-  findEvidence: (a: UiAssigned, m: string) => { evidence: UiConducted; reportDate: string } | null;
-  onDeleteReport: (reportId: string) => void;
 }) => {
+  const normalizeText = (value: string) => value.trim().toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ');
+  const normalizeBin = (value: string) => value.replace(/\D/g, '');
+  const buildCounterpartyKey = (name: string, bin: string) => `${normalizeBin(bin)}|${normalizeText(name)}`;
+
+  const hasConductedEvidence = (planned: UiAssigned, manager: string) => {
+    const plannedName = normalizeText(planned.entityName);
+    const plannedBin = normalizeBin(planned.bin);
+    const plannedType = normalizeText(planned.type);
+    for (const report of reports) {
+      if (report.manager !== manager) continue;
+      const match = report.conductedMeetings.some(
+        (cm) =>
+          normalizeBin(cm.bin) === plannedBin &&
+          normalizeText(cm.type) === plannedType &&
+          normalizeText(cm.entityName) === plannedName &&
+          cm.date >= planned.date,
+      );
+      if (match) return true;
+    }
+    return false;
+  };
+
+  const summaryTotals = useMemo(() => {
+    let plan = 0;
+    let fact = 0;
+    let realized = 0;
+    let revenue = 0;
+    for (const report of reports) {
+      plan += report.assignedMeetings.length;
+      fact += report.conductedMeetings.length;
+      revenue += report.confirmedOrders.reduce((sum, order) => sum + order.totalAmount, 0);
+      for (const assigned of report.assignedMeetings) {
+        if (hasConductedEvidence(assigned, report.manager)) realized += 1;
+      }
+    }
+    return { plan, fact, realized, revenue };
+  }, [reports]);
+
+  const counterpartyRows = useMemo(() => {
+    const rows = new Map<
+      string,
+      {
+        key: string;
+        name: string;
+        bin: string;
+        plan: number;
+        fact: number;
+        realized: number;
+        revenue: number;
+        managers: Set<string>;
+        minDate: string;
+        maxDate: string;
+      }
+    >();
+
+    const ensureRow = (name: string, bin: string, manager: string, reportDate: string) => {
+      const cleanName = name.trim();
+      const cleanBin = bin.trim();
+      if (!cleanName) return null;
+      const key = buildCounterpartyKey(cleanName, cleanBin);
+      const existing = rows.get(key);
+      if (existing) {
+        existing.managers.add(manager);
+        if (reportDate < existing.minDate) existing.minDate = reportDate;
+        if (reportDate > existing.maxDate) existing.maxDate = reportDate;
+        return existing;
+      }
+      const created = {
+        key,
+        name: cleanName,
+        bin: cleanBin,
+        plan: 0,
+        fact: 0,
+        realized: 0,
+        revenue: 0,
+        managers: new Set([manager]),
+        minDate: reportDate,
+        maxDate: reportDate,
+      };
+      rows.set(key, created);
+      return created;
+    };
+
+    for (const report of reports) {
+      for (const assigned of report.assignedMeetings) {
+        const row = ensureRow(assigned.entityName, assigned.bin, report.manager, report.date);
+        if (!row) continue;
+        row.plan += 1;
+        if (hasConductedEvidence(assigned, report.manager)) row.realized += 1;
+      }
+      for (const conducted of report.conductedMeetings) {
+        const row = ensureRow(conducted.entityName, conducted.bin, report.manager, report.date);
+        if (!row) continue;
+        row.fact += 1;
+      }
+      for (const order of report.confirmedOrders) {
+        const row = ensureRow(order.entityName, order.bin, report.manager, report.date);
+        if (!row) continue;
+        row.revenue += order.totalAmount;
+      }
+    }
+
+    return Array.from(rows.values())
+      .sort((a, b) => b.revenue - a.revenue || b.plan - a.plan || a.name.localeCompare(b.name, 'ru'))
+      .map((row) => ({
+        ...row,
+        managersText: Array.from(row.managers).sort((a, b) => a.localeCompare(b, 'ru')).join(', '),
+      }));
+  }, [reports]);
+
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-500">
       <AdminFilters
@@ -1440,86 +1520,83 @@ const AdminDashboard = ({
       <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 text-left">
         <p className="text-[11px] font-black text-blue-900 uppercase tracking-wider mb-1">Как читать таблицу</p>
         <p className="text-xs text-blue-800">
-          <span className="font-bold">План</span> — назначенные встречи, <span className="font-bold">Факт</span> —
-          проведённые встречи, <span className="font-bold">Реализация</span> — сколько назначенных доведено до проведения.
-          <span className="font-bold"> ID отчёта</span> помогает различать несколько отчётов за один день.
+          Сверху показан общий итог по отфильтрованным отчётам. Ниже — детализация по каждому контрагенту.
+          <span className="font-bold"> План</span> — назначенные, <span className="font-bold">Факт</span> — проведённые,
+          <span className="font-bold"> Реализация</span> — доведено до проведения.
         </p>
       </div>
+      <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Общая сводка</p>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="rounded-xl border border-indigo-100 bg-indigo-50/70 p-3">
+            <p className="text-[10px] text-indigo-700 font-black uppercase">План</p>
+            <p className="text-xl font-black text-indigo-900">{summaryTotals.plan}</p>
+          </div>
+          <div className="rounded-xl border border-blue-100 bg-blue-50/70 p-3">
+            <p className="text-[10px] text-blue-700 font-black uppercase">Факт</p>
+            <p className="text-xl font-black text-blue-900">{summaryTotals.fact}</p>
+          </div>
+          <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 p-3">
+            <p className="text-[10px] text-emerald-700 font-black uppercase">Реализация</p>
+            <p className="text-xl font-black text-emerald-900">
+              {summaryTotals.realized} <span className="text-sm opacity-60">/ {summaryTotals.plan}</span>
+            </p>
+          </div>
+          <div className="rounded-xl border border-amber-100 bg-amber-50/70 p-3">
+            <p className="text-[10px] text-amber-700 font-black uppercase">Выручка</p>
+            <p className="text-xl font-black text-amber-900 whitespace-nowrap">{new Intl.NumberFormat('ru-RU').format(summaryTotals.revenue)} ₸</p>
+          </div>
+        </div>
+      </div>
       <div className="bg-white border border-gray-200 rounded-3xl shadow-sm overflow-x-auto text-left">
-        <table className="w-full text-left border-collapse min-w-[1200px]">
+        <table className="w-full text-left border-collapse min-w-[1100px]">
           <thead>
             <tr className="bg-gray-50/50 text-[10px] font-black text-gray-400 uppercase border-b border-gray-100">
-              <th className="py-6 px-4">ID отчёта</th>
-              <th className="py-6 px-8">Дата отчета</th>
-              <th className="py-6 px-4">Менеджер</th>
-              <th className="py-6 px-4 min-w-[180px] max-w-xs">Контрагент</th>
-              <th className="py-6 px-4 text-center">План (назнач.)</th>
-              <th className="py-6 px-4 text-center">Факт (провед.)</th>
-              <th className="py-6 px-4 text-center">Реализация (из плана)</th>
+              <th className="py-6 px-4">Контрагент</th>
+              <th className="py-6 px-4">Менеджер(ы)</th>
+              <th className="py-6 px-4">Период</th>
+              <th className="py-6 px-4 text-center">План</th>
+              <th className="py-6 px-4 text-center">Факт</th>
+              <th className="py-6 px-4 text-center">Реализация</th>
               <th className="py-6 px-8 text-right">Выручка</th>
-              <th className="py-6 px-4 text-right">Действия</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
-            {reports.map((report) => {
-              const plans = report.assignedMeetings?.length || 0;
-              const conducted = report.conductedMeetings?.length || 0;
-              const conversion = report.assignedMeetings?.filter((p) => findEvidence(p, report.manager)).length || 0;
-              const revenue = report.confirmedOrders.reduce((a, b) => a + b.totalAmount, 0);
-              const cpList = reportCounterpartiesList(report);
-              const cpTitle = cpList.join('; ');
-              const cpText =
-                cpList.length === 0
-                  ? '—'
-                  : cpList.length <= 2
-                    ? cpList.join(', ')
-                    : `${cpList.slice(0, 2).join(', ')} +${cpList.length - 2}`;
-              return (
-                <tr key={report.id} className="hover:bg-gray-50/50">
-                  <td className="py-5 px-4 font-mono text-[11px] text-gray-500 whitespace-nowrap">{report.id.slice(0, 8)}</td>
-                  <td className="py-5 px-8 text-gray-500 font-medium">
-                    {formatDisplayDate(report.date)}
+            {counterpartyRows.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="py-10 text-center text-sm text-gray-400">
+                  Нет данных по контрагентам за выбранный период.
+                </td>
+              </tr>
+            ) : (
+              counterpartyRows.map((row) => (
+                <tr key={row.key} className="hover:bg-gray-50/50">
+                  <td className="py-5 px-4">
+                    <div className="font-bold text-gray-800">{row.name}</div>
+                    <div className="text-[11px] text-gray-400 font-mono">{row.bin || '—'}</div>
                   </td>
-                  <td className="py-5 px-4 font-bold text-gray-800">{report.manager}</td>
-                  <td
-                    className="py-5 px-4 text-sm text-gray-700 align-top"
-                    title={cpList.length ? cpTitle : undefined}
-                  >
-                    <span className="line-clamp-3 break-words">{cpText}</span>
+                  <td className="py-5 px-4 text-sm text-gray-700">{row.managersText}</td>
+                  <td className="py-5 px-4 text-sm text-gray-600 whitespace-nowrap">
+                    {formatDisplayDate(row.minDate)}
+                    {row.maxDate !== row.minDate ? ` — ${formatDisplayDate(row.maxDate)}` : ''}
                   </td>
                   <td className="py-5 px-4 text-center">
-                    <DashboardBadge icon={<Clock size={12} />} count={plans} color="indigo" />
+                    <DashboardBadge icon={<Clock size={12} />} count={row.plan} color="indigo" />
                   </td>
                   <td className="py-5 px-4 text-center">
-                    <DashboardBadge icon={<CalendarCheck size={12} />} count={conducted} color="blue" />
+                    <DashboardBadge icon={<CalendarCheck size={12} />} count={row.fact} color="blue" />
                   </td>
                   <td className="py-5 px-4 text-center">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        openDetails(report.assignedMeetings, `Анализ за ${formatDisplayDate(report.date)}`, 'conversion', report.manager, report.date)
-                      }
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg font-black text-[10px] hover:bg-emerald-100"
-                    >
-                      <Target size={12} /> {conversion} <span className="opacity-40">/ {plans}</span>
-                    </button>
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg font-black text-[10px]">
+                      <Target size={12} /> {row.realized} <span className="opacity-40">/ {row.plan}</span>
+                    </span>
                   </td>
                   <td className="py-5 px-8 text-right font-black text-gray-900 whitespace-nowrap">
-                    {new Intl.NumberFormat('ru-RU').format(revenue)} ₸
-                  </td>
-                  <td className="py-5 px-4 text-right">
-                    <button
-                      type="button"
-                      onClick={() => onDeleteReport(report.id)}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase text-red-600 border border-red-100 hover:bg-red-50"
-                      title="Удалить отчёт"
-                    >
-                      <Trash2 size={12} /> Удалить
-                    </button>
+                    {new Intl.NumberFormat('ru-RU').format(row.revenue)} ₸
                   </td>
                 </tr>
-              );
-            })}
+              ))
+            )}
           </tbody>
         </table>
       </div>
