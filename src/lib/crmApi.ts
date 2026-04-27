@@ -21,6 +21,7 @@ export type FullReport = {
   id: string;
   date: string;
   manager: string;
+  managerId: string | null;
   stats: FormStats;
   assignedMeetings: UiAssigned[];
   conductedMeetings: UiConducted[];
@@ -31,6 +32,7 @@ type ReportRow = {
   id: string;
   report_date: string;
   manager: string;
+  manager_id: string | null;
   processed_total: number;
   new_in_work: number;
   calls_total: number;
@@ -68,6 +70,7 @@ function mapReport(r: ReportRow): FullReport {
     id: r.id,
     date: r.report_date,
     manager: r.manager,
+    managerId: r.manager_id,
     stats: {
       processedTotal: r.processed_total,
       newInWork: r.new_in_work,
@@ -107,7 +110,7 @@ function mapReport(r: ReportRow): FullReport {
 }
 
 const reportSelect = `
-  id, report_date, manager,
+  id, report_date, manager, manager_id,
   processed_total, new_in_work, calls_total, validated_total,
   crm_assigned_meetings ( id, entity_name, bin, meeting_date, meeting_type, sort_order ),
   crm_conducted_meetings ( id, entity_name, bin, meeting_date, meeting_type, result, sort_order ),
@@ -158,6 +161,7 @@ export async function deleteReportById(reportId: string): Promise<void> {
 }
 
 export type SaveReportPayload = {
+  reportId?: string;
   reportDate: string;
   stats: FormStats;
   assignedMeetings: UiAssigned[];

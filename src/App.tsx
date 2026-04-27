@@ -62,6 +62,7 @@ const App = () => {
   const [assignedMeetings, setAssignedMeetings] = useState<UiAssigned[]>([]);
   const [conductedMeetings, setConductedMeetings] = useState<UiConducted[]>([]);
   const [confirmedOrders, setConfirmedOrders] = useState<UiOrder[]>([]);
+  const [managerReportDate, setManagerReportDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [isMeetingModalOpen, setIsMeetingModalOpen] = useState(false);
   const [activeMeetingIndex, setActiveMeetingIndex] = useState<number | null>(null);
   const [meetingResultTemp, setMeetingResultTemp] = useState('');
@@ -147,6 +148,29 @@ const App = () => {
     return ['Все', ...Array.from(set).sort((a, b) => a.localeCompare(b, 'ru'))];
   }, [allReports]);
 
+  const managerReportForDate = useMemo(() => {
+    if (!sessionUserId) return null;
+    return (
+      allReports.find((r) => r.date === managerReportDate && (r.managerId === sessionUserId || (!r.managerId && r.manager === managerName))) ??
+      null
+    );
+  }, [allReports, managerReportDate, managerName, sessionUserId]);
+
+  useEffect(() => {
+    if (currentView !== 'manager') return;
+    if (managerReportForDate) {
+      setFormStats({ ...managerReportForDate.stats });
+      setAssignedMeetings([...managerReportForDate.assignedMeetings]);
+      setConductedMeetings([...managerReportForDate.conductedMeetings]);
+      setConfirmedOrders([...managerReportForDate.confirmedOrders]);
+      return;
+    }
+    setFormStats({ processedTotal: 0, newInWork: 0, callsTotal: 0, validatedTotal: 0 });
+    setAssignedMeetings([]);
+    setConductedMeetings([]);
+    setConfirmedOrders([]);
+  }, [currentView, managerReportForDate]);
+
   const saveReport = async () => {
     const allEntries = [...assignedMeetings, ...conductedMeetings, ...confirmedOrders];
     const invalidEntry = allEntries.find((e) => !e.bin);
@@ -162,20 +186,16 @@ const App = () => {
     }
     setSaving(true);
     try {
-      const reportDate = new Date().toISOString().split('T')[0];
       await saveReportToDb({
-        reportDate,
+        reportId: managerReportForDate?.id,
+        reportDate: managerReportDate,
         stats: { ...formStats },
         assignedMeetings,
         conductedMeetings,
         confirmedOrders,
       });
       await refresh();
-      setFormStats({ processedTotal: 0, newInWork: 0, callsTotal: 0, validatedTotal: 0 });
-      setAssignedMeetings([]);
-      setConductedMeetings([]);
-      setConfirmedOrders([]);
-      setCurrentView(isAdmin ? 'admin' : 'manager');
+      if (isAdmin) setCurrentView('admin');
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Сохранение не удалось');
     } finally {
@@ -394,6 +414,8 @@ const App = () => {
           <ManagerDashboard
             stats={formStats}
             setStats={setFormStats}
+            reportDate={managerReportDate}
+            setReportDate={setManagerReportDate}
             DAILY_CALL_GOAL={DAILY_CALL_GOAL}
             assignedMeetings={assignedMeetings}
             setAssignedMeetings={setAssignedMeetings}
@@ -612,6 +634,8 @@ type SetState<T> = Dispatch<SetStateAction<T>>;
 const ManagerDashboard = ({
   stats,
   setStats,
+  reportDate,
+  setReportDate,
   DAILY_CALL_GOAL,
   assignedMeetings,
   setAssignedMeetings,
@@ -629,6 +653,8 @@ const ManagerDashboard = ({
 }: {
   stats: FormStats;
   setStats: SetState<FormStats>;
+  reportDate: string;
+  setReportDate: SetState<string>;
   DAILY_CALL_GOAL: number;
   assignedMeetings: UiAssigned[];
   setAssignedMeetings: SetState<UiAssigned[]>;
@@ -676,6 +702,24 @@ const ManagerDashboard = ({
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm flex flex-wrap items-end gap-3 text-left">
+        <div className="space-y-1.5">
+          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Отчет за</label>
+          <input
+            type="date"
+            className="px-4 py-2.5 bg-gray-50 border rounded-xl text-sm font-bold"
+            value={reportDate}
+            onChange={(e) => setReportDate(e.target.value)}
+          />
+        </div>
+        <button
+          type="button"
+          onClick={() => setReportDate(new Date().toISOString().split('T')[0])}
+          className="px-4 py-2.5 rounded-xl border border-gray-200 text-xs font-black uppercase tracking-wider text-gray-600 hover:bg-gray-50"
+        >
+          Сегодня
+        </button>
+      </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatInput
           icon={<Briefcase size={20} className="text-blue-500" />}

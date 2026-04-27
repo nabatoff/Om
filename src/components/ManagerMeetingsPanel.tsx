@@ -39,10 +39,12 @@ export function ManagerMeetingsPanel({
   findEvidence: (planned: UiAssigned, manager: string) => { evidence: UiConducted; reportDate: string } | null;
   managerName: string;
 }) {
+  const todayYmd = localYmd(new Date());
   const [view, setView] = useState(() => {
     const d = new Date();
     return { y: d.getFullYear(), m: d.getMonth() };
   });
+  const [selectedYmd, setSelectedYmd] = useState(todayYmd);
 
   const rows: UiAssignedWithReport[] = useMemo(() => {
     const out: UiAssignedWithReport[] = [];
@@ -59,7 +61,6 @@ export function ManagerMeetingsPanel({
     return out;
   }, [allReports]);
 
-  const todayYmd = localYmd(new Date());
   const tomorrowYmd = addDaysYmd(todayYmd, 1);
 
   const { today, tomorrow } = useMemo(() => {
@@ -84,6 +85,10 @@ export function ManagerMeetingsPanel({
     return m;
   }, [rows]);
 
+  const selectedRows = useMemo(() => {
+    return rows.filter((a) => toYmd(a.date) === selectedYmd);
+  }, [rows, selectedYmd]);
+
   const firstMondayIndex = (() => {
     const d0 = new Date(view.y, view.m, 1).getDay();
     return d0 === 0 ? 6 : d0 - 1;
@@ -100,6 +105,11 @@ export function ManagerMeetingsPanel({
       return { y: d.getFullYear(), m: d.getMonth() };
     });
   };
+
+  const selectedDateLabel = useMemo(
+    () => new Date(selectedYmd + 'T12:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }),
+    [selectedYmd],
+  );
 
   return (
     <div className="space-y-6 text-left">
@@ -151,6 +161,17 @@ export function ManagerMeetingsPanel({
               <button type="button" onClick={() => shiftMonth(1)} className="p-1.5 rounded-lg hover:bg-gray-100" aria-label="След. месяц">
                 <ChevronRight size={18} className="text-gray-500" />
               </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const d = new Date();
+                  setView({ y: d.getFullYear(), m: d.getMonth() });
+                  setSelectedYmd(todayYmd);
+                }}
+                className="px-2 py-1 rounded-lg border border-gray-200 text-[10px] font-black uppercase tracking-wider text-gray-600 hover:bg-gray-50"
+              >
+                Сегодня
+              </button>
             </div>
           </div>
           <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-black text-gray-400 mb-1">
@@ -166,21 +187,45 @@ export function ManagerMeetingsPanel({
               const ymd = localYmd(new Date(view.y, view.m, d));
               const n = byDay.get(ymd) || 0;
               const isToday = ymd === todayYmd;
+              const isSelected = ymd === selectedYmd;
               return (
-                <div
+                <button
+                  type="button"
                   key={d}
+                  onClick={() => setSelectedYmd(ymd)}
+                  title={n > 0 ? `Встреч: ${n}` : 'Нет встреч'}
                   className={`aspect-square rounded-lg flex flex-col items-center justify-center text-xs border ${
-                    isToday ? 'border-blue-500 bg-blue-50' : 'border-gray-100 bg-gray-50/80'
+                    isSelected
+                      ? 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-300'
+                      : isToday
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-gray-100 bg-gray-50/80'
                   }`}
                 >
-                  <span className={`font-bold ${isToday ? 'text-blue-700' : 'text-gray-700'}`}>{d}</span>
+                  <span className={`font-bold ${isSelected ? 'text-indigo-700' : isToday ? 'text-blue-700' : 'text-gray-700'}`}>{d}</span>
                   {n > 0 && <span className="text-[9px] font-black text-blue-600">{n}</span>}
-                </div>
+                </button>
               );
             })}
           </div>
         </section>
       </div>
+
+      <section className="bg-white border border-indigo-100 rounded-3xl p-6 shadow-sm">
+        <h3 className="text-xs font-black text-indigo-800 uppercase tracking-widest flex items-center gap-2 mb-4">
+          <CalendarDays size={16} className="text-indigo-500" />
+          Встречи на {selectedDateLabel}
+        </h3>
+        {selectedRows.length === 0 ? (
+          <p className="text-sm text-gray-400">На выбранный день назначенных встреч нет.</p>
+        ) : (
+          <ul className="space-y-2">
+            {selectedRows.map((a, i) => (
+              <MeetingMiniRow key={`sel-${a.bin}-${a.date}-${i}`} a={a} findEvidence={findEvidence} managerName={managerName} />
+            ))}
+          </ul>
+        )}
+      </section>
 
       <section className="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm overflow-x-auto">
         <h3 className="text-xs font-black text-gray-800 uppercase tracking-widest flex items-center gap-2 mb-4">
