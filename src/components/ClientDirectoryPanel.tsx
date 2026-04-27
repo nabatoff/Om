@@ -55,13 +55,13 @@ export function ClientDirectoryPanel({ clients, onSelectClient, onAddClient, onD
       </div>
 
       <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
-        <div className="overflow-x-auto max-h-[calc(100vh-22rem)]">
+        <div className="overflow-auto max-h-[calc(100vh-22rem)]">
           <table className="w-full text-left text-sm">
-            <thead>
+            <thead className="sticky top-0 z-10">
               <tr className="bg-gray-50 text-[10px] font-black text-gray-500 uppercase tracking-tighter border-b border-gray-100">
-                <th className="p-4">Наименование</th>
-                <th className="p-4">БИН</th>
-                <th className="p-4 w-36 text-right">Действия</th>
+                <th className="p-4 bg-gray-50">Наименование</th>
+                <th className="p-4 bg-gray-50">БИН</th>
+                <th className="p-4 w-36 text-right bg-gray-50">Действия</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">

@@ -519,16 +519,6 @@ const App = () => {
               </button>
               <button
                 type="button"
-                onClick={() => setAdminSubView('staff')}
-                className={`flex-1 min-w-[140px] flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                  adminSubView === 'staff' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
-                }`}
-              >
-                <UserCog size={14} />
-                Сотрудники
-              </button>
-              <button
-                type="button"
                 onClick={() => setAdminSubView('kpi')}
                 className={`flex-1 min-w-[140px] flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
                   adminSubView === 'kpi' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
@@ -536,6 +526,16 @@ const App = () => {
               >
                 <FileText size={14} />
                 KPI отчёт
+              </button>
+              <button
+                type="button"
+                onClick={() => setAdminSubView('staff')}
+                className={`flex-1 min-w-[140px] flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                  adminSubView === 'staff' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
+                }`}
+              >
+                <UserCog size={14} />
+                Сотрудники
               </button>
             </div>
             {adminSubView === 'dashboard' && (
@@ -565,6 +565,7 @@ const App = () => {
                 filterDateTo={kpiFilterDateTo}
                 setFilterDateTo={setKpiFilterDateTo}
                 managerOptions={managerFilterOptions}
+                onDeleteReport={removeReport}
               />
             )}
             {adminSubView === 'staff' && <StaffManager />}
@@ -1260,6 +1261,13 @@ const MeetingTable = ({
                       <button
                         type="button"
                         onClick={async () => {
+                          if (type === 'conducted') {
+                            const current = row as UiConducted;
+                            if (!current.result || !current.result.trim()) {
+                              alert('Заполните результат встречи перед сохранением.');
+                              return;
+                            }
+                          }
                           const currentSig = rowSig(row as UiAssigned | UiConducted);
                           const ok = await onSaveItem();
                           if (ok) {
@@ -1466,6 +1474,7 @@ const KpiDashboard = ({
   filterDateTo,
   setFilterDateTo,
   managerOptions,
+  onDeleteReport,
 }: {
   reports: FullReport[];
   filterManager: string;
@@ -1475,6 +1484,7 @@ const KpiDashboard = ({
   filterDateTo: string;
   setFilterDateTo: SetState<string>;
   managerOptions: string[];
+  onDeleteReport: (reportId: string) => void;
 }) => {
   const kpiRows = useMemo(() => {
     const byKey = new Map<string, FullReport>();
@@ -1522,6 +1532,7 @@ const KpiDashboard = ({
               <th className="py-4 px-4 text-center">Взято новых</th>
               <th className="py-4 px-4 text-center">Звонки</th>
               <th className="py-4 px-4 text-center">Квалификация</th>
+              <th className="py-4 px-4 text-right">Действия</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
@@ -1533,6 +1544,16 @@ const KpiDashboard = ({
                 <td className="py-3.5 px-4 text-center font-black text-emerald-700">{report.stats.newInWork}</td>
                 <td className="py-3.5 px-4 text-center font-black text-indigo-700">{report.stats.callsTotal}</td>
                 <td className="py-3.5 px-4 text-center font-black text-amber-700">{report.stats.validatedTotal}</td>
+                <td className="py-3.5 px-4 text-right">
+                  <button
+                    type="button"
+                    onClick={() => onDeleteReport(report.id)}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase text-red-600 border border-red-100 hover:bg-red-50"
+                    title="Удалить KPI-отчёт"
+                  >
+                    <Trash2 size={12} /> Удалить
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
