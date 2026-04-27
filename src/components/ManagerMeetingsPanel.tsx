@@ -3,6 +3,7 @@ import { Calendar, CalendarDays, ChevronLeft, ChevronRight, Clock } from 'lucide
 import type { FullReport, UiAssigned, UiConducted } from '../lib/crmApi';
 
 export type UiAssignedWithReport = UiAssigned & { reportDate: string };
+type UiMeetingWithReport = UiAssignedWithReport & { source: 'assigned' | 'conducted' };
 
 function formatDisplayDate(raw: string): string {
   const ymd = toYmd(raw);
@@ -75,11 +76,21 @@ export function ManagerMeetingsPanel({
   const [assignedStatusFilter, setAssignedStatusFilter] = useState<'all' | 'done' | 'pending'>('all');
   const [assignedTypeFilter, setAssignedTypeFilter] = useState<'all' | 'Новая' | 'Повторная'>('all');
 
-  const rows: UiAssignedWithReport[] = useMemo(() => {
-    const out: UiAssignedWithReport[] = [];
+  const rows: UiMeetingWithReport[] = useMemo(() => {
+    const out: UiMeetingWithReport[] = [];
     for (const r of allReports) {
       for (const a of r.assignedMeetings) {
-        out.push({ ...a, reportDate: r.date });
+        out.push({ ...a, reportDate: r.date, source: 'assigned' });
+      }
+      for (const c of r.conductedMeetings) {
+        out.push({
+          entityName: c.entityName,
+          bin: c.bin,
+          date: c.date,
+          type: c.type,
+          reportDate: r.date,
+          source: 'conducted',
+        });
       }
     }
     out.sort((x, y) => {
@@ -124,7 +135,7 @@ export function ManagerMeetingsPanel({
       if (!ymd) return false;
       if (assignedFilterFrom && ymd < assignedFilterFrom) return false;
       if (assignedFilterTo && ymd > assignedFilterTo) return false;
-      const isDone = Boolean(findEvidence(a, managerName));
+      const isDone = a.source === 'conducted' ? true : Boolean(findEvidence(a, managerName));
       if (assignedStatusFilter === 'done' && !isDone) return false;
       if (assignedStatusFilter === 'pending' && isDone) return false;
       if (assignedTypeFilter !== 'all') {
@@ -281,7 +292,7 @@ export function ManagerMeetingsPanel({
         <section className="bg-white border border-gray-200 rounded-3xl p-4 sm:p-6 shadow-sm overflow-x-auto">
           <h3 className="text-xs font-black text-gray-800 uppercase tracking-widest flex items-center gap-2 mb-4">
             <CalendarDays size={16} className="text-blue-500" />
-            Все назначенные встречи
+            Все встречи
           </h3>
           <div className="bg-gray-50/70 border border-gray-100 rounded-2xl p-3 sm:p-4 mb-4 flex flex-wrap gap-3 items-end">
             <div className="space-y-1.5 w-full sm:w-auto">
@@ -397,7 +408,7 @@ export function ManagerMeetingsPanel({
             ) : (
               filteredAssignedRows.map((a, idx) => {
                 const ymd = toYmd(a.date);
-                const ev = findEvidence(a, managerName);
+                const isDone = a.source === 'conducted' ? true : Boolean(findEvidence(a, managerName));
                 return (
                   <tr key={`${a.bin}-${a.date}-${idx}`} className="text-gray-800">
                     <td className="py-3 text-gray-600 whitespace-nowrap">
@@ -418,7 +429,7 @@ export function ManagerMeetingsPanel({
                     </td>
                     <td className="py-3 text-gray-500 text-xs">{formatDisplayDate(a.reportDate)}</td>
                     <td className="py-3 text-right">
-                      {ev ? (
+                      {isDone ? (
                         <span className="text-emerald-600 font-black text-[10px] bg-emerald-50 px-2 py-1 rounded-full uppercase">Выполнено</span>
                       ) : (
                         <span className="text-amber-600 font-black text-[10px] bg-amber-50 px-2 py-1 rounded-full uppercase">Ожидает</span>
@@ -441,11 +452,11 @@ function MeetingMiniRow({
   findEvidence,
   managerName,
 }: {
-  a: UiAssignedWithReport;
+  a: UiMeetingWithReport;
   findEvidence: (planned: UiAssigned, manager: string) => { evidence: UiConducted; reportDate: string } | null;
   managerName: string;
 }) {
-  const ev = findEvidence(a, managerName);
+  const ev = a.source === 'conducted' ? true : Boolean(findEvidence(a, managerName));
   return (
     <li className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 p-2.5 sm:p-3 rounded-2xl bg-amber-50/80 border border-amber-100/80 text-xs sm:text-sm">
       <div>

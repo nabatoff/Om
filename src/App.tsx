@@ -614,7 +614,7 @@ const App = () => {
                   }`}
                 >
                   <List size={14} />
-                  Все назначенные встречи
+                  Все встречи
                 </button>
                 <button
                   type="button"
