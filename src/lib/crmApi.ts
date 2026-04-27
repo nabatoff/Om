@@ -173,3 +173,16 @@ export async function saveReportToDb(payload: SaveReportPayload): Promise<void> 
   const { error } = await getSupabase().rpc('save_crm_report', { payload });
   if (error) throw error;
 }
+
+export async function saveKpiToDb(payload: {
+  reportId?: string;
+  reportDate: string;
+  processedTotal: number;
+  newInWork: number;
+  callsTotal: number;
+  validatedTotal: number;
+}): Promise<string> {
+  const { data, error } = await getSupabase().rpc('save_crm_kpi', { payload });
+  if (error) throw error;
+  return String(data);
+}

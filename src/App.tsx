@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef, type ReactNode, type Dispatch, type SetStateAction } from 'react';
+import { useState, useEffect, useMemo, useCallback, type ReactNode, type Dispatch, type SetStateAction } from 'react';
 import {
   Plus,
   Trash2,
@@ -8,7 +8,6 @@ import {
   Users,
   FileText,
   X,
-  Save,
   Clock,
   ShieldCheck,
   CalendarCheck,
@@ -35,6 +34,7 @@ import {
   deleteClientByBin,
   deleteReportById,
   saveReportToDb,
+  saveKpiToDb,
 } from './lib/crmApi';
 import { buildClientCrmHistory } from './lib/crmClientHistory';
 import { ClientDirectoryPanel } from './components/ClientDirectoryPanel';
@@ -112,7 +112,7 @@ const App = () => {
   const [kpiFilterManager, setKpiFilterManager] = useState('Все');
   const [kpiFilterDateFrom, setKpiFilterDateFrom] = useState('');
   const [kpiFilterDateTo, setKpiFilterDateTo] = useState('');
-  const statsAutosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [kpiSaving, setKpiSaving] = useState(false);
 
   const supabaseOk = isSupabaseConfigured();
 
@@ -227,20 +227,33 @@ const App = () => {
     }
   };
 
-  useEffect(() => {
-    if (currentView !== 'manager') return;
-    if (!supabaseOk) return;
-    if (statsAutosaveTimer.current) clearTimeout(statsAutosaveTimer.current);
-    statsAutosaveTimer.current = setTimeout(() => {
-      void saveReport({ silent: true, skipValidation: true, refreshAfterSave: false });
-    }, 800);
-    return () => {
-      if (statsAutosaveTimer.current) {
-        clearTimeout(statsAutosaveTimer.current);
-        statsAutosaveTimer.current = null;
+  const saveKpi = useCallback(
+    async (nextStats: FormStats) => {
+      if (!supabaseOk || currentView !== 'manager') return;
+      const isAllZero =
+        nextStats.processedTotal === 0 &&
+        nextStats.newInWork === 0 &&
+        nextStats.callsTotal === 0 &&
+        nextStats.validatedTotal === 0;
+      if (isAllZero && !managerReportForDate?.id) return;
+      setKpiSaving(true);
+      try {
+        await saveKpiToDb({
+          reportId: managerReportForDate?.id,
+          reportDate: managerReportDate,
+          processedTotal: nextStats.processedTotal,
+          newInWork: nextStats.newInWork,
+          callsTotal: nextStats.callsTotal,
+          validatedTotal: nextStats.validatedTotal,
+        });
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setKpiSaving(false);
       }
-    };
-  }, [currentView, supabaseOk, managerReportDate, formStats.processedTotal, formStats.newInWork, formStats.callsTotal, formStats.validatedTotal]);
+    },
+    [supabaseOk, currentView, managerReportForDate?.id, managerReportDate],
+  );
 
   const createClient = async () => {
     if (newClientData.name.trim().length < 2 || newClientData.bin.length !== 12) {
@@ -471,9 +484,10 @@ const App = () => {
             setConductedMeetings={setConductedMeetings}
             confirmedOrders={confirmedOrders}
             setConfirmedOrders={setConfirmedOrders}
-            saveReport={saveReport}
             saving={saving}
             onSaveAction={(opts) => saveReport(opts)}
+            onSaveKpi={saveKpi}
+            kpiSaving={kpiSaving}
             setIsMeetingModalOpen={setIsMeetingModalOpen}
             setActiveMeetingIndex={setActiveMeetingIndex}
             setMeetingResultTemp={setMeetingResultTemp}
@@ -714,9 +728,10 @@ const ManagerDashboard = ({
   setConductedMeetings,
   confirmedOrders,
   setConfirmedOrders,
-  saveReport,
   saving,
   onSaveAction,
+  onSaveKpi,
+  kpiSaving,
   setIsMeetingModalOpen,
   setActiveMeetingIndex,
   setMeetingResultTemp,
@@ -734,9 +749,10 @@ const ManagerDashboard = ({
   setConductedMeetings: SetState<UiConducted[]>;
   confirmedOrders: UiOrder[];
   setConfirmedOrders: SetState<UiOrder[]>;
-  saveReport: (options?: SaveReportOptions) => Promise<boolean>;
   saving: boolean;
   onSaveAction: (opts?: SaveReportOptions) => Promise<boolean>;
+  onSaveKpi: (nextStats: FormStats) => Promise<void>;
+  kpiSaving: boolean;
   setIsMeetingModalOpen: SetState<boolean>;
   setActiveMeetingIndex: SetState<number | null>;
   setMeetingResultTemp: SetState<string>;
@@ -773,6 +789,18 @@ const ManagerDashboard = ({
     setStats((prev) => ({ ...prev, [field]: 0 }));
   };
 
+  const commitKpi = async (field: keyof FormStats) => {
+    const normalized: FormStats = {
+      ...stats,
+      [field]:
+        statDraft[field] === ''
+          ? 0
+          : Math.max(0, parseInt(statDraft[field], 10) || 0),
+    };
+    setStats(normalized);
+    await onSaveKpi(normalized);
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm flex flex-wrap items-end gap-3 text-left">
@@ -799,14 +827,20 @@ const ManagerDashboard = ({
           label="Отработано"
           value={statDraft.processedTotal}
           onChange={(v) => handleStatChange('processedTotal', v)}
-          onBlur={() => handleStatBlur('processedTotal')}
+          onBlur={async () => {
+            handleStatBlur('processedTotal');
+            await commitKpi('processedTotal');
+          }}
         />
         <StatInput
           icon={<Users size={20} className="text-emerald-500" />}
           label="Взято новых"
           value={statDraft.newInWork}
           onChange={(v) => handleStatChange('newInWork', v)}
-          onBlur={() => handleStatBlur('newInWork')}
+          onBlur={async () => {
+            handleStatBlur('newInWork');
+            await commitKpi('newInWork');
+          }}
         />
         <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm space-y-3 text-left">
           <div className="flex items-center justify-between">
@@ -822,15 +856,22 @@ const ManagerDashboard = ({
             value={statDraft.callsTotal}
             onChange={(e) => handleStatChange('callsTotal', e.target.value)}
             onFocus={(e) => e.target.value === '0' && handleStatChange('callsTotal', '')}
-            onBlur={() => handleStatBlur('callsTotal')}
+            onBlur={async () => {
+              handleStatBlur('callsTotal');
+              await commitKpi('callsTotal');
+            }}
           />
+          <p className="text-[10px] text-gray-400">{kpiSaving ? 'Сохранение KPI...' : 'KPI сохраняется при смене поля'}</p>
         </div>
         <StatInput
           icon={<CheckCircle size={20} className="text-amber-500" />}
           label="Квалификация"
           value={statDraft.validatedTotal}
           onChange={(v) => handleStatChange('validatedTotal', v)}
-          onBlur={() => handleStatBlur('validatedTotal')}
+          onBlur={async () => {
+            handleStatBlur('validatedTotal');
+            await commitKpi('validatedTotal');
+          }}
         />
       </div>
       <MeetingTable
@@ -869,14 +910,7 @@ const ManagerDashboard = ({
         onSaveItem={() => onSaveAction({ refreshAfterSave: false })}
       />
       <div className="flex justify-end pt-4">
-        <button
-          type="button"
-          onClick={() => void saveReport()}
-          disabled={saving}
-          className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-12 py-4 rounded-3xl font-black text-xs uppercase tracking-[0.2em] shadow-2xl shadow-blue-200 flex items-center gap-3"
-        >
-          <Save size={18} /> {saving ? 'Сохранение…' : 'Сохранить отчет'}
-        </button>
+        {saving && <span className="text-xs text-gray-400 font-bold">Сохранение...</span>}
       </div>
     </div>
   );
