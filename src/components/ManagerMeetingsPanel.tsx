@@ -63,6 +63,7 @@ export function ManagerMeetingsPanel({
   const [assignedFilterFrom, setAssignedFilterFrom] = useState('');
   const [assignedFilterTo, setAssignedFilterTo] = useState('');
   const [assignedStatusFilter, setAssignedStatusFilter] = useState<'all' | 'done' | 'pending'>('all');
+  const [assignedTypeFilter, setAssignedTypeFilter] = useState<'all' | 'Новая' | 'Повторная'>('all');
 
   const rows: UiAssignedWithReport[] = useMemo(() => {
     const out: UiAssignedWithReport[] = [];
@@ -116,9 +117,10 @@ export function ManagerMeetingsPanel({
       const isDone = Boolean(findEvidence(a, managerName));
       if (assignedStatusFilter === 'done' && !isDone) return false;
       if (assignedStatusFilter === 'pending' && isDone) return false;
+      if (assignedTypeFilter !== 'all' && a.type !== assignedTypeFilter) return false;
       return true;
     });
-  }, [rows, assignedFilterFrom, assignedFilterTo, assignedStatusFilter, findEvidence, managerName]);
+  }, [rows, assignedFilterFrom, assignedFilterTo, assignedStatusFilter, assignedTypeFilter, findEvidence, managerName]);
 
   const firstMondayIndex = (() => {
     const d0 = new Date(view.y, view.m, 1).getDay();
@@ -287,6 +289,18 @@ export function ManagerMeetingsPanel({
               />
             </div>
             <div className="space-y-1.5 w-full sm:w-auto sm:min-w-[200px]">
+              <label className="text-[10px] font-black text-gray-400 uppercase">Тип встречи</label>
+              <select
+                className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm font-semibold"
+                value={assignedTypeFilter}
+                onChange={(e) => setAssignedTypeFilter(e.target.value as 'all' | 'Новая' | 'Повторная')}
+              >
+                <option value="all">Все</option>
+                <option value="Новая">Новая</option>
+                <option value="Повторная">Повторная</option>
+              </select>
+            </div>
+            <div className="space-y-1.5 w-full sm:w-auto sm:min-w-[200px]">
               <label className="text-[10px] font-black text-gray-400 uppercase">Статус</label>
               <select
                 className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm font-semibold"
@@ -342,6 +356,7 @@ export function ManagerMeetingsPanel({
                 setAssignedFilterFrom('');
                 setAssignedFilterTo('');
                 setAssignedStatusFilter('all');
+                setAssignedTypeFilter('all');
               }}
               className="w-full sm:w-auto px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider border border-gray-200 text-gray-600 hover:bg-white"
             >
