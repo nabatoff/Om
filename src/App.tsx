@@ -1039,16 +1039,25 @@ const AdminDashboard = ({
         setTo={setFilterDateTo}
         managerOptions={managerOptions}
       />
+      <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 text-left">
+        <p className="text-[11px] font-black text-blue-900 uppercase tracking-wider mb-1">Как читать таблицу</p>
+        <p className="text-xs text-blue-800">
+          <span className="font-bold">План</span> — назначенные встречи, <span className="font-bold">Факт</span> —
+          проведённые встречи, <span className="font-bold">Реализация</span> — сколько назначенных доведено до проведения.
+          <span className="font-bold"> ID отчёта</span> помогает различать несколько отчётов за один день.
+        </p>
+      </div>
       <div className="bg-white border border-gray-200 rounded-3xl shadow-sm overflow-x-auto text-left">
-        <table className="w-full text-left border-collapse min-w-[1100px]">
+        <table className="w-full text-left border-collapse min-w-[1200px]">
           <thead>
             <tr className="bg-gray-50/50 text-[10px] font-black text-gray-400 uppercase border-b border-gray-100">
+              <th className="py-6 px-4">ID отчёта</th>
               <th className="py-6 px-8">Дата отчета</th>
               <th className="py-6 px-4">Менеджер</th>
               <th className="py-6 px-4 min-w-[180px] max-w-xs">Контрагент</th>
-              <th className="py-6 px-4 text-center">План</th>
-              <th className="py-6 px-4 text-center">Факт</th>
-              <th className="py-6 px-4 text-center">Реализация</th>
+              <th className="py-6 px-4 text-center">План (назнач.)</th>
+              <th className="py-6 px-4 text-center">Факт (провед.)</th>
+              <th className="py-6 px-4 text-center">Реализация (из плана)</th>
               <th className="py-6 px-8 text-right">Выручка</th>
             </tr>
           </thead>
@@ -1068,6 +1077,7 @@ const AdminDashboard = ({
                     : `${cpList.slice(0, 2).join(', ')} +${cpList.length - 2}`;
               return (
                 <tr key={report.id} className="hover:bg-gray-50/50">
+                  <td className="py-5 px-4 font-mono text-[11px] text-gray-500 whitespace-nowrap">{report.id.slice(0, 8)}</td>
                   <td className="py-5 px-8 text-gray-500 font-medium">
                     {new Date(report.date + 'T12:00:00').toLocaleDateString('ru-RU')}
                   </td>
