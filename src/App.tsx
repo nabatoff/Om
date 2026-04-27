@@ -393,7 +393,7 @@ const App = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 p-4 md:p-8 font-sans text-sm">
-      <div className="max-w-7xl mx-auto space-y-6">
+      <div className="max-w-[1800px] mx-auto space-y-6">
         {(!supabaseOk || loadError) && (
           <div
             className={`rounded-2xl p-4 text-xs font-bold ${loadError ? 'bg-amber-50 text-amber-900 border border-amber-200' : 'bg-red-50 text-red-800 border border-red-200'}`}
@@ -1442,7 +1442,7 @@ const AdminDashboard = ({
                       <Target size={12} /> {conversion} <span className="opacity-40">/ {plans}</span>
                     </button>
                   </td>
-                  <td className="py-5 px-8 text-right font-black text-gray-900">
+                  <td className="py-5 px-8 text-right font-black text-gray-900 whitespace-nowrap">
                     {new Intl.NumberFormat('ru-RU').format(revenue)} ₸
                   </td>
                   <td className="py-5 px-4 text-right">
