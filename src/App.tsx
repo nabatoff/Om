@@ -1157,13 +1157,17 @@ const AdminDashboard = ({
         </p>
       </div>
       <div className="bg-white border border-gray-200 rounded-3xl shadow-sm overflow-x-auto text-left">
-        <table className="w-full text-left border-collapse min-w-[1200px]">
+        <table className="w-full text-left border-collapse min-w-[1500px]">
           <thead>
             <tr className="bg-gray-50/50 text-[10px] font-black text-gray-400 uppercase border-b border-gray-100">
               <th className="py-6 px-4">ID отчёта</th>
               <th className="py-6 px-8">Дата отчета</th>
               <th className="py-6 px-4">Менеджер</th>
               <th className="py-6 px-4 min-w-[180px] max-w-xs">Контрагент</th>
+              <th className="py-6 px-4 text-center">Отработано</th>
+              <th className="py-6 px-4 text-center">Взято новых</th>
+              <th className="py-6 px-4 text-center">Звонки</th>
+              <th className="py-6 px-4 text-center">Квалификация</th>
               <th className="py-6 px-4 text-center">План (назнач.)</th>
               <th className="py-6 px-4 text-center">Факт (провед.)</th>
               <th className="py-6 px-4 text-center">Реализация (из плана)</th>
@@ -1197,6 +1201,26 @@ const AdminDashboard = ({
                     title={cpList.length ? cpTitle : undefined}
                   >
                     <span className="line-clamp-3 break-words">{cpText}</span>
+                  </td>
+                  <td className="py-5 px-4 text-center">
+                    <span className="inline-flex items-center justify-center min-w-[56px] px-2 py-1 rounded-lg bg-gray-100 text-gray-800 text-xs font-black">
+                      {report.stats.processedTotal}
+                    </span>
+                  </td>
+                  <td className="py-5 px-4 text-center">
+                    <span className="inline-flex items-center justify-center min-w-[56px] px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-black">
+                      {report.stats.newInWork}
+                    </span>
+                  </td>
+                  <td className="py-5 px-4 text-center">
+                    <span className="inline-flex items-center justify-center min-w-[56px] px-2 py-1 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-black">
+                      {report.stats.callsTotal}
+                    </span>
+                  </td>
+                  <td className="py-5 px-4 text-center">
+                    <span className="inline-flex items-center justify-center min-w-[56px] px-2 py-1 rounded-lg bg-amber-50 text-amber-700 text-xs font-black">
+                      {report.stats.validatedTotal}
+                    </span>
                   </td>
                   <td className="py-5 px-4 text-center">
                     <DashboardBadge icon={<Clock size={12} />} count={plans} color="indigo" />
