@@ -9,14 +9,27 @@ type Props = {
   onDeleteClient: (c: UiClient) => void;
 };
 
+function normalizeText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/ё/g, 'е')
+    .replace(/[«»"'`]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export function ClientDirectoryPanel({ clients, onSelectClient, onAddClient, onDeleteClient }: Props) {
   const [q, setQ] = useState('');
 
   const filtered = useMemo(() => {
-    const t = q.trim().toLowerCase();
-    if (!t) return clients;
+    const textQuery = normalizeText(q);
+    const digitsQuery = q.replace(/\D/g, '');
+    if (!textQuery && !digitsQuery) return clients;
+
     return clients.filter(
-      (c) => c.name.toLowerCase().includes(t) || c.bin.replace(/\D/g, '').includes(t.replace(/\D/g, '')),
+      (c) =>
+        (textQuery ? normalizeText(c.name).includes(textQuery) : false) ||
+        (digitsQuery ? c.bin.replace(/\D/g, '').includes(digitsQuery) : false),
     );
   }, [clients, q]);
 
