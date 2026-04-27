@@ -47,6 +47,15 @@ import { ManagerMeetingsPanel } from './components/ManagerMeetingsPanel';
 
 const DAILY_CALL_GOAL = 22;
 
+function formatDisplayDate(raw: string): string {
+  const t = (raw || '').trim();
+  const ymd = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (ymd) return `${ymd[3]}-${ymd[2]}-${ymd[1]}`;
+  const dmyDots = t.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+  if (dmyDots) return `${dmyDots[1].padStart(2, '0')}-${dmyDots[2].padStart(2, '0')}-${dmyDots[3]}`;
+  return t;
+}
+
 const App = () => {
   const { session, ready: authReady, managerName, signOut, isAdmin } = useAuth();
   const sessionUserId = session?.user?.id;
@@ -930,11 +939,12 @@ const OrdersBlock = ({
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 pt-2">
               {order.amounts.map((sum, sIdx) => (
                 <div key={sIdx} className="space-y-1 text-left">
-                  <label className="text-[8px] font-bold text-gray-300 uppercase ml-1">Сумма #{sIdx + 1}</label>
+                  <label className="text-[8px] font-bold text-gray-500 uppercase ml-1">Сумма #{sIdx + 1}</label>
                   <input
                     type="text"
-                    className="w-full bg-white border-none p-2 rounded-xl text-xs font-black text-right shadow-inner"
+                    className="w-full bg-gray-50 border border-gray-200 p-2 rounded-xl text-xs font-black text-right text-gray-900 shadow-sm outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-300"
                     value={sum || ''}
+                    placeholder="0"
                     onChange={(e) => {
                       const u = [...data];
                       u[oIdx].amounts[sIdx] = parseFloat(e.target.value.replace(/[^0-9.]/g, '')) || 0;
@@ -1148,6 +1158,35 @@ const AdminDashboard = ({
         setTo={setFilterDateTo}
         managerOptions={managerOptions}
       />
+      <section className="bg-white border border-gray-200 rounded-3xl shadow-sm overflow-x-auto text-left">
+        <div className="px-6 pt-5 pb-2">
+          <h3 className="text-xs font-black text-gray-700 uppercase tracking-widest">Отдельный отчёт по KPI менеджеров</h3>
+        </div>
+        <table className="w-full text-left border-collapse min-w-[900px]">
+          <thead>
+            <tr className="bg-gray-50/50 text-[10px] font-black text-gray-400 uppercase border-y border-gray-100">
+              <th className="py-4 px-6">Дата отчета</th>
+              <th className="py-4 px-4">Менеджер</th>
+              <th className="py-4 px-4 text-center">Отработано</th>
+              <th className="py-4 px-4 text-center">Взято новых</th>
+              <th className="py-4 px-4 text-center">Звонки</th>
+              <th className="py-4 px-4 text-center">Квалификация</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {reports.map((report) => (
+              <tr key={`kpi-${report.id}`} className="hover:bg-gray-50/50">
+                <td className="py-3.5 px-6 text-gray-600 whitespace-nowrap">{formatDisplayDate(report.date)}</td>
+                <td className="py-3.5 px-4 font-bold text-gray-800 whitespace-nowrap">{report.manager}</td>
+                <td className="py-3.5 px-4 text-center font-black text-gray-800">{report.stats.processedTotal}</td>
+                <td className="py-3.5 px-4 text-center font-black text-emerald-700">{report.stats.newInWork}</td>
+                <td className="py-3.5 px-4 text-center font-black text-indigo-700">{report.stats.callsTotal}</td>
+                <td className="py-3.5 px-4 text-center font-black text-amber-700">{report.stats.validatedTotal}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
       <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 text-left">
         <p className="text-[11px] font-black text-blue-900 uppercase tracking-wider mb-1">Как читать таблицу</p>
         <p className="text-xs text-blue-800">
@@ -1157,17 +1196,13 @@ const AdminDashboard = ({
         </p>
       </div>
       <div className="bg-white border border-gray-200 rounded-3xl shadow-sm overflow-x-auto text-left">
-        <table className="w-full text-left border-collapse min-w-[1500px]">
+        <table className="w-full text-left border-collapse min-w-[1200px]">
           <thead>
             <tr className="bg-gray-50/50 text-[10px] font-black text-gray-400 uppercase border-b border-gray-100">
               <th className="py-6 px-4">ID отчёта</th>
               <th className="py-6 px-8">Дата отчета</th>
               <th className="py-6 px-4">Менеджер</th>
               <th className="py-6 px-4 min-w-[180px] max-w-xs">Контрагент</th>
-              <th className="py-6 px-4 text-center">Отработано</th>
-              <th className="py-6 px-4 text-center">Взято новых</th>
-              <th className="py-6 px-4 text-center">Звонки</th>
-              <th className="py-6 px-4 text-center">Квалификация</th>
               <th className="py-6 px-4 text-center">План (назнач.)</th>
               <th className="py-6 px-4 text-center">Факт (провед.)</th>
               <th className="py-6 px-4 text-center">Реализация (из плана)</th>
@@ -1193,7 +1228,7 @@ const AdminDashboard = ({
                 <tr key={report.id} className="hover:bg-gray-50/50">
                   <td className="py-5 px-4 font-mono text-[11px] text-gray-500 whitespace-nowrap">{report.id.slice(0, 8)}</td>
                   <td className="py-5 px-8 text-gray-500 font-medium">
-                    {new Date(report.date + 'T12:00:00').toLocaleDateString('ru-RU')}
+                    {formatDisplayDate(report.date)}
                   </td>
                   <td className="py-5 px-4 font-bold text-gray-800">{report.manager}</td>
                   <td
@@ -1201,26 +1236,6 @@ const AdminDashboard = ({
                     title={cpList.length ? cpTitle : undefined}
                   >
                     <span className="line-clamp-3 break-words">{cpText}</span>
-                  </td>
-                  <td className="py-5 px-4 text-center">
-                    <span className="inline-flex items-center justify-center min-w-[56px] px-2 py-1 rounded-lg bg-gray-100 text-gray-800 text-xs font-black">
-                      {report.stats.processedTotal}
-                    </span>
-                  </td>
-                  <td className="py-5 px-4 text-center">
-                    <span className="inline-flex items-center justify-center min-w-[56px] px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-black">
-                      {report.stats.newInWork}
-                    </span>
-                  </td>
-                  <td className="py-5 px-4 text-center">
-                    <span className="inline-flex items-center justify-center min-w-[56px] px-2 py-1 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-black">
-                      {report.stats.callsTotal}
-                    </span>
-                  </td>
-                  <td className="py-5 px-4 text-center">
-                    <span className="inline-flex items-center justify-center min-w-[56px] px-2 py-1 rounded-lg bg-amber-50 text-amber-700 text-xs font-black">
-                      {report.stats.validatedTotal}
-                    </span>
                   </td>
                   <td className="py-5 px-4 text-center">
                     <DashboardBadge icon={<Clock size={12} />} count={plans} color="indigo" />
@@ -1232,7 +1247,7 @@ const AdminDashboard = ({
                     <button
                       type="button"
                       onClick={() =>
-                        openDetails(report.assignedMeetings, `Анализ за ${report.date}`, 'conversion', report.manager, report.date)
+                        openDetails(report.assignedMeetings, `Анализ за ${formatDisplayDate(report.date)}`, 'conversion', report.manager, report.date)
                       }
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg font-black text-[10px] hover:bg-emerald-100"
                     >
@@ -1336,7 +1351,7 @@ const OrdersHistoryDashboard = ({
             {orders.map((order, idx) => (
               <tr key={idx} className="hover:bg-gray-50/50 text-sm">
                 <td className="py-5 px-8 text-gray-500 whitespace-nowrap">
-                  {new Date(order.date + 'T12:00:00').toLocaleDateString('ru-RU')}
+                  {formatDisplayDate(order.date)}
                 </td>
                 {isAdmin && <td className="py-5 px-4 font-bold text-gray-800 whitespace-nowrap">{order.manager}</td>}
                 <td className="py-5 px-4 font-mono text-gray-400 text-[11px]">{order.bin}</td>
@@ -1532,14 +1547,14 @@ const DetailsListModal = ({
                     </span>
                   </td>
                   <td className="py-5 px-4 text-center text-gray-500 font-bold text-xs">
-                    {new Date(item.date + 'T12:00:00').toLocaleDateString('ru-RU')}
+                      {formatDisplayDate(item.date)}
                   </td>
                   <td className="py-5 text-right">
                     {isAssignedType ? (
                       ev ? (
                         <div className="flex flex-col items-end">
                           <span className="text-emerald-600 font-black text-[10px] bg-emerald-50 px-3 py-1.5 rounded-full uppercase">Выполнено</span>
-                          <span className="text-[9px] text-gray-400 mt-1">Отчет от {new Date(ev.reportDate + 'T12:00:00').toLocaleDateString('ru-RU')}</span>
+                          <span className="text-[9px] text-gray-400 mt-1">Отчет от {formatDisplayDate(ev.reportDate)}</span>
                         </div>
                       ) : (
                         <span className="text-amber-500 font-black text-[10px] bg-amber-50 px-3 py-1.5 rounded-full uppercase">Ожидает</span>

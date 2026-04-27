@@ -4,6 +4,13 @@ import type { FullReport, UiAssigned, UiConducted } from '../lib/crmApi';
 
 export type UiAssignedWithReport = UiAssigned & { reportDate: string };
 
+function formatDisplayDate(raw: string): string {
+  const ymd = toYmd(raw);
+  if (!ymd) return raw;
+  const [y, m, d] = ymd.split('-');
+  return `${d}-${m}-${y}`;
+}
+
 function toYmd(raw: string): string | null {
   const t = raw.trim();
   if (/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0, 10);
@@ -106,10 +113,7 @@ export function ManagerMeetingsPanel({
     });
   };
 
-  const selectedDateLabel = useMemo(
-    () => new Date(selectedYmd + 'T12:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }),
-    [selectedYmd],
-  );
+  const selectedDateLabel = useMemo(() => formatDisplayDate(selectedYmd), [selectedYmd]);
 
   return (
     <div className="space-y-6 text-left">
@@ -256,9 +260,7 @@ export function ManagerMeetingsPanel({
                 return (
                   <tr key={`${a.bin}-${a.date}-${idx}`} className="text-gray-800">
                     <td className="py-3 text-gray-600 whitespace-nowrap">
-                      {ymd
-                        ? new Date(ymd + 'T12:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' })
-                        : a.date}
+                      {ymd ? formatDisplayDate(ymd) : a.date}
                     </td>
                     <td className="py-3 font-bold">
                       {a.entityName}
@@ -273,7 +275,7 @@ export function ManagerMeetingsPanel({
                         {a.type}
                       </span>
                     </td>
-                    <td className="py-3 text-gray-500 text-xs">{a.reportDate}</td>
+                    <td className="py-3 text-gray-500 text-xs">{formatDisplayDate(a.reportDate)}</td>
                     <td className="py-3 text-right">
                       {ev ? (
                         <span className="text-emerald-600 font-black text-[10px] bg-emerald-50 px-2 py-1 rounded-full uppercase">Выполнено</span>

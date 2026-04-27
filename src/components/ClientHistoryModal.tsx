@@ -2,6 +2,15 @@ import { X, CalendarCheck, ShoppingBag, User } from 'lucide-react';
 import type { UiClient } from '../lib/crmApi';
 import type { ClientConductedRow, ClientOrderRow } from '../lib/crmClientHistory';
 
+function formatDisplayDate(raw: string): string {
+  const t = (raw || '').trim();
+  const ymd = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (ymd) return `${ymd[3]}-${ymd[2]}-${ymd[1]}`;
+  const dmyDots = t.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+  if (dmyDots) return `${dmyDots[1].padStart(2, '0')}-${dmyDots[2].padStart(2, '0')}-${dmyDots[3]}`;
+  return t;
+}
+
 type Props = {
   client: UiClient;
   conducted: ClientConductedRow[];
@@ -62,9 +71,9 @@ export function ClientHistoryModal({ client, conducted, orders, onClose }: Props
                   <tbody className="divide-y divide-gray-100">
                     {conducted.map((row, i) => (
                       <tr key={`c-${i}-${row.reportDate}-${row.date}`} className="hover:bg-gray-50/50">
-                        <td className="p-3 font-mono text-xs text-gray-700 whitespace-nowrap">{row.reportDate}</td>
+                        <td className="p-3 font-mono text-xs text-gray-700 whitespace-nowrap">{formatDisplayDate(row.reportDate)}</td>
                         <td className="p-3 text-gray-800">{row.manager}</td>
-                        <td className="p-3 font-mono text-xs text-gray-600 whitespace-nowrap">{row.date || '—'}</td>
+                        <td className="p-3 font-mono text-xs text-gray-600 whitespace-nowrap">{row.date ? formatDisplayDate(row.date) : '—'}</td>
                         <td className="p-3 text-gray-600">{row.type}</td>
                         <td className="p-3 text-gray-800">{row.entityName}</td>
                         <td className="p-3 text-gray-600 text-xs leading-snug">{row.result || '—'}</td>
@@ -97,7 +106,7 @@ export function ClientHistoryModal({ client, conducted, orders, onClose }: Props
                   <tbody className="divide-y divide-gray-100">
                     {orders.map((row, i) => (
                       <tr key={`o-${i}-${row.reportDate}-${row.entityName}`} className="hover:bg-gray-50/50">
-                        <td className="p-3 font-mono text-xs text-gray-700 whitespace-nowrap">{row.reportDate}</td>
+                        <td className="p-3 font-mono text-xs text-gray-700 whitespace-nowrap">{formatDisplayDate(row.reportDate)}</td>
                         <td className="p-3 text-gray-800">{row.manager}</td>
                         <td className="p-3 text-gray-800">{row.entityName}</td>
                         <td className="p-3 font-mono text-xs">{row.orderCount}</td>
