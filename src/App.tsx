@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, type ReactNode, type Dispatch, type SetStateAction } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef, type ReactNode, type Dispatch, type SetStateAction } from 'react';
 import {
   Plus,
   Trash2,
@@ -56,6 +56,12 @@ function formatDisplayDate(raw: string): string {
   return t;
 }
 
+type SaveReportOptions = {
+  silent?: boolean;
+  skipValidation?: boolean;
+  refreshAfterSave?: boolean;
+};
+
 const App = () => {
   const { session, ready: authReady, managerName, signOut, isAdmin } = useAuth();
   const sessionUserId = session?.user?.id;
@@ -102,7 +108,11 @@ const App = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [booting, setBooting] = useState(true);
-  const [adminSubView, setAdminSubView] = useState<'dashboard' | 'staff'>('dashboard');
+  const [adminSubView, setAdminSubView] = useState<'dashboard' | 'kpi' | 'staff'>('dashboard');
+  const [kpiFilterManager, setKpiFilterManager] = useState('Все');
+  const [kpiFilterDateFrom, setKpiFilterDateFrom] = useState('');
+  const [kpiFilterDateTo, setKpiFilterDateTo] = useState('');
+  const statsAutosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const supabaseOk = isSupabaseConfigured();
 
@@ -180,18 +190,21 @@ const App = () => {
     setConfirmedOrders([]);
   }, [currentView, managerReportForDate]);
 
-  const saveReport = async () => {
+  const saveReport = async (options: SaveReportOptions = {}): Promise<boolean> => {
+    const { silent = false, skipValidation = false, refreshAfterSave = true } = options;
     const allEntries = [...assignedMeetings, ...conductedMeetings, ...confirmedOrders];
     const invalidEntry = allEntries.find((e) => !e.bin);
-    if (invalidEntry) {
-      alert(
-        `Контрагент "${invalidEntry.entityName || 'Неизвестно'}" не зарегистрирован. Создайте карточку через «+».`,
-      );
-      return;
+    if (invalidEntry && !skipValidation) {
+      if (!silent) {
+        alert(
+          `Контрагент "${invalidEntry.entityName || 'Неизвестно'}" не зарегистрирован. Создайте карточку через «+».`,
+        );
+      }
+      return false;
     }
     if (!supabaseOk) {
-      alert('Supabase не настроен (.env).');
-      return;
+      if (!silent) alert('Supabase не настроен (.env).');
+      return false;
     }
     setSaving(true);
     try {
@@ -203,14 +216,31 @@ const App = () => {
         conductedMeetings,
         confirmedOrders,
       });
-      await refresh();
+      if (refreshAfterSave) await refresh();
       if (isAdmin) setCurrentView('admin');
+      return true;
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Сохранение не удалось');
+      if (!silent) alert(e instanceof Error ? e.message : 'Сохранение не удалось');
+      return false;
     } finally {
       setSaving(false);
     }
   };
+
+  useEffect(() => {
+    if (currentView !== 'manager') return;
+    if (!supabaseOk) return;
+    if (statsAutosaveTimer.current) clearTimeout(statsAutosaveTimer.current);
+    statsAutosaveTimer.current = setTimeout(() => {
+      void saveReport({ silent: true, skipValidation: true, refreshAfterSave: false });
+    }, 800);
+    return () => {
+      if (statsAutosaveTimer.current) {
+        clearTimeout(statsAutosaveTimer.current);
+        statsAutosaveTimer.current = null;
+      }
+    };
+  }, [currentView, supabaseOk, managerReportDate, formStats.processedTotal, formStats.newInWork, formStats.callsTotal, formStats.validatedTotal]);
 
   const createClient = async () => {
     if (newClientData.name.trim().length < 2 || newClientData.bin.length !== 12) {
@@ -291,6 +321,15 @@ const App = () => {
       return matchManager && matchDateFrom && matchDateTo;
     });
   }, [allReports, adminFilterManager, adminFilterDateFrom, adminFilterDateTo]);
+
+  const kpiFilteredReports = useMemo(() => {
+    return allReports.filter((report) => {
+      const matchManager = kpiFilterManager === 'Все' || report.manager === kpiFilterManager;
+      const matchDateFrom = !kpiFilterDateFrom || report.date >= kpiFilterDateFrom;
+      const matchDateTo = !kpiFilterDateTo || report.date <= kpiFilterDateTo;
+      return matchManager && matchDateFrom && matchDateTo;
+    });
+  }, [allReports, kpiFilterManager, kpiFilterDateFrom, kpiFilterDateTo]);
 
   /** Админ: как в аналитике. Менеджер: RLS отдаёт только свои отчёты; фильтр по датам. */
   const reportsForOrders = useMemo(() => {
@@ -434,6 +473,7 @@ const App = () => {
             setConfirmedOrders={setConfirmedOrders}
             saveReport={saveReport}
             saving={saving}
+            onSaveAction={(opts) => saveReport(opts)}
             setIsMeetingModalOpen={setIsMeetingModalOpen}
             setActiveMeetingIndex={setActiveMeetingIndex}
             setMeetingResultTemp={setMeetingResultTemp}
@@ -473,6 +513,16 @@ const App = () => {
                 <UserCog size={14} />
                 Сотрудники
               </button>
+              <button
+                type="button"
+                onClick={() => setAdminSubView('kpi')}
+                className={`flex-1 min-w-[140px] flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                  adminSubView === 'kpi' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
+                }`}
+              >
+                <FileText size={14} />
+                KPI отчёт
+              </button>
             </div>
             {adminSubView === 'dashboard' && (
               <AdminDashboard
@@ -489,6 +539,18 @@ const App = () => {
                 }
                 findEvidence={findSpecificConductedEvidence}
                 onDeleteReport={removeReport}
+              />
+            )}
+            {adminSubView === 'kpi' && (
+              <KpiDashboard
+                reports={kpiFilteredReports}
+                filterManager={kpiFilterManager}
+                setFilterManager={setKpiFilterManager}
+                filterDateFrom={kpiFilterDateFrom}
+                setFilterDateFrom={setKpiFilterDateFrom}
+                filterDateTo={kpiFilterDateTo}
+                setFilterDateTo={setKpiFilterDateTo}
+                managerOptions={managerFilterOptions}
               />
             )}
             {adminSubView === 'staff' && <StaffManager />}
@@ -654,6 +716,7 @@ const ManagerDashboard = ({
   setConfirmedOrders,
   saveReport,
   saving,
+  onSaveAction,
   setIsMeetingModalOpen,
   setActiveMeetingIndex,
   setMeetingResultTemp,
@@ -671,8 +734,9 @@ const ManagerDashboard = ({
   setConductedMeetings: SetState<UiConducted[]>;
   confirmedOrders: UiOrder[];
   setConfirmedOrders: SetState<UiOrder[]>;
-  saveReport: () => void | Promise<void>;
+  saveReport: (options?: SaveReportOptions) => Promise<boolean>;
   saving: boolean;
+  onSaveAction: (opts?: SaveReportOptions) => Promise<boolean>;
   setIsMeetingModalOpen: SetState<boolean>;
   setActiveMeetingIndex: SetState<number | null>;
   setMeetingResultTemp: SetState<string>;
@@ -777,6 +841,8 @@ const ManagerDashboard = ({
         type="assigned"
         clients={clients}
         onOpenAddClient={onOpenAddClient}
+        seedKey={`assigned-${reportDate}`}
+        onSaveItem={() => onSaveAction({ refreshAfterSave: false })}
       />
       <MeetingTable
         title="Проведено встреч (Факт)"
@@ -791,8 +857,17 @@ const ManagerDashboard = ({
         }}
         clients={clients}
         onOpenAddClient={onOpenAddClient}
+        seedKey={`conducted-${reportDate}`}
+        onSaveItem={() => onSaveAction({ refreshAfterSave: false })}
       />
-      <OrdersBlock data={confirmedOrders} setData={setConfirmedOrders} clients={clients} onOpenAddClient={onOpenAddClient} />
+      <OrdersBlock
+        data={confirmedOrders}
+        setData={setConfirmedOrders}
+        clients={clients}
+        onOpenAddClient={onOpenAddClient}
+        seedKey={`orders-${reportDate}`}
+        onSaveItem={() => onSaveAction({ refreshAfterSave: false })}
+      />
       <div className="flex justify-end pt-4">
         <button
           type="button"
@@ -869,16 +944,28 @@ const OrdersBlock = ({
   setData,
   clients,
   onOpenAddClient,
+  seedKey,
+  onSaveItem,
 }: {
   data: UiOrder[];
   setData: SetState<UiOrder[]>;
   clients: UiClient[];
   onOpenAddClient: (input: string, cb: (c: UiClient) => void) => void;
+  seedKey: string;
+  onSaveItem: () => Promise<boolean>;
 }) => {
+  const orderSig = (o: UiOrder) =>
+    `${o.entityName.trim().toLowerCase()}|${o.bin}|${o.orderCount}|${o.amounts.map((x) => Number(x || 0)).join(',')}|${o.totalAmount}`;
+  const [savedOrders, setSavedOrders] = useState<Set<string>>(() => new Set(data.map(orderSig)));
+  useEffect(() => {
+    setSavedOrders(new Set(data.map(orderSig)));
+  }, [seedKey]);
+
   const addOrder = () =>
     setData([...data, { entityName: '', bin: '', orderCount: 1, amounts: [0], totalAmount: 0 }]);
   const updateOrder = (idx: number, field: keyof UiOrder, val: string | number) => {
     const updated = [...data];
+    const prevSig = orderSig(updated[idx]);
     if (field === 'orderCount') {
       const count = Math.max(1, parseInt(String(val), 10) || 1);
       const newAmounts = [...updated[idx].amounts];
@@ -888,6 +975,13 @@ const OrdersBlock = ({
     } else {
       updated[idx] = { ...updated[idx], [field]: val } as UiOrder;
     }
+    const newSig = orderSig(updated[idx]);
+    setSavedOrders((prev) => {
+      const n = new Set(prev);
+      n.delete(prevSig);
+      n.delete(newSig);
+      return n;
+    });
     setData(updated);
   };
   return (
@@ -955,6 +1049,31 @@ const OrdersBlock = ({
                 </div>
               ))}
             </div>
+            <div className="flex justify-end">
+              {savedOrders.has(orderSig(order)) ? (
+                <span className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-100">
+                  Сохранено
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const currentOrderSig = orderSig(order);
+                    const ok = await onSaveItem();
+                    if (ok) {
+                      setSavedOrders((prev) => {
+                        const n = new Set(prev);
+                        n.add(currentOrderSig);
+                        return n;
+                      });
+                    }
+                  }}
+                  className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider text-blue-700 bg-blue-50 border border-blue-100 hover:bg-blue-100"
+                >
+                  Сохранить
+                </button>
+              )}
+            </div>
           </div>
         ))}
       </div>
@@ -971,6 +1090,8 @@ const MeetingTable = ({
   onResultClick,
   clients,
   onOpenAddClient,
+  seedKey,
+  onSaveItem,
 }: {
   title: string;
   icon: ReactNode;
@@ -980,7 +1101,16 @@ const MeetingTable = ({
   onResultClick?: (idx: number) => void;
   clients: UiClient[];
   onOpenAddClient: (input: string, cb: (c: UiClient) => void) => void;
+  seedKey: string;
+  onSaveItem: () => Promise<boolean>;
 }) => {
+  const rowSig = (row: UiAssigned | UiConducted) =>
+    `${row.entityName.trim().toLowerCase()}|${row.bin}|${row.date}|${row.type}|${'result' in row ? row.result : ''}`;
+  const [savedRows, setSavedRows] = useState<Set<string>>(() => new Set(data.map(rowSig)));
+  useEffect(() => {
+    setSavedRows(new Set(data.map(rowSig)));
+  }, [seedKey]);
+
   const addRow = () => {
     const d = new Date().toISOString().split('T')[0];
     if (type === 'assigned') {
@@ -993,13 +1123,27 @@ const MeetingTable = ({
     }
   };
   const removeRow = (idx: number) => {
+    const removedSig = rowSig(data[idx]);
+    setSavedRows((prev) => {
+      const n = new Set(prev);
+      n.delete(removedSig);
+      return n;
+    });
     const next = data.filter((_, i) => i !== idx);
     if (type === 'assigned') (setData as SetState<UiAssigned[]>)(next as UiAssigned[]);
     else (setData as SetState<UiConducted[]>)(next as UiConducted[]);
   };
   const updateRow = (idx: number, field: string, val: string) => {
     const updated = [...data] as Record<string, unknown>[];
+    const prevSig = rowSig(data[idx]);
     updated[idx][field] = val;
+    const nextSig = rowSig(updated[idx] as UiAssigned | UiConducted);
+    setSavedRows((prev) => {
+      const n = new Set(prev);
+      n.delete(prevSig);
+      n.delete(nextSig);
+      return n;
+    });
     (setData as (u: (UiAssigned | UiConducted)[]) => void)(updated as never);
   };
   return (
@@ -1026,6 +1170,7 @@ const MeetingTable = ({
                 <th className="pb-4 w-40 px-4 text-center">Дата</th>
                 <th className="pb-4 w-36 px-4 text-center">Тип</th>
                 {type === 'conducted' && <th className="pb-4 w-32 text-center">Итог</th>}
+                <th className="pb-4 w-36 text-center">Сохранить</th>
                 <th className="pb-4 w-10" />
               </tr>
             </thead>
@@ -1072,6 +1217,31 @@ const MeetingTable = ({
                       </button>
                     </td>
                   )}
+                  <td className="py-4 px-2 text-center">
+                    {savedRows.has(rowSig(row as UiAssigned | UiConducted)) ? (
+                      <span className="px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-100">
+                        Сохранено
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const currentSig = rowSig(row as UiAssigned | UiConducted);
+                          const ok = await onSaveItem();
+                          if (ok) {
+                            setSavedRows((prev) => {
+                              const n = new Set(prev);
+                              n.add(currentSig);
+                              return n;
+                            });
+                          }
+                        }}
+                        className="px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider text-blue-700 bg-blue-50 border border-blue-100 hover:bg-blue-100"
+                      >
+                        Сохранить
+                      </button>
+                    )}
+                  </td>
                   <td className="py-4 text-right">
                     <button type="button" onClick={() => removeRow(idx)} className="text-gray-200 hover:text-red-500">
                       <Trash2 size={18} />
@@ -1157,36 +1327,12 @@ const AdminDashboard = ({
         to={filterDateTo}
         setTo={setFilterDateTo}
         managerOptions={managerOptions}
+        onReset={() => {
+          setFilterManager('Все');
+          setFilterDateFrom('');
+          setFilterDateTo('');
+        }}
       />
-      <section className="bg-white border border-gray-200 rounded-3xl shadow-sm overflow-x-auto text-left">
-        <div className="px-6 pt-5 pb-2">
-          <h3 className="text-xs font-black text-gray-700 uppercase tracking-widest">Отдельный отчёт по KPI менеджеров</h3>
-        </div>
-        <table className="w-full text-left border-collapse min-w-[900px]">
-          <thead>
-            <tr className="bg-gray-50/50 text-[10px] font-black text-gray-400 uppercase border-y border-gray-100">
-              <th className="py-4 px-6">Дата отчета</th>
-              <th className="py-4 px-4">Менеджер</th>
-              <th className="py-4 px-4 text-center">Отработано</th>
-              <th className="py-4 px-4 text-center">Взято новых</th>
-              <th className="py-4 px-4 text-center">Звонки</th>
-              <th className="py-4 px-4 text-center">Квалификация</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-50">
-            {reports.map((report) => (
-              <tr key={`kpi-${report.id}`} className="hover:bg-gray-50/50">
-                <td className="py-3.5 px-6 text-gray-600 whitespace-nowrap">{formatDisplayDate(report.date)}</td>
-                <td className="py-3.5 px-4 font-bold text-gray-800 whitespace-nowrap">{report.manager}</td>
-                <td className="py-3.5 px-4 text-center font-black text-gray-800">{report.stats.processedTotal}</td>
-                <td className="py-3.5 px-4 text-center font-black text-emerald-700">{report.stats.newInWork}</td>
-                <td className="py-3.5 px-4 text-center font-black text-indigo-700">{report.stats.callsTotal}</td>
-                <td className="py-3.5 px-4 text-center font-black text-amber-700">{report.stats.validatedTotal}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
       <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 text-left">
         <p className="text-[11px] font-black text-blue-900 uppercase tracking-wider mb-1">Как читать таблицу</p>
         <p className="text-xs text-blue-800">
@@ -1277,6 +1423,91 @@ const AdminDashboard = ({
   );
 };
 
+const KpiDashboard = ({
+  reports,
+  filterManager,
+  setFilterManager,
+  filterDateFrom,
+  setFilterDateFrom,
+  filterDateTo,
+  setFilterDateTo,
+  managerOptions,
+}: {
+  reports: FullReport[];
+  filterManager: string;
+  setFilterManager: SetState<string>;
+  filterDateFrom: string;
+  setFilterDateFrom: SetState<string>;
+  filterDateTo: string;
+  setFilterDateTo: SetState<string>;
+  managerOptions: string[];
+}) => {
+  const kpiRows = useMemo(() => {
+    const byKey = new Map<string, FullReport>();
+    for (const r of reports) {
+      const key = `${r.date}|${r.manager}`;
+      const prev = byKey.get(key);
+      if (!prev) {
+        byKey.set(key, r);
+        continue;
+      }
+      const prevScore =
+        prev.stats.processedTotal + prev.stats.newInWork + prev.stats.callsTotal + prev.stats.validatedTotal;
+      const curScore = r.stats.processedTotal + r.stats.newInWork + r.stats.callsTotal + r.stats.validatedTotal;
+      if (curScore >= prevScore) byKey.set(key, r);
+    }
+    return Array.from(byKey.values()).sort((a, b) => b.date.localeCompare(a.date) || a.manager.localeCompare(b.manager, 'ru'));
+  }, [reports]);
+
+  return (
+    <div className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-500">
+      <AdminFilters
+        manager={filterManager}
+        setManager={setFilterManager}
+        from={filterDateFrom}
+        setFrom={setFilterDateFrom}
+        to={filterDateTo}
+        setTo={setFilterDateTo}
+        managerOptions={managerOptions}
+        onReset={() => {
+          setFilterManager('Все');
+          setFilterDateFrom('');
+          setFilterDateTo('');
+        }}
+      />
+      <section className="bg-white border border-gray-200 rounded-3xl shadow-sm overflow-x-auto text-left">
+        <div className="px-6 pt-5 pb-2">
+          <h3 className="text-xs font-black text-gray-700 uppercase tracking-widest">Отдельный отчёт по KPI менеджеров</h3>
+        </div>
+        <table className="w-full text-left border-collapse min-w-[900px]">
+          <thead>
+            <tr className="bg-gray-50/50 text-[10px] font-black text-gray-400 uppercase border-y border-gray-100">
+              <th className="py-4 px-6">Дата отчета</th>
+              <th className="py-4 px-4">Менеджер</th>
+              <th className="py-4 px-4 text-center">Отработано</th>
+              <th className="py-4 px-4 text-center">Взято новых</th>
+              <th className="py-4 px-4 text-center">Звонки</th>
+              <th className="py-4 px-4 text-center">Квалификация</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {kpiRows.map((report) => (
+              <tr key={`kpi-${report.id}`} className="hover:bg-gray-50/50">
+                <td className="py-3.5 px-6 text-gray-600 whitespace-nowrap">{formatDisplayDate(report.date)}</td>
+                <td className="py-3.5 px-4 font-bold text-gray-800 whitespace-nowrap">{report.manager}</td>
+                <td className="py-3.5 px-4 text-center font-black text-gray-800">{report.stats.processedTotal}</td>
+                <td className="py-3.5 px-4 text-center font-black text-emerald-700">{report.stats.newInWork}</td>
+                <td className="py-3.5 px-4 text-center font-black text-indigo-700">{report.stats.callsTotal}</td>
+                <td className="py-3.5 px-4 text-center font-black text-amber-700">{report.stats.validatedTotal}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+    </div>
+  );
+};
+
 const OrdersHistoryDashboard = ({
   isAdmin,
   orders,
@@ -1300,6 +1531,11 @@ const OrdersHistoryDashboard = ({
   managerOptions: string[];
   openOrderDetails: (entity: string, bin: string, amounts: number[]) => void;
 }) => {
+  const ordersTotalAmount = useMemo(
+    () => orders.reduce((sum, o) => sum + o.totalAmount, 0),
+    [orders],
+  );
+
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-500 text-left">
       {isAdmin ? (
@@ -1311,6 +1547,11 @@ const OrdersHistoryDashboard = ({
           to={filterDateTo}
           setTo={setFilterDateTo}
           managerOptions={managerOptions}
+          onReset={() => {
+            setFilterManager('Все');
+            setFilterDateFrom('');
+            setFilterDateTo('');
+          }}
         />
       ) : (
         <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm flex flex-wrap gap-6 items-end">
@@ -1332,8 +1573,30 @@ const OrdersHistoryDashboard = ({
               onChange={(e) => setFilterDateTo(e.target.value)}
             />
           </div>
+          <div className="flex-none">
+            <button
+              type="button"
+              onClick={() => {
+                setFilterDateFrom('');
+                setFilterDateTo('');
+              }}
+              className="px-4 py-2.5 rounded-xl border border-gray-200 text-xs font-black uppercase tracking-wider text-gray-600 hover:bg-gray-50"
+            >
+              Сбросить фильтр
+            </button>
+          </div>
         </div>
       )}
+      <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm flex flex-wrap gap-6 items-center">
+        <div>
+          <p className="text-[10px] font-black text-gray-400 uppercase">Заказов по фильтру</p>
+          <p className="text-lg font-black text-gray-900">{orders.length}</p>
+        </div>
+        <div>
+          <p className="text-[10px] font-black text-gray-400 uppercase">Итого сумма по заказам</p>
+          <p className="text-lg font-black text-emerald-700">{new Intl.NumberFormat('ru-RU').format(ordersTotalAmount)} ₸</p>
+        </div>
+      </div>
       <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest">Подтверждённые заказы</h2>
       <div className="bg-white border border-gray-200 rounded-3xl shadow-sm overflow-x-auto text-left">
         <table className="w-full text-left border-collapse min-w-[1000px]">
@@ -1385,6 +1648,7 @@ const AdminFilters = ({
   to,
   setTo,
   managerOptions,
+  onReset,
 }: {
   manager: string;
   setManager: SetState<string>;
@@ -1393,6 +1657,7 @@ const AdminFilters = ({
   to: string;
   setTo: SetState<string>;
   managerOptions: string[];
+  onReset: () => void;
 }) => (
   <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm flex flex-wrap gap-6 items-end">
     <div className="flex-1 min-w-[200px] space-y-1.5 text-left">
@@ -1416,6 +1681,15 @@ const AdminFilters = ({
     <div className="flex-1 min-w-[150px] space-y-1.5 text-left">
       <label className="text-[10px] font-black text-gray-400 uppercase">Дата по</label>
       <input type="date" className="w-full px-4 py-2.5 bg-gray-50 border rounded-xl text-sm" value={to} onChange={(e) => setTo(e.target.value)} />
+    </div>
+    <div className="flex-none">
+      <button
+        type="button"
+        onClick={onReset}
+        className="px-4 py-2.5 rounded-xl border border-gray-200 text-xs font-black uppercase tracking-wider text-gray-600 hover:bg-gray-50"
+      >
+        Сбросить фильтр
+      </button>
     </div>
   </div>
 );
