@@ -48,7 +48,7 @@ export function LoginView() {
           </div>
         </div>
         <p className="text-xs text-slate-500 text-center mb-4">
-          Войти по <strong>логину</strong> и паролю, которые выдал администратор. Саморегистрации нет.
+          Войти по <strong>логину</strong> и паролю, которые выдал администратор.
         </p>
         <form onSubmit={submit} className="space-y-4 text-left">
           {err && (
