@@ -644,9 +644,34 @@ const ManagerDashboard = ({
   clients: UiClient[];
   onOpenAddClient: (input: string, cb: (c: UiClient) => void) => void;
 }) => {
+  const [statDraft, setStatDraft] = useState<Record<keyof FormStats, string>>({
+    processedTotal: String(stats.processedTotal),
+    newInWork: String(stats.newInWork),
+    callsTotal: String(stats.callsTotal),
+    validatedTotal: String(stats.validatedTotal),
+  });
+
+  useEffect(() => {
+    setStatDraft({
+      processedTotal: String(stats.processedTotal),
+      newInWork: String(stats.newInWork),
+      callsTotal: String(stats.callsTotal),
+      validatedTotal: String(stats.validatedTotal),
+    });
+  }, [stats.processedTotal, stats.newInWork, stats.callsTotal, stats.validatedTotal]);
+
   const handleStatChange = (field: keyof FormStats, value: string) => {
-    const numericValue = value === '' ? 0 : parseInt(value, 10);
-    setStats((prev) => ({ ...prev, [field]: Number.isNaN(numericValue) ? 0 : numericValue }));
+    setStatDraft((prev) => ({ ...prev, [field]: value }));
+    if (value === '') return;
+    const numericValue = parseInt(value, 10);
+    if (Number.isNaN(numericValue)) return;
+    setStats((prev) => ({ ...prev, [field]: Math.max(0, numericValue) }));
+  };
+
+  const handleStatBlur = (field: keyof FormStats) => {
+    if (statDraft[field] !== '') return;
+    setStatDraft((prev) => ({ ...prev, [field]: '0' }));
+    setStats((prev) => ({ ...prev, [field]: 0 }));
   };
 
   return (
@@ -655,14 +680,16 @@ const ManagerDashboard = ({
         <StatInput
           icon={<Briefcase size={20} className="text-blue-500" />}
           label="Отработано"
-          value={stats.processedTotal}
+          value={statDraft.processedTotal}
           onChange={(v) => handleStatChange('processedTotal', v)}
+          onBlur={() => handleStatBlur('processedTotal')}
         />
         <StatInput
           icon={<Users size={20} className="text-emerald-500" />}
           label="Взято новых"
-          value={stats.newInWork}
+          value={statDraft.newInWork}
           onChange={(v) => handleStatChange('newInWork', v)}
+          onBlur={() => handleStatBlur('newInWork')}
         />
         <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm space-y-3 text-left">
           <div className="flex items-center justify-between">
@@ -675,15 +702,18 @@ const ManagerDashboard = ({
           <input
             type="number"
             className="w-full text-3xl font-black text-gray-800 outline-none bg-transparent"
-            value={stats.callsTotal}
+            value={statDraft.callsTotal}
             onChange={(e) => handleStatChange('callsTotal', e.target.value)}
+            onFocus={(e) => e.target.value === '0' && handleStatChange('callsTotal', '')}
+            onBlur={() => handleStatBlur('callsTotal')}
           />
         </div>
         <StatInput
           icon={<CheckCircle size={20} className="text-amber-500" />}
           label="Квалификация"
-          value={stats.validatedTotal}
+          value={statDraft.validatedTotal}
           onChange={(v) => handleStatChange('validatedTotal', v)}
+          onBlur={() => handleStatBlur('validatedTotal')}
         />
       </div>
       <MeetingTable
@@ -1312,11 +1342,13 @@ const StatInput = ({
   label,
   value,
   onChange,
+  onBlur,
 }: {
   icon: ReactNode;
   label: string;
-  value: number;
+  value: string;
   onChange: (v: string) => void;
+  onBlur: () => void;
 }) => (
   <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm space-y-3 text-left">
     <div className="flex items-center gap-2 text-gray-500">
@@ -1330,7 +1362,7 @@ const StatInput = ({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       onFocus={(e) => e.target.value === '0' && onChange('')}
-      onBlur={(e) => e.target.value === '' && onChange('0')}
+      onBlur={onBlur}
     />
   </div>
 );
