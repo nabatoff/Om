@@ -105,6 +105,7 @@ const App = () => {
   const [ordersFilterManager, setOrdersFilterManager] = useState('Все');
   const [ordersFilterDateFrom, setOrdersFilterDateFrom] = useState('');
   const [ordersFilterDateTo, setOrdersFilterDateTo] = useState('');
+  const [managerOrdersSection, setManagerOrdersSection] = useState<'calendar' | 'meetings' | 'orders'>('calendar');
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [booting, setBooting] = useState(true);
@@ -156,6 +157,12 @@ const App = () => {
   useEffect(() => {
     if (currentView !== 'admin') {
       setAdminSubView('dashboard');
+    }
+  }, [currentView]);
+
+  useEffect(() => {
+    if (currentView !== 'orders') {
+      setManagerOrdersSection('calendar');
     }
   }, [currentView]);
 
@@ -412,8 +419,8 @@ const App = () => {
           ))}
         </datalist>
 
-        <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-4 text-left">
+        <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3 sm:gap-4 text-left w-full md:w-auto">
             <div className="p-3 bg-blue-600 rounded-xl text-white shadow-inner">
               <ShieldCheck size={24} />
             </div>
@@ -422,23 +429,23 @@ const App = () => {
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap w-full md:w-auto">
-            <div className="text-left px-3 py-2">
+            <div className="text-left px-2 sm:px-3 py-2 w-full sm:w-auto">
               <p className="text-[10px] font-black text-gray-400 uppercase">Менеджер (отчёт)</p>
               <p className="text-sm font-bold text-gray-800">{managerName}</p>
             </div>
             <button
               type="button"
               onClick={() => void signOut()}
-              className="px-3 py-2 border border-gray-200 rounded-xl text-gray-500 hover:text-red-600 hover:border-red-200 text-xs font-bold flex items-center gap-1.5"
+              className="px-3 py-2 border border-gray-200 rounded-xl text-gray-500 hover:text-red-600 hover:border-red-200 text-xs font-bold flex items-center gap-1.5 w-full sm:w-auto justify-center"
             >
               <LogOut size={16} />
               Выйти
             </button>
-            <div className="flex bg-gray-100 p-1 rounded-xl flex-1 md:flex-none min-w-0">
+            <div className="flex flex-wrap bg-gray-100 p-1 rounded-xl flex-1 md:flex-none min-w-0 w-full sm:w-auto">
               <button
                 type="button"
                 onClick={() => setCurrentView('manager')}
-                className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${currentView === 'manager' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                className={`flex-1 md:flex-none min-w-[120px] sm:min-w-0 flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all ${currentView === 'manager' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
               >
                 <FileText size={14} /> ОТЧЕТ
               </button>
@@ -446,7 +453,7 @@ const App = () => {
                 <button
                   type="button"
                   onClick={() => setCurrentView('admin')}
-                  className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${currentView === 'admin' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                  className={`flex-1 md:flex-none min-w-[120px] sm:min-w-0 flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all ${currentView === 'admin' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                 >
                   <List size={14} /> АДМИНКА
                 </button>
@@ -455,7 +462,7 @@ const App = () => {
                 <button
                   type="button"
                   onClick={() => setCurrentView('clients')}
-                  className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${currentView === 'clients' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                  className={`flex-1 md:flex-none min-w-[120px] sm:min-w-0 flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all ${currentView === 'clients' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                 >
                   <Users size={14} /> КЛИЕНТЫ
                 </button>
@@ -463,7 +470,7 @@ const App = () => {
               <button
                 type="button"
                 onClick={() => setCurrentView('orders')}
-                className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${currentView === 'orders' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                className={`flex-1 md:flex-none min-w-[120px] sm:min-w-0 flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all ${currentView === 'orders' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
               >
                 <ShoppingBag size={14} /> ЗАКАЗЫ
               </button>
@@ -510,7 +517,7 @@ const App = () => {
               <button
                 type="button"
                 onClick={() => setAdminSubView('dashboard')}
-                className={`flex-1 min-w-[140px] flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                className={`flex-1 min-w-[110px] sm:min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all ${
                   adminSubView === 'dashboard' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
                 }`}
               >
@@ -520,7 +527,7 @@ const App = () => {
               <button
                 type="button"
                 onClick={() => setAdminSubView('kpi')}
-                className={`flex-1 min-w-[140px] flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                className={`flex-1 min-w-[110px] sm:min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all ${
                   adminSubView === 'kpi' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
                 }`}
               >
@@ -530,7 +537,7 @@ const App = () => {
               <button
                 type="button"
                 onClick={() => setAdminSubView('staff')}
-                className={`flex-1 min-w-[140px] flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                className={`flex-1 min-w-[110px] sm:min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all ${
                   adminSubView === 'staff' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
                 }`}
               >
@@ -588,24 +595,61 @@ const App = () => {
         {currentView === 'orders' && (
           <div className="space-y-8">
             {!isAdmin && (
+              <div className="bg-white border border-gray-200 rounded-2xl p-2 shadow-sm flex flex-wrap gap-2 w-full md:w-auto">
+                <button
+                  type="button"
+                  onClick={() => setManagerOrdersSection('calendar')}
+                  className={`flex-1 min-w-[130px] sm:min-w-[170px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all ${
+                    managerOrdersSection === 'calendar' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
+                  }`}
+                >
+                  <CalendarCheck size={14} />
+                  Календарь
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setManagerOrdersSection('meetings')}
+                  className={`flex-1 min-w-[130px] sm:min-w-[170px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all ${
+                    managerOrdersSection === 'meetings' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
+                  }`}
+                >
+                  <List size={14} />
+                  Все назначенные встречи
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setManagerOrdersSection('orders')}
+                  className={`flex-1 min-w-[130px] sm:min-w-[170px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all ${
+                    managerOrdersSection === 'orders' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
+                  }`}
+                >
+                  <ShoppingBag size={14} />
+                  Подтвержденные заказы
+                </button>
+              </div>
+            )}
+            {!isAdmin && managerOrdersSection !== 'orders' && (
               <ManagerMeetingsPanel
                 allReports={allReports}
                 findEvidence={findSpecificConductedEvidence}
                 managerName={managerName}
+                mode={managerOrdersSection === 'calendar' ? 'calendar' : 'assigned'}
               />
             )}
-            <OrdersHistoryDashboard
-              isAdmin={isAdmin}
-              orders={allFilteredOrders}
-              filterManager={ordersFilterManager}
-              setFilterManager={setOrdersFilterManager}
-              filterDateFrom={ordersFilterDateFrom}
-              setFilterDateFrom={setOrdersFilterDateFrom}
-              filterDateTo={ordersFilterDateTo}
-              setFilterDateTo={setOrdersFilterDateTo}
-              managerOptions={managerFilterOptions}
-              openOrderDetails={(entity, bin, amounts) => setOrderDetailModal({ isOpen: true, entity, bin, amounts })}
-            />
+            {(isAdmin || managerOrdersSection === 'orders') && (
+              <OrdersHistoryDashboard
+                isAdmin={isAdmin}
+                orders={allFilteredOrders}
+                filterManager={ordersFilterManager}
+                setFilterManager={setOrdersFilterManager}
+                filterDateFrom={ordersFilterDateFrom}
+                setFilterDateFrom={setOrdersFilterDateFrom}
+                filterDateTo={ordersFilterDateTo}
+                setFilterDateTo={setOrdersFilterDateTo}
+                managerOptions={managerFilterOptions}
+                openOrderDetails={(entity, bin, amounts) => setOrderDetailModal({ isOpen: true, entity, bin, amounts })}
+              />
+            )}
           </div>
         )}
       </div>
@@ -1609,8 +1653,8 @@ const OrdersHistoryDashboard = ({
           }}
         />
       ) : (
-        <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm flex flex-wrap gap-6 items-end">
-          <div className="flex-1 min-w-[150px] space-y-1.5 text-left">
+        <div className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-6 shadow-sm flex flex-wrap gap-4 sm:gap-6 items-end">
+          <div className="w-full sm:flex-1 sm:min-w-[150px] space-y-1.5 text-left">
             <label className="text-[10px] font-black text-gray-400 uppercase">Дата с</label>
             <input
               type="date"
@@ -1619,7 +1663,7 @@ const OrdersHistoryDashboard = ({
               onChange={(e) => setFilterDateFrom(e.target.value)}
             />
           </div>
-          <div className="flex-1 min-w-[150px] space-y-1.5 text-left">
+          <div className="w-full sm:flex-1 sm:min-w-[150px] space-y-1.5 text-left">
             <label className="text-[10px] font-black text-gray-400 uppercase">Дата по</label>
             <input
               type="date"
@@ -1628,14 +1672,14 @@ const OrdersHistoryDashboard = ({
               onChange={(e) => setFilterDateTo(e.target.value)}
             />
           </div>
-          <div className="flex-none">
+          <div className="w-full sm:w-auto">
             <button
               type="button"
               onClick={() => {
                 setFilterDateFrom('');
                 setFilterDateTo('');
               }}
-              className="px-4 py-2.5 rounded-xl border border-gray-200 text-xs font-black uppercase tracking-wider text-gray-600 hover:bg-gray-50"
+              className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-gray-200 text-xs font-black uppercase tracking-wider text-gray-600 hover:bg-gray-50"
             >
               Сбросить фильтр
             </button>
@@ -1649,7 +1693,7 @@ const OrdersHistoryDashboard = ({
         </div>
         <div>
           <p className="text-[10px] font-black text-gray-400 uppercase">Итого сумма по заказам</p>
-          <p className="text-lg font-black text-emerald-700">{new Intl.NumberFormat('ru-RU').format(ordersTotalAmount)} ₸</p>
+          <p className="text-lg font-black text-emerald-700 whitespace-nowrap">{new Intl.NumberFormat('ru-RU').format(ordersTotalAmount)} ₸</p>
         </div>
       </div>
       <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest">Подтверждённые заказы</h2>
@@ -1714,8 +1758,8 @@ const AdminFilters = ({
   managerOptions: string[];
   onReset: () => void;
 }) => (
-  <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm flex flex-wrap gap-6 items-end">
-    <div className="flex-1 min-w-[200px] space-y-1.5 text-left">
+  <div className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-6 shadow-sm flex flex-wrap gap-4 sm:gap-6 items-end">
+    <div className="w-full sm:flex-1 sm:min-w-[200px] space-y-1.5 text-left">
       <label className="text-[10px] font-black text-gray-400 uppercase">Менеджер</label>
       <select
         className="w-full px-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-sm font-bold"
@@ -1729,19 +1773,19 @@ const AdminFilters = ({
         ))}
       </select>
     </div>
-    <div className="flex-1 min-w-[150px] space-y-1.5 text-left">
+    <div className="w-full sm:flex-1 sm:min-w-[150px] space-y-1.5 text-left">
       <label className="text-[10px] font-black text-gray-400 uppercase">Дата с</label>
       <input type="date" className="w-full px-4 py-2.5 bg-gray-50 border rounded-xl text-sm" value={from} onChange={(e) => setFrom(e.target.value)} />
     </div>
-    <div className="flex-1 min-w-[150px] space-y-1.5 text-left">
+    <div className="w-full sm:flex-1 sm:min-w-[150px] space-y-1.5 text-left">
       <label className="text-[10px] font-black text-gray-400 uppercase">Дата по</label>
       <input type="date" className="w-full px-4 py-2.5 bg-gray-50 border rounded-xl text-sm" value={to} onChange={(e) => setTo(e.target.value)} />
     </div>
     <div className="flex-none">
-      <button
+    <button
         type="button"
         onClick={onReset}
-        className="px-4 py-2.5 rounded-xl border border-gray-200 text-xs font-black uppercase tracking-wider text-gray-600 hover:bg-gray-50"
+      className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-gray-200 text-xs font-black uppercase tracking-wider text-gray-600 hover:bg-gray-50"
       >
         Сбросить фильтр
       </button>
