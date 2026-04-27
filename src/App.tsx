@@ -972,8 +972,13 @@ const ContractorLookup = ({
   clients: UiClient[];
   onOpenAddClient: (input: string, cb: (c: UiClient) => void) => void;
 }) => {
+  const normalizeName = (s: string) => s.trim().toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ');
+  const normalizeBin = (s: string) => s.replace(/\D/g, '');
+  const valueName = normalizeName(value);
+  const valueBin = normalizeBin(value);
+
   const currentClient = clients.find(
-    (c) => c.name.trim().toLowerCase() === value.trim().toLowerCase() || c.bin === value.trim(),
+    (c) => normalizeName(c.name) === valueName || normalizeBin(c.bin) === valueBin,
   );
   const isNotFound = value.trim() !== '' && !currentClient;
   return (
@@ -987,7 +992,9 @@ const ContractorLookup = ({
             value={currentClient ? currentClient.name : value}
             onChange={(e) => {
               const val = e.target.value;
-              const found = clients.find((c) => c.name === val || c.bin === val);
+              const found = clients.find(
+                (c) => normalizeName(c.name) === normalizeName(val) || normalizeBin(c.bin) === normalizeBin(val),
+              );
               onSelect(found ? found.name : val, found ? found.bin : '');
             }}
             placeholder="Наименование или БИН..."
