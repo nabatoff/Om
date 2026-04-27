@@ -1190,8 +1190,14 @@ const MeetingTable = ({
   seedKey: string;
   onSaveItem: () => Promise<boolean>;
 }) => {
-  const rowSig = (row: UiAssigned | UiConducted) =>
-    `${row.entityName.trim().toLowerCase()}|${row.bin}|${row.date}|${row.type}|${'result' in row ? row.result : ''}`;
+  const rowSig = (row: UiAssigned | UiConducted) => {
+    const name = row.entityName.trim().toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ');
+    const bin = row.bin.replace(/\D/g, '');
+    const date = String(row.date || '').trim();
+    const type = String(row.type || '').trim().toLowerCase().replace(/ё/g, 'е');
+    const result = 'result' in row ? String(row.result || '').trim().toLowerCase().replace(/ё/g, 'е') : '';
+    return `${name}|${bin}|${date}|${type}|${result}`;
+  };
   const [savedRows, setSavedRows] = useState<Set<string>>(() => new Set(data.map(rowSig)));
   useEffect(() => {
     setSavedRows(new Set(data.map(rowSig)));
@@ -1325,6 +1331,11 @@ const MeetingTable = ({
                             setSavedRows((prev) => {
                               const n = new Set(prev);
                               n.add(currentSig);
+                              // После успешного сохранения помечаем текущий срез таблицы как сохранённый.
+                              // Это делает UI предсказуемым: кнопка сразу меняется на "Сохранено".
+                              for (const item of data) {
+                                n.add(rowSig(item as UiAssigned | UiConducted));
+                              }
                               return n;
                             });
                           }

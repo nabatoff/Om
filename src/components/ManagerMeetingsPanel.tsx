@@ -20,6 +20,12 @@ function toYmd(raw: string): string | null {
     const mo = m[2].padStart(2, '0');
     return `${m[3]}-${mo}-${d}`;
   }
+  const mDash = t.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+  if (mDash) {
+    const d = mDash[1].padStart(2, '0');
+    const mo = mDash[2].padStart(2, '0');
+    return `${mDash[3]}-${mo}-${d}`;
+  }
   return null;
 }
 
@@ -41,6 +47,10 @@ function buildLastDaysRange(days: number): { from: string; to: string } {
   const to = localYmd(new Date());
   const from = addDaysYmd(to, -(days - 1));
   return { from, to };
+}
+
+function normalizeMeetingType(value: string): string {
+  return value.trim().toLowerCase().replace(/ё/g, 'е');
 }
 
 export function ManagerMeetingsPanel({
@@ -117,7 +127,11 @@ export function ManagerMeetingsPanel({
       const isDone = Boolean(findEvidence(a, managerName));
       if (assignedStatusFilter === 'done' && !isDone) return false;
       if (assignedStatusFilter === 'pending' && isDone) return false;
-      if (assignedTypeFilter !== 'all' && a.type !== assignedTypeFilter) return false;
+      if (assignedTypeFilter !== 'all') {
+        const rowType = normalizeMeetingType(a.type);
+        if (assignedTypeFilter === 'Новая' && !rowType.startsWith('нов')) return false;
+        if (assignedTypeFilter === 'Повторная' && !rowType.startsWith('повтор')) return false;
+      }
       return true;
     });
   }, [rows, assignedFilterFrom, assignedFilterTo, assignedStatusFilter, assignedTypeFilter, findEvidence, managerName]);
