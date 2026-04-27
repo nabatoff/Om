@@ -147,6 +147,16 @@ export async function createClientRow(c: UiClient): Promise<UiClient> {
   return { name: data.name, bin: String(data.bin).trim() };
 }
 
+export async function deleteClientByBin(bin: string): Promise<void> {
+  const { error } = await getSupabase().from('crm_clients').delete().eq('bin', bin);
+  if (error) throw error;
+}
+
+export async function deleteReportById(reportId: string): Promise<void> {
+  const { error } = await getSupabase().from('crm_reports').delete().eq('id', reportId);
+  if (error) throw error;
+}
+
 export type SaveReportPayload = {
   reportDate: string;
   stats: FormStats;

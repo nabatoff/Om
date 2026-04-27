@@ -1,14 +1,15 @@
 import { useMemo, useState } from 'react';
-import { Fingerprint, Search, UserPlus, Users } from 'lucide-react';
+import { Fingerprint, Search, Trash2, UserPlus, Users } from 'lucide-react';
 import type { UiClient } from '../lib/crmApi';
 
 type Props = {
   clients: UiClient[];
   onSelectClient: (c: UiClient) => void;
   onAddClient: () => void;
+  onDeleteClient: (c: UiClient) => void;
 };
 
-export function ClientDirectoryPanel({ clients, onSelectClient, onAddClient }: Props) {
+export function ClientDirectoryPanel({ clients, onSelectClient, onAddClient, onDeleteClient }: Props) {
   const [q, setQ] = useState('');
 
   const filtered = useMemo(() => {
@@ -60,7 +61,7 @@ export function ClientDirectoryPanel({ clients, onSelectClient, onAddClient }: P
               <tr className="bg-gray-50 text-[10px] font-black text-gray-500 uppercase tracking-tighter border-b border-gray-100">
                 <th className="p-4">Наименование</th>
                 <th className="p-4">БИН</th>
-                <th className="p-4 w-24 text-right"> </th>
+                <th className="p-4 w-36 text-right">Действия</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -92,7 +93,23 @@ export function ClientDirectoryPanel({ clients, onSelectClient, onAddClient }: P
                         {c.bin}
                       </span>
                     </td>
-                    <td className="p-4 text-right text-[10px] font-black text-blue-600 uppercase">История</td>
+                    <td className="p-4 text-right">
+                      <div className="inline-flex items-center gap-2">
+                        <span className="text-[10px] font-black text-blue-600 uppercase">История</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDeleteClient(c);
+                          }}
+                          className="inline-flex items-center justify-center p-1.5 rounded-lg text-red-500 hover:bg-red-50 border border-transparent hover:border-red-100"
+                          aria-label={`Удалить клиента ${c.name}`}
+                          title="Удалить клиента"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))
               )}

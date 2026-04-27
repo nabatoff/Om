@@ -32,6 +32,8 @@ import {
   fetchClientsApi,
   fetchReportsApi,
   createClientRow,
+  deleteClientByBin,
+  deleteReportById,
   saveReportToDb,
 } from './lib/crmApi';
 import { buildClientCrmHistory } from './lib/crmClientHistory';
@@ -203,6 +205,35 @@ const App = () => {
       setNewClientData({ name: '', bin: '' });
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Ошибка создания');
+    }
+  };
+
+  const removeClient = async (client: UiClient) => {
+    if (!isAdmin) return;
+    const ok = window.confirm(
+      `Удалить контрагента "${client.name}" (${client.bin})?\n\nЕсли он используется в отчётах, удаление может быть запрещено.`,
+    );
+    if (!ok) return;
+    try {
+      await deleteClientByBin(client.bin);
+      setClientHistoryFor((prev) => (prev?.bin === client.bin ? null : prev));
+      await refresh();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Не удалось удалить контрагента');
+    }
+  };
+
+  const removeReport = async (reportId: string) => {
+    if (!isAdmin) return;
+    const ok = window.confirm(
+      `Удалить отчёт ${reportId.slice(0, 8)}?\n\nБудут удалены связанные встречи и сделки (если настроено каскадное удаление).`,
+    );
+    if (!ok) return;
+    try {
+      await deleteReportById(reportId);
+      await refresh();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Не удалось удалить отчёт');
     }
   };
 
@@ -426,6 +457,7 @@ const App = () => {
                   setDetailsModal({ isOpen: true, list, title, type: 'conversion', manager, reportDate: rDate })
                 }
                 findEvidence={findSpecificConductedEvidence}
+                onDeleteReport={removeReport}
               />
             )}
             {adminSubView === 'staff' && <StaffManager />}
@@ -441,6 +473,7 @@ const App = () => {
               setOnClientCreatedCallback(null);
               setIsClientModalOpen(true);
             }}
+            onDeleteClient={removeClient}
           />
         )}
 
@@ -1016,6 +1049,7 @@ const AdminDashboard = ({
   managerOptions,
   openDetails,
   findEvidence,
+  onDeleteReport,
 }: {
   reports: FullReport[];
   filterManager: string;
@@ -1027,6 +1061,7 @@ const AdminDashboard = ({
   managerOptions: string[];
   openDetails: (list: UiAssigned[], title: string, type: string, manager: string, rDate: string) => void;
   findEvidence: (a: UiAssigned, m: string) => { evidence: UiConducted; reportDate: string } | null;
+  onDeleteReport: (reportId: string) => void;
 }) => {
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-500">
@@ -1059,6 +1094,7 @@ const AdminDashboard = ({
               <th className="py-6 px-4 text-center">Факт (провед.)</th>
               <th className="py-6 px-4 text-center">Реализация (из плана)</th>
               <th className="py-6 px-8 text-right">Выручка</th>
+              <th className="py-6 px-4 text-right">Действия</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
@@ -1107,6 +1143,16 @@ const AdminDashboard = ({
                   </td>
                   <td className="py-5 px-8 text-right font-black text-gray-900">
                     {new Intl.NumberFormat('ru-RU').format(revenue)} ₸
+                  </td>
+                  <td className="py-5 px-4 text-right">
+                    <button
+                      type="button"
+                      onClick={() => onDeleteReport(report.id)}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase text-red-600 border border-red-100 hover:bg-red-50"
+                      title="Удалить отчёт"
+                    >
+                      <Trash2 size={12} /> Удалить
+                    </button>
                   </td>
                 </tr>
               );
