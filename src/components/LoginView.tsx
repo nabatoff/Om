@@ -5,7 +5,6 @@ import {
   formatAuthSignInError,
   isValidStaffLogin,
   staffLoginToServiceEmail,
-  STAFF_EMAIL_DOMAIN,
 } from '../lib/staffAuth';
 
 export function LoginView() {
@@ -50,10 +49,6 @@ export function LoginView() {
         </div>
         <p className="text-xs text-slate-500 text-center mb-4">
           Войти по <strong>логину</strong> и паролю, которые выдал администратор. Саморегистрации нет.
-          <br />
-          <span className="text-slate-600">
-            (тех. email в Supabase: <span className="font-mono text-slate-500">логин@{STAFF_EMAIL_DOMAIN}</span>)
-          </span>
         </p>
         <form onSubmit={submit} className="space-y-4 text-left">
           {err && (
