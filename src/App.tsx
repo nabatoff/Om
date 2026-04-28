@@ -108,6 +108,7 @@ const App = () => {
   const [ordersFilterManager, setOrdersFilterManager] = useState('Все');
   const [ordersFilterDateFrom, setOrdersFilterDateFrom] = useState('');
   const [ordersFilterDateTo, setOrdersFilterDateTo] = useState('');
+  const [ordersFilterCounterparty, setOrdersFilterCounterparty] = useState('');
   const [managerOrdersSection, setManagerOrdersSection] = useState<'calendar' | 'meetings' | 'orders'>('calendar');
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -394,8 +395,15 @@ const App = () => {
         orders.push({ ...order, manager: report.manager, date: report.date });
       });
     });
-    return orders;
-  }, [reportsForOrders]);
+    const qRaw = ordersFilterCounterparty.trim().toLowerCase();
+    if (!qRaw) return orders;
+    const qDigits = qRaw.replace(/\D/g, '');
+    return orders.filter((o) => {
+      const byName = o.entityName.toLowerCase().includes(qRaw);
+      const byBin = qDigits.length > 0 && o.bin.replace(/\D/g, '').includes(qDigits);
+      return byName || byBin;
+    });
+  }, [reportsForOrders, ordersFilterCounterparty]);
 
   const clientHistoryAggregated = useMemo(
     () =>
@@ -556,16 +564,6 @@ const App = () => {
               </button>
               <button
                 type="button"
-                onClick={() => setAdminSubView('staff')}
-                className={`flex-1 min-w-[110px] sm:min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all ${
-                  adminSubView === 'staff' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
-                }`}
-              >
-                <UserCog size={14} />
-                Сотрудники
-              </button>
-              <button
-                type="button"
                 onClick={() => setAdminSubView('meetings')}
                 className={`flex-1 min-w-[110px] sm:min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all ${
                   adminSubView === 'meetings' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
@@ -573,6 +571,16 @@ const App = () => {
               >
                 <List size={14} />
                 Все встречи
+              </button>
+              <button
+                type="button"
+                onClick={() => setAdminSubView('staff')}
+                className={`flex-1 min-w-[110px] sm:min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all ${
+                  adminSubView === 'staff' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
+                }`}
+              >
+                <UserCog size={14} />
+                Сотрудники
               </button>
             </div>
             {adminSubView === 'dashboard' && (
@@ -589,6 +597,7 @@ const App = () => {
             )}
             {adminSubView === 'kpi' && (
               <KpiDashboard
+                allReports={allReports}
                 reports={kpiFilteredReports}
                 filterManager={kpiFilterManager}
                 setFilterManager={setKpiFilterManager}
@@ -685,6 +694,8 @@ const App = () => {
                 setFilterDateFrom={setOrdersFilterDateFrom}
                 filterDateTo={ordersFilterDateTo}
                 setFilterDateTo={setOrdersFilterDateTo}
+                filterCounterparty={ordersFilterCounterparty}
+                setFilterCounterparty={setOrdersFilterCounterparty}
                 managerOptions={managerFilterOptions}
                 openOrderDetails={(entity, bin, amounts) => setOrderDetailModal({ isOpen: true, entity, bin, amounts })}
               />
@@ -1719,6 +1730,7 @@ function countConductedRepeatMeetings(report: FullReport): number {
 }
 
 const KpiDashboard = ({
+  allReports,
   reports,
   filterManager,
   setFilterManager,
@@ -1729,6 +1741,7 @@ const KpiDashboard = ({
   managerOptions,
   onDeleteReport,
 }: {
+  allReports: FullReport[];
   reports: FullReport[];
   filterManager: string;
   setFilterManager: SetState<string>;
@@ -1768,6 +1781,54 @@ const KpiDashboard = ({
     return { assignedNew, conductedNew, conductedRepeat };
   }, [kpiRows]);
 
+  const monthlyManagerSummary = useMemo(() => {
+    const monthPrefix = new Date().toISOString().slice(0, 7);
+    const source = allReports.filter((r) => {
+      const matchManager = filterManager === 'Все' || r.manager === filterManager;
+      return matchManager && r.date.startsWith(monthPrefix);
+    });
+    const byKey = new Map<string, FullReport>();
+    for (const r of source) {
+      const key = `${r.date}|${r.manager}`;
+      const prev = byKey.get(key);
+      if (!prev) {
+        byKey.set(key, r);
+        continue;
+      }
+      const prevScore =
+        prev.stats.processedTotal + prev.stats.newInWork + prev.stats.callsTotal + prev.stats.validatedTotal;
+      const curScore = r.stats.processedTotal + r.stats.newInWork + r.stats.callsTotal + r.stats.validatedTotal;
+      if (curScore >= prevScore) byKey.set(key, r);
+    }
+    let processedTotal = 0;
+    let newInWork = 0;
+    let callsTotal = 0;
+    let validatedTotal = 0;
+    let assignedNew = 0;
+    let conductedNew = 0;
+    let conductedRepeat = 0;
+    for (const r of byKey.values()) {
+      processedTotal += r.stats.processedTotal;
+      newInWork += r.stats.newInWork;
+      callsTotal += r.stats.callsTotal;
+      validatedTotal += r.stats.validatedTotal;
+      assignedNew += countAssignedNewMeetings(r);
+      conductedNew += countConductedNewMeetings(r);
+      conductedRepeat += countConductedRepeatMeetings(r);
+    }
+    return {
+      monthPrefix,
+      reportsCount: byKey.size,
+      processedTotal,
+      newInWork,
+      callsTotal,
+      validatedTotal,
+      assignedNew,
+      conductedNew,
+      conductedRepeat,
+    };
+  }, [allReports, filterManager]);
+
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-500">
       <AdminFilters
@@ -1784,6 +1845,46 @@ const KpiDashboard = ({
           setFilterDateTo('');
         }}
       />
+      <section className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-5 shadow-sm">
+        <div className="mb-3 text-left">
+          <h3 className="text-[11px] font-black text-gray-700 uppercase tracking-widest">
+            Общая сводка за месяц ({monthlyManagerSummary.monthPrefix})
+          </h3>
+          <p className="text-[10px] text-gray-500 mt-1">
+            Реагирует только на фильтр менеджера. Найдено отчётов: {monthlyManagerSummary.reportsCount}
+          </p>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-2">
+          <div className="rounded-xl bg-gray-50 border border-gray-100 p-3 text-left">
+            <p className="text-[10px] text-gray-500 font-black uppercase">Отработано</p>
+            <p className="text-lg font-black text-gray-900">{monthlyManagerSummary.processedTotal}</p>
+          </div>
+          <div className="rounded-xl bg-emerald-50 border border-emerald-100 p-3 text-left">
+            <p className="text-[10px] text-emerald-700 font-black uppercase">Взято новых</p>
+            <p className="text-lg font-black text-emerald-800">{monthlyManagerSummary.newInWork}</p>
+          </div>
+          <div className="rounded-xl bg-indigo-50 border border-indigo-100 p-3 text-left">
+            <p className="text-[10px] text-indigo-700 font-black uppercase">Звонки</p>
+            <p className="text-lg font-black text-indigo-800">{monthlyManagerSummary.callsTotal}</p>
+          </div>
+          <div className="rounded-xl bg-amber-50 border border-amber-100 p-3 text-left">
+            <p className="text-[10px] text-amber-700 font-black uppercase">Квалификация</p>
+            <p className="text-lg font-black text-amber-800">{monthlyManagerSummary.validatedTotal}</p>
+          </div>
+          <div className="rounded-xl bg-slate-50 border border-slate-100 p-3 text-left">
+            <p className="text-[10px] text-slate-700 font-black uppercase">Назначено новых</p>
+            <p className="text-lg font-black text-slate-900">{monthlyManagerSummary.assignedNew}</p>
+          </div>
+          <div className="rounded-xl bg-teal-50 border border-teal-100 p-3 text-left">
+            <p className="text-[10px] text-teal-700 font-black uppercase">Проведено новых</p>
+            <p className="text-lg font-black text-teal-800">{monthlyManagerSummary.conductedNew}</p>
+          </div>
+          <div className="rounded-xl bg-violet-50 border border-violet-100 p-3 text-left">
+            <p className="text-[10px] text-violet-700 font-black uppercase">Проведено повторных</p>
+            <p className="text-lg font-black text-violet-800">{monthlyManagerSummary.conductedRepeat}</p>
+          </div>
+        </div>
+      </section>
       <section className="bg-white border border-gray-200 rounded-3xl shadow-sm overflow-x-auto text-left">
         <div className="px-6 pt-5 pb-2 space-y-1">
           <h3 className="text-xs font-black text-gray-700 uppercase tracking-widest">Отдельный отчёт по KPI менеджеров</h3>
@@ -1861,6 +1962,8 @@ const OrdersHistoryDashboard = ({
   setFilterDateFrom,
   filterDateTo,
   setFilterDateTo,
+  filterCounterparty,
+  setFilterCounterparty,
   managerOptions,
   openOrderDetails,
 }: {
@@ -1872,6 +1975,8 @@ const OrdersHistoryDashboard = ({
   setFilterDateFrom: SetState<string>;
   filterDateTo: string;
   setFilterDateTo: SetState<string>;
+  filterCounterparty: string;
+  setFilterCounterparty: SetState<string>;
   managerOptions: string[];
   openOrderDetails: (entity: string, bin: string, amounts: number[]) => void;
 }) => {
@@ -1895,6 +2000,7 @@ const OrdersHistoryDashboard = ({
             setFilterManager('Все');
             setFilterDateFrom('');
             setFilterDateTo('');
+            setFilterCounterparty('');
           }}
         />
       ) : (
@@ -1923,6 +2029,7 @@ const OrdersHistoryDashboard = ({
               onClick={() => {
                 setFilterDateFrom('');
                 setFilterDateTo('');
+                setFilterCounterparty('');
               }}
               className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-gray-200 text-xs font-black uppercase tracking-wider text-gray-600 hover:bg-gray-50"
             >
@@ -1931,6 +2038,25 @@ const OrdersHistoryDashboard = ({
           </div>
         </div>
       )}
+      <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm flex flex-wrap gap-3 items-end">
+        <div className="w-full sm:flex-1 sm:min-w-[220px] space-y-1.5 text-left">
+          <label className="text-[10px] font-black text-gray-400 uppercase">Контрагент (название или БИН)</label>
+          <input
+            type="text"
+            className="w-full px-4 py-2.5 bg-gray-50 border rounded-xl text-sm"
+            value={filterCounterparty}
+            onChange={(e) => setFilterCounterparty(e.target.value)}
+            placeholder="Например: Прогресс или 123456..."
+          />
+        </div>
+        <button
+          type="button"
+          onClick={() => setFilterCounterparty('')}
+          className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-gray-200 text-xs font-black uppercase tracking-wider text-gray-600 hover:bg-gray-50"
+        >
+          Очистить контрагента
+        </button>
+      </div>
       <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm flex flex-wrap gap-6 items-center">
         <div>
           <p className="text-[10px] font-black text-gray-400 uppercase">Заказов по фильтру</p>
