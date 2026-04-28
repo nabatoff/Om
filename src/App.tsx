@@ -1954,15 +1954,17 @@ const KpiDashboard = ({
   }, [reports]);
 
   const meetingTotals = useMemo(() => {
+    let conductedFact = 0;
     let assignedNew = 0;
     let conductedNew = 0;
     let conductedRepeat = 0;
     for (const r of kpiRows) {
+      conductedFact += r.conductedMeetings.length;
       assignedNew += countAssignedNewMeetings(r);
       conductedNew += countConductedNewMeetings(r);
       conductedRepeat += countConductedRepeatMeetings(r);
     }
-    return { assignedNew, conductedNew, conductedRepeat };
+    return { conductedFact, assignedNew, conductedNew, conductedRepeat };
   }, [kpiRows]);
 
   const monthlyManagerSummary = useMemo(() => {
@@ -2085,6 +2087,7 @@ const KpiDashboard = ({
               <th className="py-4 px-4 text-center">Взято новых</th>
               <th className="py-4 px-4 text-center">Звонки</th>
               <th className="py-4 px-4 text-center">Квалификация</th>
+              <th className="py-4 px-4 text-center">Фактически за день проведено</th>
               <th className="py-4 px-4 text-center">Назначено новых</th>
               <th className="py-4 px-4 text-center">Проведено новых</th>
               <th className="py-4 px-4 text-center">Проведено повторных</th>
@@ -2100,6 +2103,7 @@ const KpiDashboard = ({
                 <td className="py-3.5 px-4 text-center font-black text-emerald-700">{report.stats.newInWork}</td>
                 <td className="py-3.5 px-4 text-center font-black text-indigo-700">{report.stats.callsTotal}</td>
                 <td className="py-3.5 px-4 text-center font-black text-amber-700">{report.stats.validatedTotal}</td>
+                <td className="py-3.5 px-4 text-center font-black text-sky-700">{report.conductedMeetings.length}</td>
                 <td className="py-3.5 px-4 text-center font-black text-slate-800">{countAssignedNewMeetings(report)}</td>
                 <td className="py-3.5 px-4 text-center font-black text-teal-700">{countConductedNewMeetings(report)}</td>
                 <td className="py-3.5 px-4 text-center font-black text-violet-700">{countConductedRepeatMeetings(report)}</td>
@@ -2124,6 +2128,7 @@ const KpiDashboard = ({
                 <td className="py-3 px-4 text-center text-gray-500">—</td>
                 <td className="py-3 px-4 text-center text-gray-500">—</td>
                 <td className="py-3 px-4 text-center text-gray-500">—</td>
+                <td className="py-3 px-4 text-center text-sky-900">{meetingTotals.conductedFact}</td>
                 <td className="py-3 px-4 text-center text-slate-900">{meetingTotals.assignedNew}</td>
                 <td className="py-3 px-4 text-center text-teal-900">{meetingTotals.conductedNew}</td>
                 <td className="py-3 px-4 text-center text-violet-900">{meetingTotals.conductedRepeat}</td>
