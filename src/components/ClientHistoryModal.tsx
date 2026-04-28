@@ -99,6 +99,7 @@ export function ClientHistoryModal({ client, conducted, orders, onClose }: Props
                       <th className="p-3">Дата отчёта</th>
                       <th className="p-3">Менеджер</th>
                       <th className="p-3">Сущность</th>
+                      <th className="p-3">Заказ через (ЮЛ)</th>
                       <th className="p-3">Кол-во</th>
                       <th className="p-3">Сумма</th>
                     </tr>
@@ -109,6 +110,18 @@ export function ClientHistoryModal({ client, conducted, orders, onClose }: Props
                         <td className="p-3 font-mono text-xs text-gray-700 whitespace-nowrap">{formatDisplayDate(row.reportDate)}</td>
                         <td className="p-3 text-gray-800">{row.manager}</td>
                         <td className="p-3 text-gray-800">{row.entityName}</td>
+                        <td className="p-3 text-gray-700 text-xs">
+                          {row.viaEntityName.trim() ? (
+                            <>
+                              <span className="font-bold">{row.viaEntityName}</span>
+                              {row.viaBin.trim() ? (
+                                <div className="text-[10px] font-mono text-gray-400 mt-0.5">{row.viaBin}</div>
+                              ) : null}
+                            </>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
                         <td className="p-3 font-mono text-xs">{row.orderCount}</td>
                         <td className="p-3 font-mono text-xs text-emerald-700">
                           {row.totalAmount.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} ₸

@@ -12,6 +12,9 @@ export type UiConducted = { entityName: string; bin: string; date: string; type:
 export type UiOrder = {
   entityName: string;
   bin: string;
+  /** Юр. лицо, через которое оформлен заказ (из справочника контрагентов). */
+  viaEntityName: string;
+  viaBin: string;
   orderCount: number;
   amounts: number[];
   totalAmount: number;
@@ -58,6 +61,8 @@ type ReportRow = {
     id: string;
     entity_name: string;
     bin: string;
+    via_entity_name?: string | null;
+    via_bin?: string | null;
     order_count: number;
     amounts: string[] | number[] | null;
     total_amount: string | number;
@@ -101,6 +106,8 @@ function mapReport(r: ReportRow): FullReport {
         return {
           entityName: o.entity_name,
           bin: o.bin?.trim() || '',
+          viaEntityName: (o.via_entity_name ?? '').trim(),
+          viaBin: (o.via_bin ?? '').trim(),
           orderCount: o.order_count,
           amounts: amts.map((n) => Number(n)),
           totalAmount: Number(o.total_amount),
@@ -114,7 +121,7 @@ const reportSelect = `
   processed_total, new_in_work, calls_total, validated_total,
   crm_assigned_meetings ( id, entity_name, bin, meeting_date, meeting_type, sort_order ),
   crm_conducted_meetings ( id, entity_name, bin, meeting_date, meeting_type, result, sort_order ),
-  crm_confirmed_orders ( id, entity_name, bin, order_count, amounts, total_amount, sort_order )
+  crm_confirmed_orders ( id, entity_name, bin, via_entity_name, via_bin, order_count, amounts, total_amount, sort_order )
 `;
 
 export async function fetchClientsApi(): Promise<UiClient[]> {

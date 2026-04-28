@@ -57,6 +57,37 @@ function formatDisplayDate(raw: string): string {
   return t;
 }
 
+/** Для сортировки / выбора «самой ранней» назначенной даты в отчёте. */
+function meetingDateToSortKey(raw: string): string {
+  const t = (raw || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0, 10);
+  const dmyDots = t.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+  if (dmyDots) {
+    const d = dmyDots[1].padStart(2, '0');
+    const mo = dmyDots[2].padStart(2, '0');
+    return `${dmyDots[3]}-${mo}-${d}`;
+  }
+  const mDash = t.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+  if (mDash) {
+    const d = mDash[1].padStart(2, '0');
+    const mo = mDash[2].padStart(2, '0');
+    return `${mDash[3]}-${mo}-${d}`;
+  }
+  return t;
+}
+
+/** Дата назначенной встречи по тому же отчёту, что и заказ (БИН + название; иначе любая назначенная по БИН). */
+function assignedMeetingDateForOrder(report: FullReport, order: UiOrder): string | null {
+  const bin = order.bin.trim();
+  const nameNorm = order.entityName.trim().toLowerCase();
+  const byBin = report.assignedMeetings.filter((a) => a.bin.trim() === bin);
+  if (byBin.length === 0) return null;
+  const pool = byBin.filter((a) => a.entityName.trim().toLowerCase() === nameNorm);
+  const list = pool.length > 0 ? pool : byBin;
+  const sorted = [...list].sort((a, b) => meetingDateToSortKey(a.date).localeCompare(meetingDateToSortKey(b.date)));
+  return sorted[0]?.date?.trim() || null;
+}
+
 type SaveReportOptions = {
   silent?: boolean;
   skipValidation?: boolean;
@@ -388,10 +419,15 @@ const App = () => {
   }, [isAdmin, allReports, ordersFilterManager, ordersFilterDateFrom, ordersFilterDateTo]);
 
   const allFilteredOrders = useMemo(() => {
-    const orders: (UiOrder & { manager: string; date: string })[] = [];
+    const orders: (UiOrder & { manager: string; reportDate: string; assignedMeetingDate: string | null })[] = [];
     reportsForOrders.forEach((report) => {
       report.confirmedOrders.forEach((order) => {
-        orders.push({ ...order, manager: report.manager, date: report.date });
+        orders.push({
+          ...order,
+          manager: report.manager,
+          reportDate: report.date,
+          assignedMeetingDate: assignedMeetingDateForOrder(report, order),
+        });
       });
     });
     return orders;
@@ -1102,14 +1138,14 @@ const OrdersBlock = ({
   onSaveItem: () => Promise<boolean>;
 }) => {
   const orderSig = (o: UiOrder) =>
-    `${o.entityName.trim().toLowerCase()}|${o.bin}|${o.orderCount}|${o.amounts.map((x) => Number(x || 0)).join(',')}|${o.totalAmount}`;
+    `${o.entityName.trim().toLowerCase()}|${o.bin}|${o.viaEntityName.trim().toLowerCase()}|${o.viaBin}|${o.orderCount}|${o.amounts.map((x) => Number(x || 0)).join(',')}|${o.totalAmount}`;
   const [savedOrders, setSavedOrders] = useState<Set<string>>(() => new Set(data.map(orderSig)));
   useEffect(() => {
     setSavedOrders(new Set(data.map(orderSig)));
   }, [seedKey]);
 
   const addOrder = () =>
-    setData([...data, { entityName: '', bin: '', orderCount: 1, amounts: [0], totalAmount: 0 }]);
+    setData([...data, { entityName: '', bin: '', viaEntityName: '', viaBin: '', orderCount: 1, amounts: [0], totalAmount: 0 }]);
   const updateOrder = (idx: number, field: keyof UiOrder, val: string | number) => {
     const updated = [...data];
     const prevSig = orderSig(updated[idx]);
@@ -1174,6 +1210,19 @@ const OrdersBlock = ({
                   className="w-full bg-white border-none p-3 rounded-2xl text-sm font-black shadow-sm h-[46px]"
                   value={order.orderCount}
                   onChange={(e) => updateOrder(oIdx, 'orderCount', e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5 text-left md:col-span-2">
+                <label className="text-[9px] font-black text-gray-400 uppercase ml-2">Юр. лицо через которое был заказ</label>
+                <ContractorLookup
+                  value={order.viaEntityName}
+                  onSelect={(name, bin) => {
+                    const u = [...data];
+                    u[oIdx] = { ...u[oIdx], viaEntityName: name, viaBin: bin };
+                    setData(u);
+                  }}
+                  clients={clients}
+                  onOpenAddClient={onOpenAddClient}
                 />
               </div>
             </div>
@@ -1781,7 +1830,7 @@ const OrdersHistoryDashboard = ({
   openOrderDetails,
 }: {
   isAdmin: boolean;
-  orders: (UiOrder & { date: string; manager: string })[];
+  orders: (UiOrder & { manager: string; reportDate: string; assignedMeetingDate: string | null })[];
   filterManager: string;
   setFilterManager: SetState<string>;
   filterDateFrom: string;
@@ -1859,13 +1908,14 @@ const OrdersHistoryDashboard = ({
       </div>
       <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest">Подтверждённые заказы</h2>
       <div className="bg-white border border-gray-200 rounded-3xl shadow-sm overflow-x-auto text-left">
-        <table className="w-full text-left border-collapse min-w-[1000px]">
+        <table className="w-full text-left border-collapse min-w-[1120px]">
           <thead>
             <tr className="bg-gray-50/50 text-[10px] font-black text-gray-400 border-b border-gray-100">
-              <th className="py-6 px-8">Дата</th>
+              <th className="py-6 px-8">Дата назначения встречи</th>
               {isAdmin && <th className="py-6 px-4">Менеджер</th>}
               <th className="py-6 px-4">БИН/ИИН</th>
               <th className="py-6 px-4">Контрагент</th>
+              <th className="py-6 px-4">Заказ через (ЮЛ)</th>
               <th className="py-6 px-4 text-center">Кол-во</th>
               <th className="py-6 px-8 text-right">Сумма</th>
             </tr>
@@ -1874,11 +1924,23 @@ const OrdersHistoryDashboard = ({
             {orders.map((order, idx) => (
               <tr key={idx} className="hover:bg-gray-50/50 text-sm">
                 <td className="py-5 px-8 text-gray-500 whitespace-nowrap">
-                  {formatDisplayDate(order.date)}
+                  {order.assignedMeetingDate ? formatDisplayDate(order.assignedMeetingDate) : '—'}
                 </td>
                 {isAdmin && <td className="py-5 px-4 font-bold text-gray-800 whitespace-nowrap">{order.manager}</td>}
                 <td className="py-5 px-4 font-mono text-gray-400 text-[11px]">{order.bin}</td>
                 <td className="py-5 px-4 font-black text-gray-800">{order.entityName}</td>
+                <td className="py-5 px-4 text-gray-800">
+                  {order.viaEntityName.trim() ? (
+                    <>
+                      <span className="font-bold">{order.viaEntityName}</span>
+                      {order.viaBin.trim() ? (
+                        <div className="text-[10px] font-mono text-gray-400 mt-0.5">{order.viaBin}</div>
+                      ) : null}
+                    </>
+                  ) : (
+                    <span className="text-gray-400">—</span>
+                  )}
+                </td>
                 <td className="py-5 px-4 text-center">
                   <button
                     type="button"
