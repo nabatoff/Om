@@ -54,6 +54,22 @@ function normalizeMeetingType(value: string): string {
   return value.trim().toLowerCase().replace(/ё/g, 'е');
 }
 
+/** Плановая дата в первой колонке; фактическая дата проведения — из проведённой встречи или «—». */
+function meetingConductedLabel(
+  a: UiMeetingWithReport,
+  findEvidence: (planned: UiAssigned, manager: string) => { evidence: UiConducted; reportDate: string } | null,
+): { done: boolean; conductedLabel: string } {
+  if (a.source === 'conducted') {
+    const y = toYmd(a.date);
+    return { done: true, conductedLabel: y ? formatDisplayDate(y) : a.date.trim() || '—' };
+  }
+  const pack = findEvidence(a, a.manager);
+  if (!pack) return { done: false, conductedLabel: '—' };
+  const raw = pack.evidence.date;
+  const y = toYmd(raw);
+  return { done: true, conductedLabel: y ? formatDisplayDate(y) : raw.trim() || '—' };
+}
+
 export function ManagerMeetingsPanel({
   allReports,
   findEvidence,
@@ -308,7 +324,7 @@ export function ManagerMeetingsPanel({
                 <th className="text-left py-2">Контрагент</th>
                 <th className="text-left py-2">Менеджер</th>
                 <th className="text-center py-2">Тип</th>
-                <th className="text-left py-2">Дата отчёта</th>
+                <th className="text-left py-2">Дата проведения</th>
                 <th className="text-right py-2">Статус</th>
               </tr>
             </thead>
@@ -322,8 +338,7 @@ export function ManagerMeetingsPanel({
               ) : (
                 filteredAssignedRows.map((a, idx) => {
                   const ymd = toYmd(a.date);
-                  const evidenceManager = a.manager;
-                  const isDone = a.source === 'conducted' ? true : Boolean(findEvidence(a, evidenceManager));
+                  const { done: isDone, conductedLabel } = meetingConductedLabel(a, findEvidence);
                   return (
                     <tr key={`${a.manager}-${a.source}-${a.bin}-${a.date}-${idx}`} className="text-gray-800">
                       <td className="py-3 text-gray-600 whitespace-nowrap">{ymd ? formatDisplayDate(ymd) : a.date}</td>
@@ -341,7 +356,7 @@ export function ManagerMeetingsPanel({
                           {a.type}
                         </span>
                       </td>
-                      <td className="py-3 text-gray-500 text-xs whitespace-nowrap">{formatDisplayDate(a.reportDate)}</td>
+                      <td className="py-3 text-gray-600 text-xs whitespace-nowrap">{conductedLabel}</td>
                       <td className="py-3 text-right">
                         {isDone ? (
                           <span className="text-emerald-600 font-black text-[10px] bg-emerald-50 px-2 py-1 rounded-full uppercase">
@@ -592,7 +607,7 @@ export function ManagerMeetingsPanel({
               <th className="text-left py-2">Дата встречи</th>
               <th className="text-left py-2">Контрагент</th>
               <th className="text-center py-2">Тип</th>
-              <th className="text-left py-2">Отчёт</th>
+              <th className="text-left py-2">Дата проведения</th>
               <th className="text-right py-2">Статус</th>
             </tr>
           </thead>
@@ -606,7 +621,7 @@ export function ManagerMeetingsPanel({
             ) : (
               filteredAssignedRows.map((a, idx) => {
                 const ymd = toYmd(a.date);
-                const isDone = a.source === 'conducted' ? true : Boolean(findEvidence(a, a.manager));
+                const { done: isDone, conductedLabel } = meetingConductedLabel(a, findEvidence);
                 return (
                   <tr key={`${a.manager}-${a.source}-${a.bin}-${a.date}-${idx}`} className="text-gray-800">
                     <td className="py-3 text-gray-600 whitespace-nowrap">
@@ -625,7 +640,7 @@ export function ManagerMeetingsPanel({
                         {a.type}
                       </span>
                     </td>
-                    <td className="py-3 text-gray-500 text-xs">{formatDisplayDate(a.reportDate)}</td>
+                    <td className="py-3 text-gray-600 text-xs whitespace-nowrap">{conductedLabel}</td>
                     <td className="py-3 text-right">
                       {isDone ? (
                         <span className="text-emerald-600 font-black text-[10px] bg-emerald-50 px-2 py-1 rounded-full uppercase">Выполнено</span>
