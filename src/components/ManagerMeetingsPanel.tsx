@@ -3,7 +3,7 @@ import { Calendar, CalendarDays, ChevronLeft, ChevronRight, Clock } from 'lucide
 import type { FullReport, UiAssigned, UiConducted } from '../lib/crmApi';
 
 export type UiAssignedWithReport = UiAssigned & { reportDate: string };
-type UiMeetingWithReport = UiAssignedWithReport & { source: 'assigned' | 'conducted' };
+type UiMeetingWithReport = UiAssignedWithReport & { source: 'assigned' | 'conducted'; manager: string };
 
 function formatDisplayDate(raw: string): string {
   const ymd = toYmd(raw);
@@ -57,13 +57,17 @@ function normalizeMeetingType(value: string): string {
 export function ManagerMeetingsPanel({
   allReports,
   findEvidence,
-  managerName,
   mode = 'all',
+  variant = 'manager',
+  managerOptions,
 }: {
   allReports: FullReport[];
   findEvidence: (planned: UiAssigned, manager: string) => { evidence: UiConducted; reportDate: string } | null;
-  managerName: string;
   mode?: 'calendar' | 'assigned' | 'all';
+  /** admin: только таблица «Все встречи» по всем менеджерам + фильтр по менеджеру. */
+  variant?: 'manager' | 'admin';
+  /** Для variant=admin: опции фильтра, первый элемент — «Все». */
+  managerOptions?: string[];
 }) {
   const todayYmd = localYmd(new Date());
   const [view, setView] = useState(() => {
@@ -75,12 +79,14 @@ export function ManagerMeetingsPanel({
   const [assignedFilterTo, setAssignedFilterTo] = useState('');
   const [assignedStatusFilter, setAssignedStatusFilter] = useState<'all' | 'done' | 'pending'>('all');
   const [assignedTypeFilter, setAssignedTypeFilter] = useState<'all' | 'Новая' | 'Повторная'>('all');
+  const [adminMeetingsManager, setAdminMeetingsManager] = useState('Все');
 
   const rows: UiMeetingWithReport[] = useMemo(() => {
     const out: UiMeetingWithReport[] = [];
     for (const r of allReports) {
+      const mgr = r.manager || '';
       for (const a of r.assignedMeetings) {
-        out.push({ ...a, reportDate: r.date, source: 'assigned' });
+        out.push({ ...a, reportDate: r.date, source: 'assigned', manager: mgr });
       }
       for (const c of r.conductedMeetings) {
         out.push({
@@ -90,6 +96,7 @@ export function ManagerMeetingsPanel({
           type: c.type,
           reportDate: r.date,
           source: 'conducted',
+          manager: mgr,
         });
       }
     }
@@ -133,9 +140,10 @@ export function ManagerMeetingsPanel({
     return rows.filter((a) => {
       const ymd = toYmd(a.date);
       if (!ymd) return false;
+      if (variant === 'admin' && adminMeetingsManager !== 'Все' && a.manager !== adminMeetingsManager) return false;
       if (assignedFilterFrom && ymd < assignedFilterFrom) return false;
       if (assignedFilterTo && ymd > assignedFilterTo) return false;
-      const isDone = a.source === 'conducted' ? true : Boolean(findEvidence(a, managerName));
+      const isDone = a.source === 'conducted' ? true : Boolean(findEvidence(a, a.manager));
       if (assignedStatusFilter === 'done' && !isDone) return false;
       if (assignedStatusFilter === 'pending' && isDone) return false;
       if (assignedTypeFilter !== 'all') {
@@ -145,7 +153,16 @@ export function ManagerMeetingsPanel({
       }
       return true;
     });
-  }, [rows, assignedFilterFrom, assignedFilterTo, assignedStatusFilter, assignedTypeFilter, findEvidence, managerName]);
+  }, [
+    rows,
+    variant,
+    adminMeetingsManager,
+    assignedFilterFrom,
+    assignedFilterTo,
+    assignedStatusFilter,
+    assignedTypeFilter,
+    findEvidence,
+  ]);
 
   const firstMondayIndex = (() => {
     const d0 = new Date(view.y, view.m, 1).getDay();
@@ -166,6 +183,187 @@ export function ManagerMeetingsPanel({
 
   const selectedDateLabel = useMemo(() => formatDisplayDate(selectedYmd), [selectedYmd]);
 
+  if (variant === 'admin') {
+    const opts = managerOptions?.length ? managerOptions : ['Все'];
+    return (
+      <div className="space-y-4 sm:space-y-6 text-left animate-in fade-in slide-in-from-top-4 duration-500">
+        <section className="bg-white border border-gray-200 rounded-3xl p-4 sm:p-6 shadow-sm overflow-x-auto">
+          <h3 className="text-xs font-black text-gray-800 uppercase tracking-widest flex items-center gap-2 mb-4">
+            <CalendarDays size={16} className="text-blue-500" />
+            Все встречи (все менеджеры)
+          </h3>
+          <div className="bg-gray-50/70 border border-gray-100 rounded-2xl p-3 sm:p-4 mb-4 flex flex-wrap gap-3 items-end">
+            <div className="space-y-1.5 w-full sm:w-auto sm:min-w-[200px]">
+              <label className="text-[10px] font-black text-gray-400 uppercase">Менеджер</label>
+              <select
+                className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm font-semibold"
+                value={adminMeetingsManager}
+                onChange={(e) => setAdminMeetingsManager(e.target.value)}
+              >
+                {opts.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5 w-full sm:w-auto">
+              <label className="text-[10px] font-black text-gray-400 uppercase">Дата с</label>
+              <input
+                type="date"
+                className="w-full sm:w-auto px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm"
+                value={assignedFilterFrom}
+                onChange={(e) => setAssignedFilterFrom(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5 w-full sm:w-auto">
+              <label className="text-[10px] font-black text-gray-400 uppercase">Дата по</label>
+              <input
+                type="date"
+                className="w-full sm:w-auto px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm"
+                value={assignedFilterTo}
+                onChange={(e) => setAssignedFilterTo(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5 w-full sm:w-auto sm:min-w-[200px]">
+              <label className="text-[10px] font-black text-gray-400 uppercase">Тип встречи</label>
+              <select
+                className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm font-semibold"
+                value={assignedTypeFilter}
+                onChange={(e) => setAssignedTypeFilter(e.target.value as 'all' | 'Новая' | 'Повторная')}
+              >
+                <option value="all">Все</option>
+                <option value="Новая">Новая</option>
+                <option value="Повторная">Повторная</option>
+              </select>
+            </div>
+            <div className="space-y-1.5 w-full sm:w-auto sm:min-w-[200px]">
+              <label className="text-[10px] font-black text-gray-400 uppercase">Статус</label>
+              <select
+                className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm font-semibold"
+                value={assignedStatusFilter}
+                onChange={(e) => setAssignedStatusFilter(e.target.value as 'all' | 'done' | 'pending')}
+              >
+                <option value="all">Все</option>
+                <option value="done">Выполнено</option>
+                <option value="pending">Ожидает</option>
+              </select>
+            </div>
+            <div className="w-full sm:w-auto sm:min-w-[250px]">
+              <p className="text-[10px] font-black text-gray-400 uppercase mb-1.5">Быстрый период</p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const today = localYmd(new Date());
+                    setAssignedFilterFrom(today);
+                    setAssignedFilterTo(today);
+                  }}
+                  className="px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider border border-gray-200 text-gray-600 hover:bg-white"
+                >
+                  Сегодня
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const range = buildLastDaysRange(7);
+                    setAssignedFilterFrom(range.from);
+                    setAssignedFilterTo(range.to);
+                  }}
+                  className="px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider border border-gray-200 text-gray-600 hover:bg-white"
+                >
+                  7 дней
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const range = buildLastDaysRange(30);
+                    setAssignedFilterFrom(range.from);
+                    setAssignedFilterTo(range.to);
+                  }}
+                  className="px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider border border-gray-200 text-gray-600 hover:bg-white"
+                >
+                  30 дней
+                </button>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setAdminMeetingsManager('Все');
+                setAssignedFilterFrom('');
+                setAssignedFilterTo('');
+                setAssignedStatusFilter('all');
+                setAssignedTypeFilter('all');
+              }}
+              className="w-full sm:w-auto px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider border border-gray-200 text-gray-600 hover:bg-white"
+            >
+              Сбросить фильтр
+            </button>
+          </div>
+          <table className="w-full text-sm border-collapse min-w-[880px]">
+            <thead>
+              <tr className="text-[10px] font-black text-gray-400 border-b">
+                <th className="text-left py-2">Дата встречи</th>
+                <th className="text-left py-2">Контрагент</th>
+                <th className="text-left py-2">Менеджер</th>
+                <th className="text-center py-2">Тип</th>
+                <th className="text-left py-2">Дата отчёта</th>
+                <th className="text-right py-2">Статус</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {filteredAssignedRows.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-8 text-center text-gray-400">
+                    Нет встреч по выбранным фильтрам
+                  </td>
+                </tr>
+              ) : (
+                filteredAssignedRows.map((a, idx) => {
+                  const ymd = toYmd(a.date);
+                  const evidenceManager = a.manager;
+                  const isDone = a.source === 'conducted' ? true : Boolean(findEvidence(a, evidenceManager));
+                  return (
+                    <tr key={`${a.manager}-${a.source}-${a.bin}-${a.date}-${idx}`} className="text-gray-800">
+                      <td className="py-3 text-gray-600 whitespace-nowrap">{ymd ? formatDisplayDate(ymd) : a.date}</td>
+                      <td className="py-3 font-bold">
+                        {a.entityName}
+                        <div className="text-[10px] font-mono text-gray-400">{a.bin}</div>
+                      </td>
+                      <td className="py-3 text-sm font-bold text-gray-800 whitespace-nowrap">{a.manager}</td>
+                      <td className="py-3 text-center">
+                        <span
+                          className={`px-2 py-1 rounded text-[10px] font-black uppercase ${
+                            a.type === 'Новая' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'
+                          }`}
+                        >
+                          {a.type}
+                        </span>
+                      </td>
+                      <td className="py-3 text-gray-500 text-xs whitespace-nowrap">{formatDisplayDate(a.reportDate)}</td>
+                      <td className="py-3 text-right">
+                        {isDone ? (
+                          <span className="text-emerald-600 font-black text-[10px] bg-emerald-50 px-2 py-1 rounded-full uppercase">
+                            Выполнено
+                          </span>
+                        ) : (
+                          <span className="text-amber-600 font-black text-[10px] bg-amber-50 px-2 py-1 rounded-full uppercase">
+                            Ожидает
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4 sm:space-y-6 text-left">
       {mode !== 'assigned' && (
@@ -184,7 +382,7 @@ export function ManagerMeetingsPanel({
                   ) : (
                     <ul className="space-y-2">
                       {today.map((a, i) => (
-                        <MeetingMiniRow key={`t-${a.bin}-${i}`} a={a} findEvidence={findEvidence} managerName={managerName} />
+                        <MeetingMiniRow key={`t-${a.bin}-${i}`} a={a} findEvidence={findEvidence} />
                       ))}
                     </ul>
                   )}
@@ -196,7 +394,7 @@ export function ManagerMeetingsPanel({
                   ) : (
                     <ul className="space-y-2">
                       {tomorrow.map((a, i) => (
-                        <MeetingMiniRow key={`tm-${a.bin}-${i}`} a={a} findEvidence={findEvidence} managerName={managerName} />
+                        <MeetingMiniRow key={`tm-${a.bin}-${i}`} a={a} findEvidence={findEvidence} />
                       ))}
                     </ul>
                   )}
@@ -280,7 +478,7 @@ export function ManagerMeetingsPanel({
             ) : (
               <ul className="space-y-2">
                 {selectedRows.map((a, i) => (
-                  <MeetingMiniRow key={`sel-${a.bin}-${a.date}-${i}`} a={a} findEvidence={findEvidence} managerName={managerName} />
+                  <MeetingMiniRow key={`sel-${a.bin}-${a.date}-${i}`} a={a} findEvidence={findEvidence} />
                 ))}
               </ul>
             )}
@@ -408,9 +606,9 @@ export function ManagerMeetingsPanel({
             ) : (
               filteredAssignedRows.map((a, idx) => {
                 const ymd = toYmd(a.date);
-                const isDone = a.source === 'conducted' ? true : Boolean(findEvidence(a, managerName));
+                const isDone = a.source === 'conducted' ? true : Boolean(findEvidence(a, a.manager));
                 return (
-                  <tr key={`${a.bin}-${a.date}-${idx}`} className="text-gray-800">
+                  <tr key={`${a.manager}-${a.source}-${a.bin}-${a.date}-${idx}`} className="text-gray-800">
                     <td className="py-3 text-gray-600 whitespace-nowrap">
                       {ymd ? formatDisplayDate(ymd) : a.date}
                     </td>
@@ -450,13 +648,11 @@ export function ManagerMeetingsPanel({
 function MeetingMiniRow({
   a,
   findEvidence,
-  managerName,
 }: {
   a: UiMeetingWithReport;
   findEvidence: (planned: UiAssigned, manager: string) => { evidence: UiConducted; reportDate: string } | null;
-  managerName: string;
 }) {
-  const ev = a.source === 'conducted' ? true : Boolean(findEvidence(a, managerName));
+  const ev = a.source === 'conducted' ? true : Boolean(findEvidence(a, a.manager));
   return (
     <li className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 p-2.5 sm:p-3 rounded-2xl bg-amber-50/80 border border-amber-100/80 text-xs sm:text-sm">
       <div>

@@ -112,7 +112,7 @@ const App = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [booting, setBooting] = useState(true);
-  const [adminSubView, setAdminSubView] = useState<'dashboard' | 'kpi' | 'staff'>('dashboard');
+  const [adminSubView, setAdminSubView] = useState<'dashboard' | 'kpi' | 'staff' | 'meetings'>('dashboard');
   const [kpiFilterManager, setKpiFilterManager] = useState('Все');
   const [kpiFilterDateFrom, setKpiFilterDateFrom] = useState('');
   const [kpiFilterDateTo, setKpiFilterDateTo] = useState('');
@@ -564,6 +564,16 @@ const App = () => {
                 <UserCog size={14} />
                 Сотрудники
               </button>
+              <button
+                type="button"
+                onClick={() => setAdminSubView('meetings')}
+                className={`flex-1 min-w-[110px] sm:min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all ${
+                  adminSubView === 'meetings' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
+                }`}
+              >
+                <List size={14} />
+                Все встречи
+              </button>
             </div>
             {adminSubView === 'dashboard' && (
               <AdminDashboard
@@ -591,6 +601,14 @@ const App = () => {
               />
             )}
             {adminSubView === 'staff' && <StaffManager />}
+            {adminSubView === 'meetings' && (
+              <ManagerMeetingsPanel
+                variant="admin"
+                allReports={allReports}
+                findEvidence={findSpecificConductedEvidence}
+                managerOptions={managerFilterOptions}
+              />
+            )}
           </div>
         )}
 
@@ -654,7 +672,6 @@ const App = () => {
               <ManagerMeetingsPanel
                 allReports={allReports}
                 findEvidence={findSpecificConductedEvidence}
-                managerName={managerName}
                 mode={managerOrdersSection === 'calendar' ? 'calendar' : 'assigned'}
               />
             )}
