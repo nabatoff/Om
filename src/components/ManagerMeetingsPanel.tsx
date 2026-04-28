@@ -149,6 +149,7 @@ export function ManagerMeetingsPanel({
   const [assignedStatusFilter, setAssignedStatusFilter] = useState<'all' | 'done' | 'pending'>('all');
   const [assignedTypeFilter, setAssignedTypeFilter] = useState<'all' | 'Новая' | 'Повторная'>('all');
   const [adminMeetingsManager, setAdminMeetingsManager] = useState('Все');
+  const [resultPreviewText, setResultPreviewText] = useState<string | null>(null);
 
   const rows: UiMeetingWithReport[] = useMemo(() => {
     const out: UiMeetingWithReport[] = [];
@@ -414,7 +415,14 @@ export function ManagerMeetingsPanel({
                       <td className="py-3 text-gray-600 text-xs whitespace-nowrap">{conductedLabel}</td>
                       <td className="py-3 text-gray-700 text-xs max-w-[220px] align-top">
                         {resultText ? (
-                          <span className="line-clamp-4 whitespace-pre-wrap break-words">{resultText}</span>
+                          <button
+                            type="button"
+                            onClick={() => setResultPreviewText(resultText)}
+                            className="block w-full text-left text-gray-700 hover:text-gray-900 underline-offset-2 hover:underline truncate"
+                            title={resultText}
+                          >
+                            {resultText}
+                          </button>
                         ) : (
                           <span className="text-gray-400">—</span>
                         )}
@@ -437,6 +445,31 @@ export function ManagerMeetingsPanel({
             </tbody>
           </table>
         </section>
+        {resultPreviewText && (
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[600] flex items-center justify-center p-4"
+            onClick={() => setResultPreviewText(null)}
+          >
+            <div
+              className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-gray-100 p-6 sm:p-8 text-left"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="text-xs font-black text-gray-700 uppercase tracking-widest">Итог встречи</h4>
+                <button
+                  type="button"
+                  onClick={() => setResultPreviewText(null)}
+                  className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase border border-gray-200 text-gray-600 hover:bg-gray-50"
+                >
+                  Закрыть
+                </button>
+              </div>
+              <div className="max-h-[60vh] overflow-y-auto text-sm text-gray-800 whitespace-pre-wrap break-words leading-relaxed">
+                {resultPreviewText}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -704,7 +737,14 @@ export function ManagerMeetingsPanel({
                     <td className="py-3 text-gray-600 text-xs whitespace-nowrap">{conductedLabel}</td>
                     <td className="py-3 text-gray-700 text-xs max-w-[200px] align-top">
                       {resultText ? (
-                        <span className="line-clamp-4 whitespace-pre-wrap break-words">{resultText}</span>
+                        <button
+                          type="button"
+                          onClick={() => setResultPreviewText(resultText)}
+                          className="block w-full text-left text-gray-700 hover:text-gray-900 underline-offset-2 hover:underline truncate"
+                          title={resultText}
+                        >
+                          {resultText}
+                        </button>
                       ) : (
                         <span className="text-gray-400">—</span>
                       )}
@@ -723,6 +763,31 @@ export function ManagerMeetingsPanel({
           </tbody>
           </table>
         </section>
+      )}
+      {resultPreviewText && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[600] flex items-center justify-center p-4"
+          onClick={() => setResultPreviewText(null)}
+        >
+          <div
+            className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-gray-100 p-6 sm:p-8 text-left"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="text-xs font-black text-gray-700 uppercase tracking-widest">Итог встречи</h4>
+              <button
+                type="button"
+                onClick={() => setResultPreviewText(null)}
+                className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase border border-gray-200 text-gray-600 hover:bg-gray-50"
+              >
+                Закрыть
+              </button>
+            </div>
+            <div className="max-h-[60vh] overflow-y-auto text-sm text-gray-800 whitespace-pre-wrap break-words leading-relaxed">
+              {resultPreviewText}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

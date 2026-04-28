@@ -388,13 +388,30 @@ const App = () => {
     });
   }, [isAdmin, allReports, ordersFilterManager, ordersFilterDateFrom, ordersFilterDateTo]);
 
-  const allFilteredOrders = useMemo(() => {
+  const allOrdersByDateAndManager = useMemo(() => {
     const orders: (UiOrder & { manager: string; date: string })[] = [];
     reportsForOrders.forEach((report) => {
       report.confirmedOrders.forEach((order) => {
         orders.push({ ...order, manager: report.manager, date: report.date });
       });
     });
+    return orders;
+  }, [reportsForOrders]);
+
+  const ordersCounterpartyOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const o of allOrdersByDateAndManager) {
+      const key = `${o.entityName.trim().toLowerCase()}|${o.bin.trim()}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(`${o.entityName} (${o.bin})`);
+    }
+    return out.sort((a, b) => a.localeCompare(b, 'ru'));
+  }, [allOrdersByDateAndManager]);
+
+  const allFilteredOrders = useMemo(() => {
+    const orders = allOrdersByDateAndManager;
     const qRaw = ordersFilterCounterparty.trim().toLowerCase();
     if (!qRaw) return orders;
     const qDigits = qRaw.replace(/\D/g, '');
@@ -403,7 +420,7 @@ const App = () => {
       const byBin = qDigits.length > 0 && o.bin.replace(/\D/g, '').includes(qDigits);
       return byName || byBin;
     });
-  }, [reportsForOrders, ordersFilterCounterparty]);
+  }, [allOrdersByDateAndManager, ordersFilterCounterparty]);
 
   const clientHistoryAggregated = useMemo(
     () =>
@@ -696,6 +713,7 @@ const App = () => {
                 setFilterDateTo={setOrdersFilterDateTo}
                 filterCounterparty={ordersFilterCounterparty}
                 setFilterCounterparty={setOrdersFilterCounterparty}
+                counterpartyOptions={ordersCounterpartyOptions}
                 managerOptions={managerFilterOptions}
                 openOrderDetails={(entity, bin, amounts) => setOrderDetailModal({ isOpen: true, entity, bin, amounts })}
               />
@@ -1964,6 +1982,7 @@ const OrdersHistoryDashboard = ({
   setFilterDateTo,
   filterCounterparty,
   setFilterCounterparty,
+  counterpartyOptions,
   managerOptions,
   openOrderDetails,
 }: {
@@ -1977,6 +1996,7 @@ const OrdersHistoryDashboard = ({
   setFilterDateTo: SetState<string>;
   filterCounterparty: string;
   setFilterCounterparty: SetState<string>;
+  counterpartyOptions: string[];
   managerOptions: string[];
   openOrderDetails: (entity: string, bin: string, amounts: number[]) => void;
 }) => {
@@ -2042,12 +2062,18 @@ const OrdersHistoryDashboard = ({
         <div className="w-full sm:flex-1 sm:min-w-[220px] space-y-1.5 text-left">
           <label className="text-[10px] font-black text-gray-400 uppercase">Контрагент (название или БИН)</label>
           <input
+            list="orders-counterparty-options"
             type="text"
             className="w-full px-4 py-2.5 bg-gray-50 border rounded-xl text-sm"
             value={filterCounterparty}
             onChange={(e) => setFilterCounterparty(e.target.value)}
             placeholder="Например: Прогресс или 123456..."
           />
+          <datalist id="orders-counterparty-options">
+            {counterpartyOptions.map((item) => (
+              <option key={item} value={item} />
+            ))}
+          </datalist>
         </div>
         <button
           type="button"
