@@ -3,7 +3,12 @@ import { Calendar, CalendarDays, ChevronLeft, ChevronRight, Clock } from 'lucide
 import type { FullReport, UiAssigned, UiConducted } from '../lib/crmApi';
 
 export type UiAssignedWithReport = UiAssigned & { reportDate: string };
-type UiMeetingWithReport = UiAssignedWithReport & { source: 'assigned' | 'conducted'; manager: string };
+type UiMeetingWithReport = UiAssignedWithReport & {
+  source: 'assigned' | 'conducted';
+  manager: string;
+  /** Только для source=conducted — текст итога из отчёта. */
+  result?: string;
+};
 
 function formatDisplayDate(raw: string): string {
   const ymd = toYmd(raw);
@@ -109,6 +114,15 @@ function meetingConductedLabel(
   return { done: true, conductedLabel: y ? formatDisplayDate(y) : raw.trim() || '—' };
 }
 
+function meetingResultText(
+  a: UiMeetingWithReport,
+  findEvidence: (planned: UiAssigned, manager: string) => { evidence: UiConducted; reportDate: string } | null,
+): string {
+  if (a.source === 'conducted') return (a.result ?? '').trim();
+  const pack = findEvidence(a, a.manager);
+  return (pack?.evidence.result ?? '').trim();
+}
+
 export function ManagerMeetingsPanel({
   allReports,
   findEvidence,
@@ -152,6 +166,7 @@ export function ManagerMeetingsPanel({
           reportDate: r.date,
           source: 'conducted',
           manager: mgr,
+          result: c.result || '',
         });
       }
     }
@@ -356,7 +371,7 @@ export function ManagerMeetingsPanel({
               Сбросить фильтр
             </button>
           </div>
-          <table className="w-full text-sm border-collapse min-w-[880px]">
+          <table className="w-full text-sm border-collapse min-w-[960px]">
             <thead>
               <tr className="text-[10px] font-black text-gray-400 border-b">
                 <th className="text-left py-2">Дата назначения встречи</th>
@@ -364,19 +379,21 @@ export function ManagerMeetingsPanel({
                 <th className="text-left py-2">Менеджер</th>
                 <th className="text-center py-2">Тип</th>
                 <th className="text-left py-2">Дата проведения</th>
+                <th className="text-left py-2 min-w-[140px]">Итог</th>
                 <th className="text-right py-2">Статус</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filteredAssignedRows.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-gray-400">
+                  <td colSpan={7} className="py-8 text-center text-gray-400">
                     Нет встреч по выбранным фильтрам
                   </td>
                 </tr>
               ) : (
                 filteredAssignedRows.map((a, idx) => {
                   const { done: isDone, conductedLabel } = meetingConductedLabel(a, findEvidence);
+                  const resultText = meetingResultText(a, findEvidence);
                   return (
                     <tr key={`${a.manager}-${a.source}-${a.bin}-${a.date}-${idx}`} className="text-gray-800">
                       <td className="py-3 text-gray-600 whitespace-nowrap">{assignedPlanColumnLabel(a, allReports)}</td>
@@ -395,6 +412,13 @@ export function ManagerMeetingsPanel({
                         </span>
                       </td>
                       <td className="py-3 text-gray-600 text-xs whitespace-nowrap">{conductedLabel}</td>
+                      <td className="py-3 text-gray-700 text-xs max-w-[220px] align-top">
+                        {resultText ? (
+                          <span className="line-clamp-4 whitespace-pre-wrap break-words">{resultText}</span>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
+                      </td>
                       <td className="py-3 text-right">
                         {isDone ? (
                           <span className="text-emerald-600 font-black text-[10px] bg-emerald-50 px-2 py-1 rounded-full uppercase">
@@ -639,26 +663,28 @@ export function ManagerMeetingsPanel({
               Сбросить фильтр
             </button>
           </div>
-          <table className="w-full text-sm border-collapse min-w-[700px]">
+          <table className="w-full text-sm border-collapse min-w-[820px]">
           <thead>
             <tr className="text-[10px] font-black text-gray-400 border-b">
               <th className="text-left py-2">Дата назначения встречи</th>
               <th className="text-left py-2">Контрагент</th>
               <th className="text-center py-2">Тип</th>
               <th className="text-left py-2">Дата проведения</th>
+              <th className="text-left py-2 min-w-[120px]">Итог</th>
               <th className="text-right py-2">Статус</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {filteredAssignedRows.length === 0 ? (
               <tr>
-                <td colSpan={5} className="py-8 text-center text-gray-400">
+                <td colSpan={6} className="py-8 text-center text-gray-400">
                   Нет встреч по выбранным фильтрам
                 </td>
               </tr>
             ) : (
               filteredAssignedRows.map((a, idx) => {
                 const { done: isDone, conductedLabel } = meetingConductedLabel(a, findEvidence);
+                const resultText = meetingResultText(a, findEvidence);
                 return (
                   <tr key={`${a.manager}-${a.source}-${a.bin}-${a.date}-${idx}`} className="text-gray-800">
                     <td className="py-3 text-gray-600 whitespace-nowrap">{assignedPlanColumnLabel(a, allReports)}</td>
@@ -676,6 +702,13 @@ export function ManagerMeetingsPanel({
                       </span>
                     </td>
                     <td className="py-3 text-gray-600 text-xs whitespace-nowrap">{conductedLabel}</td>
+                    <td className="py-3 text-gray-700 text-xs max-w-[200px] align-top">
+                      {resultText ? (
+                        <span className="line-clamp-4 whitespace-pre-wrap break-words">{resultText}</span>
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
+                    </td>
                     <td className="py-3 text-right">
                       {isDone ? (
                         <span className="text-emerald-600 font-black text-[10px] bg-emerald-50 px-2 py-1 rounded-full uppercase">Выполнено</span>
@@ -703,15 +736,23 @@ function MeetingMiniRow({
   findEvidence: (planned: UiAssigned, manager: string) => { evidence: UiConducted; reportDate: string } | null;
 }) {
   const ev = a.source === 'conducted' ? true : Boolean(findEvidence(a, a.manager));
+  const resultSnippet = meetingResultText(a, findEvidence);
   return (
-    <li className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 p-2.5 sm:p-3 rounded-2xl bg-amber-50/80 border border-amber-100/80 text-xs sm:text-sm">
-      <div>
-        <div className="font-bold text-gray-900">{a.entityName}</div>
-        <div className="text-[10px] text-gray-500 font-mono">{a.bin}</div>
+    <li className="flex flex-col gap-1.5 p-2.5 sm:p-3 rounded-2xl bg-amber-50/80 border border-amber-100/80 text-xs sm:text-sm">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1">
+        <div className="min-w-0">
+          <div className="font-bold text-gray-900">{a.entityName}</div>
+          <div className="text-[10px] text-gray-500 font-mono">{a.bin}</div>
+        </div>
+        <div className="text-xs font-bold shrink-0">
+          {ev ? <span className="text-emerald-700">Выполнено</span> : <span className="text-amber-700">Ожидает</span>}
+        </div>
       </div>
-      <div className="text-xs font-bold">
-        {ev ? <span className="text-emerald-700">Выполнено</span> : <span className="text-amber-700">Ожидает</span>}
-      </div>
+      {resultSnippet ? (
+        <p className="text-[10px] text-gray-700 leading-snug line-clamp-3 whitespace-pre-wrap break-words border-t border-amber-100/80 pt-1.5">
+          {resultSnippet}
+        </p>
+      ) : null}
     </li>
   );
 }

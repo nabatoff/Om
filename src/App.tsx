@@ -1335,7 +1335,7 @@ const MeetingTable = ({
                 <th className="pb-4">Контрагент / БИН</th>
                 <th className="pb-4 w-40 px-4 text-center">Дата</th>
                 <th className="pb-4 w-36 px-4 text-center">Тип</th>
-                {type === 'conducted' && <th className="pb-4 w-32 text-center">Итог</th>}
+                {type === 'conducted' && <th className="pb-4 min-w-[220px] max-w-[320px] px-2 text-left">Итог</th>}
                 <th className="pb-4 w-36 text-center">Сохранить</th>
                 <th className="pb-4 w-10" />
               </tr>
@@ -1373,13 +1373,24 @@ const MeetingTable = ({
                     </select>
                   </td>
                   {type === 'conducted' && (
-                    <td className="py-4 px-4 text-center">
+                    <td className="py-4 px-2 align-top min-w-[220px] max-w-[320px]">
                       <button
                         type="button"
                         onClick={() => onResultClick?.(idx)}
-                        className={`text-[9px] h-[46px] w-full rounded-xl font-black ${(row as UiConducted).result ? 'bg-emerald-500 text-white shadow-lg' : 'bg-gray-100 text-gray-400'}`}
+                        title={(row as UiConducted).result?.trim() ? 'Редактировать итог' : 'Ввести итог'}
+                        className={`w-full min-h-[46px] text-left rounded-2xl border px-3 py-2.5 transition-all ${
+                          (row as UiConducted).result?.trim()
+                            ? 'border-emerald-200 bg-emerald-50/60 hover:border-emerald-300'
+                            : 'border-dashed border-gray-200 bg-gray-50/80 hover:border-gray-300'
+                        }`}
                       >
-                        {(row as UiConducted).result ? 'OK' : 'ВВЕСТИ'}
+                        {(row as UiConducted).result?.trim() ? (
+                          <span className="text-[11px] font-medium text-gray-800 whitespace-pre-wrap break-words line-clamp-6">
+                            {(row as UiConducted).result}
+                          </span>
+                        ) : (
+                          <span className="text-[9px] font-black text-gray-400 uppercase tracking-wide">Нажмите, чтобы ввести итог</span>
+                        )}
                       </button>
                     </td>
                   )}
@@ -1683,6 +1694,30 @@ const AdminDashboard = ({
   );
 };
 
+function normalizeKpiMeetingType(value: string): string {
+  return value.trim().toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ');
+}
+
+function isNewMeetingType(type: string): boolean {
+  return normalizeKpiMeetingType(type).startsWith('нов');
+}
+
+function isRepeatMeetingType(type: string): boolean {
+  return normalizeKpiMeetingType(type).startsWith('повтор');
+}
+
+function countAssignedNewMeetings(report: FullReport): number {
+  return report.assignedMeetings.filter((m) => isNewMeetingType(m.type)).length;
+}
+
+function countConductedNewMeetings(report: FullReport): number {
+  return report.conductedMeetings.filter((m) => isNewMeetingType(m.type)).length;
+}
+
+function countConductedRepeatMeetings(report: FullReport): number {
+  return report.conductedMeetings.filter((m) => isRepeatMeetingType(m.type)).length;
+}
+
 const KpiDashboard = ({
   reports,
   filterManager,
@@ -1721,6 +1756,18 @@ const KpiDashboard = ({
     return Array.from(byKey.values()).sort((a, b) => b.date.localeCompare(a.date) || a.manager.localeCompare(b.manager, 'ru'));
   }, [reports]);
 
+  const meetingTotals = useMemo(() => {
+    let assignedNew = 0;
+    let conductedNew = 0;
+    let conductedRepeat = 0;
+    for (const r of kpiRows) {
+      assignedNew += countAssignedNewMeetings(r);
+      conductedNew += countConductedNewMeetings(r);
+      conductedRepeat += countConductedRepeatMeetings(r);
+    }
+    return { assignedNew, conductedNew, conductedRepeat };
+  }, [kpiRows]);
+
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-500">
       <AdminFilters
@@ -1738,10 +1785,13 @@ const KpiDashboard = ({
         }}
       />
       <section className="bg-white border border-gray-200 rounded-3xl shadow-sm overflow-x-auto text-left">
-        <div className="px-6 pt-5 pb-2">
+        <div className="px-6 pt-5 pb-2 space-y-1">
           <h3 className="text-xs font-black text-gray-700 uppercase tracking-widest">Отдельный отчёт по KPI менеджеров</h3>
+          <p className="text-[10px] text-gray-500 leading-relaxed">
+            Столбцы встреч считаются автоматически из назначенных и проведённых встреч отчёта (тип «Новая» / «Повторная» по полю типа встречи).
+          </p>
         </div>
-        <table className="w-full text-left border-collapse min-w-[900px]">
+        <table className="w-full text-left border-collapse min-w-[1180px]">
           <thead>
             <tr className="bg-gray-50/50 text-[10px] font-black text-gray-400 uppercase border-y border-gray-100">
               <th className="py-4 px-6">Дата отчета</th>
@@ -1750,6 +1800,9 @@ const KpiDashboard = ({
               <th className="py-4 px-4 text-center">Взято новых</th>
               <th className="py-4 px-4 text-center">Звонки</th>
               <th className="py-4 px-4 text-center">Квалификация</th>
+              <th className="py-4 px-4 text-center">Назначено новых</th>
+              <th className="py-4 px-4 text-center">Проведено новых</th>
+              <th className="py-4 px-4 text-center">Проведено повторных</th>
               <th className="py-4 px-4 text-right">Действия</th>
             </tr>
           </thead>
@@ -1762,6 +1815,9 @@ const KpiDashboard = ({
                 <td className="py-3.5 px-4 text-center font-black text-emerald-700">{report.stats.newInWork}</td>
                 <td className="py-3.5 px-4 text-center font-black text-indigo-700">{report.stats.callsTotal}</td>
                 <td className="py-3.5 px-4 text-center font-black text-amber-700">{report.stats.validatedTotal}</td>
+                <td className="py-3.5 px-4 text-center font-black text-slate-800">{countAssignedNewMeetings(report)}</td>
+                <td className="py-3.5 px-4 text-center font-black text-teal-700">{countConductedNewMeetings(report)}</td>
+                <td className="py-3.5 px-4 text-center font-black text-violet-700">{countConductedRepeatMeetings(report)}</td>
                 <td className="py-3.5 px-4 text-right">
                   <button
                     type="button"
@@ -1774,6 +1830,21 @@ const KpiDashboard = ({
                 </td>
               </tr>
             ))}
+            {kpiRows.length > 0 && (
+              <tr className="bg-gray-50/80 font-black text-[11px] text-gray-700">
+                <td className="py-3 px-6" colSpan={2}>
+                  Итого по таблице
+                </td>
+                <td className="py-3 px-4 text-center text-gray-500">—</td>
+                <td className="py-3 px-4 text-center text-gray-500">—</td>
+                <td className="py-3 px-4 text-center text-gray-500">—</td>
+                <td className="py-3 px-4 text-center text-gray-500">—</td>
+                <td className="py-3 px-4 text-center text-slate-900">{meetingTotals.assignedNew}</td>
+                <td className="py-3 px-4 text-center text-teal-900">{meetingTotals.conductedNew}</td>
+                <td className="py-3 px-4 text-center text-violet-900">{meetingTotals.conductedRepeat}</td>
+                <td className="py-3 px-4" />
+              </tr>
+            )}
           </tbody>
         </table>
       </section>
