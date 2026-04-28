@@ -1901,12 +1901,40 @@ function isRepeatMeetingType(type: string): boolean {
   return normalizeKpiMeetingType(type).startsWith('повтор');
 }
 
+function normalizeKpiText(value: string): string {
+  return value.trim().toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ');
+}
+
+function normalizeKpiBin(value: string): string {
+  return value.replace(/\D/g, '');
+}
+
 function countAssignedNewMeetings(report: FullReport): number {
   return report.assignedMeetings.filter((m) => isNewMeetingType(m.type)).length;
 }
 
-function countConductedNewMeetings(report: FullReport): number {
-  return report.conductedMeetings.filter((m) => isNewMeetingType(m.type)).length;
+function countConductedNewMeetings(report: FullReport, allReports: FullReport[]): number {
+  const managerNorm = normalizeKpiText(report.manager);
+  const laterReports = allReports.filter((r) => normalizeKpiText(r.manager) === managerNorm && r.date > report.date);
+  if (laterReports.length === 0) return 0;
+  let count = 0;
+  for (const assigned of report.assignedMeetings) {
+    if (!isNewMeetingType(assigned.type)) continue;
+    const plannedName = normalizeKpiText(assigned.entityName);
+    const plannedBin = normalizeKpiBin(assigned.bin);
+    const plannedType = normalizeKpiMeetingType(assigned.type);
+    const hasLaterEvidence = laterReports.some((lr) =>
+      lr.conductedMeetings.some(
+        (cm) =>
+          normalizeKpiBin(cm.bin) === plannedBin &&
+          normalizeKpiText(cm.entityName) === plannedName &&
+          normalizeKpiMeetingType(cm.type) === plannedType &&
+          cm.date >= assigned.date,
+      ),
+    );
+    if (hasLaterEvidence) count += 1;
+  }
+  return count;
 }
 
 function countConductedRepeatMeetings(report: FullReport): number {
@@ -1961,11 +1989,11 @@ const KpiDashboard = ({
     for (const r of kpiRows) {
       conductedFact += r.conductedMeetings.length;
       assignedNew += countAssignedNewMeetings(r);
-      conductedNew += countConductedNewMeetings(r);
+      conductedNew += countConductedNewMeetings(r, allReports);
       conductedRepeat += countConductedRepeatMeetings(r);
     }
     return { conductedFact, assignedNew, conductedNew, conductedRepeat };
-  }, [kpiRows]);
+  }, [kpiRows, allReports]);
 
   const monthlyManagerSummary = useMemo(() => {
     const monthPrefix = new Date().toISOString().slice(0, 7);
@@ -1999,7 +2027,7 @@ const KpiDashboard = ({
       callsTotal += r.stats.callsTotal;
       validatedTotal += r.stats.validatedTotal;
       assignedNew += countAssignedNewMeetings(r);
-      conductedNew += countConductedNewMeetings(r);
+      conductedNew += countConductedNewMeetings(r, allReports);
       conductedRepeat += countConductedRepeatMeetings(r);
     }
     return {
@@ -2105,7 +2133,7 @@ const KpiDashboard = ({
                 <td className="py-3.5 px-4 text-center font-black text-amber-700">{report.stats.validatedTotal}</td>
                 <td className="py-3.5 px-4 text-center font-black text-sky-700">{report.conductedMeetings.length}</td>
                 <td className="py-3.5 px-4 text-center font-black text-slate-800">{countAssignedNewMeetings(report)}</td>
-                <td className="py-3.5 px-4 text-center font-black text-teal-700">{countConductedNewMeetings(report)}</td>
+                <td className="py-3.5 px-4 text-center font-black text-teal-700">{countConductedNewMeetings(report, allReports)}</td>
                 <td className="py-3.5 px-4 text-center font-black text-violet-700">{countConductedRepeatMeetings(report)}</td>
                 <td className="py-3.5 px-4 text-right">
                   <button
