@@ -341,7 +341,12 @@ const App = () => {
           alert('Контрагент с таким БИН уже существует');
           return;
         }
-        await updateClientRow(editingClientBin, { name, bin });
+        const updatedClient = await updateClientRow(editingClientBin, { name, bin });
+        setClients((prev) =>
+          prev
+            .map((c) => (c.bin === editingClientBin ? updatedClient : c))
+            .sort((a, b) => a.name.localeCompare(b.name, 'ru')),
+        );
         setClientHistoryFor((prev) =>
           prev?.bin === editingClientBin || prev?.bin === bin ? { name, bin } : prev,
         );
@@ -353,6 +358,10 @@ const App = () => {
           return;
         }
         const newUser = await createClientRow({ name, bin });
+        setClients((prev) => {
+          if (prev.some((c) => c.bin === newUser.bin)) return prev;
+          return [...prev, newUser].sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+        });
         onClientCreatedCallback?.(newUser);
         setOnClientCreatedCallback(null);
       }
