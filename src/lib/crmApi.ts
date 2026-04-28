@@ -7,8 +7,8 @@ export type FormStats = {
   callsTotal: number;
   validatedTotal: number;
 };
-export type UiAssigned = { entityName: string; bin: string; date: string; type: string };
-export type UiConducted = { entityName: string; bin: string; date: string; type: string; result: string };
+export type UiAssigned = { id?: string; entityName: string; bin: string; date: string; type: string };
+export type UiConducted = { id?: string; entityName: string; bin: string; date: string; type: string; result: string };
 export type UiOrder = {
   entityName: string;
   bin: string;
@@ -85,6 +85,7 @@ function mapReport(r: ReportRow): FullReport {
     assignedMeetings: (r.crm_assigned_meetings || [])
       .sort((a, b) => a.sort_order - b.sort_order)
       .map((m) => ({
+        id: m.id,
         entityName: m.entity_name,
         bin: m.bin?.trim() || '',
         date: m.meeting_date,
@@ -93,6 +94,7 @@ function mapReport(r: ReportRow): FullReport {
     conductedMeetings: (r.crm_conducted_meetings || [])
       .sort((a, b) => a.sort_order - b.sort_order)
       .map((m) => ({
+        id: m.id,
         entityName: m.entity_name,
         bin: m.bin?.trim() || '',
         date: m.meeting_date,
@@ -204,6 +206,16 @@ export async function updateClientRow(originalBin: string, next: UiClient): Prom
 
 export async function deleteReportById(reportId: string): Promise<void> {
   const { error } = await getSupabase().from('crm_reports').delete().eq('id', reportId);
+  if (error) throw error;
+}
+
+export async function deleteAssignedMeetingById(meetingId: string): Promise<void> {
+  const { error } = await getSupabase().from('crm_assigned_meetings').delete().eq('id', meetingId);
+  if (error) throw error;
+}
+
+export async function deleteConductedMeetingById(meetingId: string): Promise<void> {
+  const { error } = await getSupabase().from('crm_conducted_meetings').delete().eq('id', meetingId);
   if (error) throw error;
 }
 

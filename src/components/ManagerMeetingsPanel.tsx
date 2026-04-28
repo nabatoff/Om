@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Calendar, CalendarDays, ChevronLeft, ChevronRight, Clock } from 'lucide-react';
+import { Calendar, CalendarDays, ChevronLeft, ChevronRight, Clock, Trash2 } from 'lucide-react';
 import type { FullReport, UiAssigned, UiConducted } from '../lib/crmApi';
 
 export type UiAssignedWithReport = UiAssigned & { reportDate: string };
@@ -141,6 +141,7 @@ export function ManagerMeetingsPanel({
   mode = 'all',
   variant = 'manager',
   managerOptions,
+  onAdminDeleteMeeting,
 }: {
   allReports: FullReport[];
   findEvidence: (planned: UiAssigned, manager: string) => { evidence: UiConducted; reportDate: string } | null;
@@ -149,6 +150,7 @@ export function ManagerMeetingsPanel({
   variant?: 'manager' | 'admin';
   /** Для variant=admin: опции фильтра, первый элемент — «Все». */
   managerOptions?: string[];
+  onAdminDeleteMeeting?: (row: UiMeetingWithReport) => void | Promise<void>;
 }) {
   const todayYmd = localYmd(new Date());
   const [view, setView] = useState(() => {
@@ -177,6 +179,7 @@ export function ManagerMeetingsPanel({
       }
       for (const c of r.conductedMeetings) {
         const row: UiMeetingWithReport = {
+          id: c.id,
           entityName: c.entityName,
           bin: c.bin,
           date: c.date,
@@ -403,12 +406,13 @@ export function ManagerMeetingsPanel({
                 <th className="text-left py-2">Дата проведения</th>
                 <th className="text-left py-2 min-w-[140px]">Итог</th>
                 <th className="text-right py-2">Статус</th>
+                <th className="text-right py-2">Действие</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filteredAssignedRows.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-gray-400">
+                  <td colSpan={8} className="py-8 text-center text-gray-400">
                     Нет встреч по выбранным фильтрам
                   </td>
                 </tr>
@@ -458,6 +462,16 @@ export function ManagerMeetingsPanel({
                             Ожидает
                           </span>
                         )}
+                      </td>
+                      <td className="py-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => onAdminDeleteMeeting?.(a)}
+                          className="inline-flex items-center justify-center p-2 rounded-lg text-red-500 border border-red-100 hover:bg-red-50"
+                          title="Удалить встречу"
+                        >
+                          <Trash2 size={14} />
+                        </button>
                       </td>
                     </tr>
                   );

@@ -34,6 +34,8 @@ import {
   updateClientRow,
   deleteClientByBin,
   deleteReportById,
+  deleteAssignedMeetingById,
+  deleteConductedMeetingById,
   saveReportToDb,
   saveKpiToDb,
 } from './lib/crmApi';
@@ -354,6 +356,25 @@ const App = () => {
     }
   };
 
+  const removeAdminMeeting = async (row: { source: 'assigned' | 'conducted'; id?: string; entityName: string; date: string }) => {
+    if (!isAdmin) return;
+    if (!row.id) {
+      alert('Не удалось удалить: у встречи отсутствует id');
+      return;
+    }
+    const ok = window.confirm(
+      `Удалить встречу "${row.entityName}" от ${formatDisplayDate(row.date)}?\n\nДействие необратимо.`,
+    );
+    if (!ok) return;
+    try {
+      if (row.source === 'assigned') await deleteAssignedMeetingById(row.id);
+      else await deleteConductedMeetingById(row.id);
+      await refresh();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Не удалось удалить встречу');
+    }
+  };
+
   const findSpecificConductedEvidence = (plannedMeeting: UiAssigned, manager: string) => {
     for (const report of allReports) {
       if (report.manager !== manager) continue;
@@ -651,6 +672,7 @@ const App = () => {
                 allReports={allReports}
                 findEvidence={findSpecificConductedEvidence}
                 managerOptions={managerFilterOptions}
+                onAdminDeleteMeeting={removeAdminMeeting}
               />
             )}
           </div>
