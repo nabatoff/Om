@@ -77,10 +77,29 @@ type SaveReportOptions = {
   refreshAfterSave?: boolean;
 };
 
+const LS_CURRENT_VIEW = 'om.currentView';
+const LS_ADMIN_SUBVIEW = 'om.adminSubView';
+const LS_MANAGER_ORDERS_SECTION = 'om.managerOrdersSection';
+
+function getSavedCurrentView(): 'manager' | 'admin' | 'orders' | 'clients' {
+  const raw = localStorage.getItem(LS_CURRENT_VIEW);
+  return raw === 'admin' || raw === 'orders' || raw === 'clients' ? raw : 'manager';
+}
+
+function getSavedAdminSubView(): 'dashboard' | 'kpi' | 'staff' | 'meetings' {
+  const raw = localStorage.getItem(LS_ADMIN_SUBVIEW);
+  return raw === 'kpi' || raw === 'staff' || raw === 'meetings' ? raw : 'dashboard';
+}
+
+function getSavedManagerOrdersSection(): 'calendar' | 'meetings' | 'orders' {
+  const raw = localStorage.getItem(LS_MANAGER_ORDERS_SECTION);
+  return raw === 'meetings' || raw === 'orders' ? raw : 'calendar';
+}
+
 const App = () => {
   const { session, ready: authReady, managerName, signOut, isAdmin } = useAuth();
   const sessionUserId = session?.user?.id;
-  const [currentView, setCurrentView] = useState<'manager' | 'admin' | 'orders' | 'clients'>('manager');
+  const [currentView, setCurrentView] = useState<'manager' | 'admin' | 'orders' | 'clients'>(() => getSavedCurrentView());
   const [clients, setClients] = useState<UiClient[]>([]);
   const [allReports, setAllReports] = useState<FullReport[]>([]);
   const [formStats, setFormStats] = useState<FormStats>({
@@ -104,6 +123,11 @@ const App = () => {
     manager: string;
     reportDate: string;
   }>({ isOpen: false, list: [], title: '', type: '', manager: '', reportDate: '' });
+  const [adminRealizationModal, setAdminRealizationModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    rows: Array<{ manager: string; reportDate: string; entityName: string; bin: string; date: string; type: string }>;
+  }>({ isOpen: false, title: '', rows: [] });
   const [orderDetailModal, setOrderDetailModal] = useState<{
     isOpen: boolean;
     entity: string;
@@ -123,11 +147,13 @@ const App = () => {
   const [ordersFilterDateFrom, setOrdersFilterDateFrom] = useState('');
   const [ordersFilterDateTo, setOrdersFilterDateTo] = useState('');
   const [ordersFilterCounterparty, setOrdersFilterCounterparty] = useState('');
-  const [managerOrdersSection, setManagerOrdersSection] = useState<'calendar' | 'meetings' | 'orders'>('calendar');
+  const [managerOrdersSection, setManagerOrdersSection] = useState<'calendar' | 'meetings' | 'orders'>(() =>
+    getSavedManagerOrdersSection(),
+  );
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [booting, setBooting] = useState(true);
-  const [adminSubView, setAdminSubView] = useState<'dashboard' | 'kpi' | 'staff' | 'meetings'>('dashboard');
+  const [adminSubView, setAdminSubView] = useState<'dashboard' | 'kpi' | 'staff' | 'meetings'>(() => getSavedAdminSubView());
   const [kpiFilterManager, setKpiFilterManager] = useState('Все');
   const [kpiFilterDateFrom, setKpiFilterDateFrom] = useState('');
   const [kpiFilterDateTo, setKpiFilterDateTo] = useState('');
@@ -171,6 +197,18 @@ const App = () => {
       setCurrentView('manager');
     }
   }, [isAdmin, currentView]);
+
+  useEffect(() => {
+    localStorage.setItem(LS_CURRENT_VIEW, currentView);
+  }, [currentView]);
+
+  useEffect(() => {
+    localStorage.setItem(LS_ADMIN_SUBVIEW, adminSubView);
+  }, [adminSubView]);
+
+  useEffect(() => {
+    localStorage.setItem(LS_MANAGER_ORDERS_SECTION, managerOrdersSection);
+  }, [managerOrdersSection]);
 
   useEffect(() => {
     if (currentView !== 'admin') {
@@ -649,6 +687,7 @@ const App = () => {
                 filterDateTo={adminFilterDateTo}
                 setFilterDateTo={setAdminFilterDateTo}
                 managerOptions={managerFilterOptions}
+                onOpenRealization={(title, rows) => setAdminRealizationModal({ isOpen: true, title, rows })}
               />
             )}
             {adminSubView === 'kpi' && (
@@ -871,6 +910,65 @@ const App = () => {
           findEvidence={findSpecificConductedEvidence}
           onClose={() => setDetailsModal({ ...detailsModal, isOpen: false })}
         />
+      )}
+
+      {adminRealizationModal.isOpen && (
+        <div
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[120] flex items-center justify-center p-4"
+          onClick={() => setAdminRealizationModal({ ...adminRealizationModal, isOpen: false })}
+        >
+          <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-5xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="p-8 border-b flex justify-between items-center bg-gray-50/50 text-left">
+              <div>
+                <h3 className="font-black text-gray-900 text-lg uppercase">{adminRealizationModal.title}</h3>
+                <p className="text-[10px] text-gray-400 font-bold uppercase">Доведено до проведения: {adminRealizationModal.rows.length}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAdminRealizationModal({ ...adminRealizationModal, isOpen: false })}
+                className="p-3 hover:bg-gray-100 rounded-full text-gray-400"
+              >
+                <X size={24} />
+              </button>
+            </div>
+            <div className="p-8 overflow-y-auto max-h-[60vh] text-left">
+              <table className="w-full border-collapse text-left">
+                <thead>
+                  <tr className="text-[10px] font-black text-gray-400 border-b">
+                    <th className="pb-4">Менеджер</th>
+                    <th className="pb-4">Дата отчета</th>
+                    <th className="pb-4">Дата встречи</th>
+                    <th className="pb-4">Контрагент / БИН</th>
+                    <th className="pb-4">Тип</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {adminRealizationModal.rows.map((row, idx) => (
+                    <tr key={`${row.manager}-${row.reportDate}-${row.bin}-${idx}`} className="text-sm">
+                      <td className="py-3 font-bold text-gray-800 whitespace-nowrap">{row.manager}</td>
+                      <td className="py-3 text-gray-600 whitespace-nowrap">{formatDisplayDate(row.reportDate)}</td>
+                      <td className="py-3 text-gray-600 whitespace-nowrap">{formatDisplayDate(row.date)}</td>
+                      <td className="py-3">
+                        <div className="font-bold text-gray-800">{row.entityName}</div>
+                        <div className="text-[10px] font-mono text-gray-400">{row.bin}</div>
+                      </td>
+                      <td className="py-3 text-gray-700">{row.type}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="p-8 bg-gray-50 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setAdminRealizationModal({ ...adminRealizationModal, isOpen: false })}
+                className="bg-gray-900 text-white px-12 py-3 rounded-2xl font-black text-xs uppercase"
+              >
+                Закрыть
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {orderDetailModal.isOpen && (
@@ -1540,6 +1638,7 @@ const AdminDashboard = ({
   filterDateTo,
   setFilterDateTo,
   managerOptions,
+  onOpenRealization,
 }: {
   reports: FullReport[];
   filterManager: string;
@@ -1549,6 +1648,10 @@ const AdminDashboard = ({
   filterDateTo: string;
   setFilterDateTo: SetState<string>;
   managerOptions: string[];
+  onOpenRealization: (
+    title: string,
+    rows: Array<{ manager: string; reportDate: string; entityName: string; bin: string; date: string; type: string }>,
+  ) => void;
 }) => {
   const normalizeText = (value: string) => value.trim().toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ');
   const normalizeBin = (value: string) => value.replace(/\D/g, '');
@@ -1598,6 +1701,7 @@ const AdminDashboard = ({
         plan: number;
         fact: number;
         realized: number;
+        realizedRows: Array<{ manager: string; reportDate: string; entityName: string; bin: string; date: string; type: string }>;
         revenue: number;
         managers: Set<string>;
         minDate: string;
@@ -1624,6 +1728,7 @@ const AdminDashboard = ({
         plan: 0,
         fact: 0,
         realized: 0,
+        realizedRows: [],
         revenue: 0,
         managers: new Set([manager]),
         minDate: reportDate,
@@ -1638,7 +1743,17 @@ const AdminDashboard = ({
         const row = ensureRow(assigned.entityName, assigned.bin, report.manager, report.date);
         if (!row) continue;
         row.plan += 1;
-        if (hasConductedEvidence(assigned, report.manager)) row.realized += 1;
+        if (hasConductedEvidence(assigned, report.manager)) {
+          row.realized += 1;
+          row.realizedRows.push({
+            manager: report.manager,
+            reportDate: report.date,
+            entityName: assigned.entityName,
+            bin: assigned.bin,
+            date: assigned.date,
+            type: assigned.type,
+          });
+        }
       }
       for (const conducted of report.conductedMeetings) {
         const row = ensureRow(conducted.entityName, conducted.bin, report.manager, report.date);
@@ -1746,9 +1861,20 @@ const AdminDashboard = ({
                     <DashboardBadge icon={<CalendarCheck size={12} />} count={row.fact} color="blue" />
                   </td>
                   <td className="py-5 px-4 text-center">
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg font-black text-[10px]">
-                      <Target size={12} /> {row.realized} <span className="opacity-40">/ {row.plan}</span>
-                    </span>
+                    {row.realized > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => onOpenRealization(`Реализация · ${row.name}`, row.realizedRows)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg font-black text-[10px] hover:bg-emerald-100"
+                        title="Показать доведённые встречи"
+                      >
+                        <Target size={12} /> {row.realized} <span className="opacity-40">/ {row.plan}</span>
+                      </button>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg font-black text-[10px]">
+                        <Target size={12} /> {row.realized} <span className="opacity-40">/ {row.plan}</span>
+                      </span>
+                    )}
                   </td>
                   <td className="py-5 px-8 text-right font-black text-gray-900 whitespace-nowrap">
                     {new Intl.NumberFormat('ru-RU').format(row.revenue)} ₸
