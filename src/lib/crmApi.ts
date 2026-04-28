@@ -155,6 +155,46 @@ export async function deleteClientByBin(bin: string): Promise<void> {
   if (error) throw error;
 }
 
+/** Админ: обновить наименование и/или БИН; при смене БИН в БД синхронизируются встречи и заказы (RPC). */
+export async function updateClientRow(originalBin: string, next: UiClient): Promise<UiClient> {
+  const oldB = String(originalBin).replace(/\D/g, '');
+  const name = next.name.trim();
+  const newB = next.bin.replace(/\D/g, '');
+  if (oldB.length !== 12 || newB.length !== 12) {
+    throw new Error('БИН должен состоять ровно из 12 цифр');
+  }
+  if (name.length < 2) {
+    throw new Error('Наименование слишком короткое');
+  }
+  if (oldB === newB) {
+    const { data, error } = await getSupabase()
+      .from('crm_clients')
+      .update({ name })
+      .eq('bin', oldB)
+      .select('name, bin')
+      .single();
+    if (error) {
+      if (error.code === '23505') throw new Error('Контрагент с таким БИН уже существует');
+      throw error;
+    }
+    return { name: data.name, bin: String(data.bin).trim() };
+  }
+  const { error: rpcError } = await getSupabase().rpc('update_crm_client', {
+    p_old_bin: oldB,
+    p_name: name,
+    p_new_bin: newB,
+  });
+  if (rpcError) {
+    if (rpcError.code === '23505' || rpcError.message?.includes('уже существует')) {
+      throw new Error('Контрагент с таким БИН уже существует');
+    }
+    throw rpcError;
+  }
+  const { data, error } = await getSupabase().from('crm_clients').select('name, bin').eq('bin', newB).single();
+  if (error) throw error;
+  return { name: data.name, bin: String(data.bin).trim() };
+}
+
 export async function deleteReportById(reportId: string): Promise<void> {
   const { error } = await getSupabase().from('crm_reports').delete().eq('id', reportId);
   if (error) throw error;

@@ -31,6 +31,7 @@ import {
   fetchClientsApi,
   fetchReportsApi,
   createClientRow,
+  updateClientRow,
   deleteClientByBin,
   deleteReportById,
   saveReportToDb,
@@ -98,6 +99,8 @@ const App = () => {
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
   const [newClientData, setNewClientData] = useState({ name: '', bin: '' });
   const [onClientCreatedCallback, setOnClientCreatedCallback] = useState<((c: UiClient) => void) | null>(null);
+  /** Если задан — модалка в режиме редактирования существующего контрагента (ключ = исходный БИН). */
+  const [editingClientBin, setEditingClientBin] = useState<string | null>(null);
   const [clientHistoryFor, setClientHistoryFor] = useState<UiClient | null>(null);
   const [adminFilterManager, setAdminFilterManager] = useState('Все');
   const [adminFilterDateFrom, setAdminFilterDateFrom] = useState('');
@@ -262,28 +265,44 @@ const App = () => {
     [supabaseOk, currentView, managerReportForDate?.id, managerReportDate],
   );
 
-  const createClient = async () => {
+  const saveClientModal = async () => {
     if (newClientData.name.trim().length < 2 || newClientData.bin.length !== 12) {
       alert('Необходимо заполнить наименование и БИН (12 цифр)');
-      return;
-    }
-    const exists = clients.find((c) => c.bin === newClientData.bin);
-    if (exists) {
-      alert('Контрагент с таким БИН уже существует');
       return;
     }
     if (!supabaseOk) {
       alert('Supabase не настроен');
       return;
     }
+    const name = newClientData.name.trim();
+    const bin = newClientData.bin.replace(/\D/g, '');
     try {
-      const newUser = await createClientRow({ name: newClientData.name.trim(), bin: newClientData.bin });
-      setClients((prev) => [...prev, newUser].sort((a, b) => a.name.localeCompare(b.name, 'ru')));
-      onClientCreatedCallback?.(newUser);
+      if (editingClientBin) {
+        if (bin !== editingClientBin && clients.some((c) => c.bin === bin)) {
+          alert('Контрагент с таким БИН уже существует');
+          return;
+        }
+        await updateClientRow(editingClientBin, { name, bin });
+        setClientHistoryFor((prev) =>
+          prev?.bin === editingClientBin || prev?.bin === bin ? { name, bin } : prev,
+        );
+        setOnClientCreatedCallback(null);
+      } else {
+        const exists = clients.find((c) => c.bin === bin);
+        if (exists) {
+          alert('Контрагент с таким БИН уже существует');
+          return;
+        }
+        const newUser = await createClientRow({ name, bin });
+        onClientCreatedCallback?.(newUser);
+        setOnClientCreatedCallback(null);
+      }
+      await refresh();
       setIsClientModalOpen(false);
+      setEditingClientBin(null);
       setNewClientData({ name: '', bin: '' });
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Ошибка создания');
+      alert(e instanceof Error ? e.message : editingClientBin ? 'Ошибка сохранения' : 'Ошибка создания');
     }
   };
 
@@ -501,6 +520,7 @@ const App = () => {
             clients={clients}
             onOpenAddClient={(inputValue, callback) => {
               const isBin = /^\d{12}$/.test(inputValue.trim());
+              setEditingClientBin(null);
               setNewClientData({
                 name: isBin ? '' : inputValue,
                 bin: isBin ? inputValue : '',
@@ -579,7 +599,14 @@ const App = () => {
             clients={clients}
             onSelectClient={(c) => setClientHistoryFor(c)}
             onAddClient={() => {
+              setEditingClientBin(null);
               setNewClientData({ name: '', bin: '' });
+              setOnClientCreatedCallback(null);
+              setIsClientModalOpen(true);
+            }}
+            onEditClient={(c) => {
+              setEditingClientBin(c.bin);
+              setNewClientData({ name: c.name, bin: c.bin });
               setOnClientCreatedCallback(null);
               setIsClientModalOpen(true);
             }}
@@ -652,7 +679,11 @@ const App = () => {
       {isClientModalOpen && (
         <div
           className="fixed inset-0 bg-black/60 backdrop-blur-md z-[500] flex items-center justify-center p-4 animate-in fade-in duration-200"
-          onClick={() => setIsClientModalOpen(false)}
+          onClick={() => {
+            setIsClientModalOpen(false);
+            setEditingClientBin(null);
+            setNewClientData({ name: '', bin: '' });
+          }}
         >
           <div
             className="bg-white rounded-[32px] shadow-2xl w-full max-w-md overflow-hidden"
@@ -661,9 +692,18 @@ const App = () => {
             <div className="p-8 border-b flex justify-between items-center bg-gray-50/50">
               <div className="flex items-center gap-3 text-blue-600">
                 <UserPlus size={24} />
-                <h3 className="font-black text-gray-800 text-sm uppercase tracking-widest">Новый контрагент</h3>
+                <h3 className="font-black text-gray-800 text-sm uppercase tracking-widest">
+                  {editingClientBin ? 'Редактировать контрагента' : 'Новый контрагент'}
+                </h3>
               </div>
-              <button onClick={() => setIsClientModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+              <button
+                onClick={() => {
+                  setIsClientModalOpen(false);
+                  setEditingClientBin(null);
+                  setNewClientData({ name: '', bin: '' });
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
                 <X size={24} />
               </button>
             </div>
@@ -691,17 +731,26 @@ const App = () => {
                     onChange={(e) => setNewClientData({ ...newClientData, bin: e.target.value.replace(/\D/g, '') })}
                   />
                 </div>
+                {editingClientBin && (
+                  <p className="text-[10px] text-gray-500 mt-2">
+                    При смене БИН он обновится во всех назначенных и проведённых встречах и в заказах по этому БИН.
+                  </p>
+                )}
               </div>
             </div>
             <div className="p-8 bg-gray-50 flex gap-4">
               <button
-                onClick={() => setIsClientModalOpen(false)}
+                onClick={() => {
+                  setIsClientModalOpen(false);
+                  setEditingClientBin(null);
+                  setNewClientData({ name: '', bin: '' });
+                }}
                 className="flex-1 px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-widest"
               >
                 Отмена
               </button>
               <button
-                onClick={() => void createClient()}
+                onClick={() => void saveClientModal()}
                 className="flex-1 bg-blue-600 text-white px-6 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg"
               >
                 Сохранить

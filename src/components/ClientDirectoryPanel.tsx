@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
-import { Fingerprint, Search, Trash2, UserPlus, Users } from 'lucide-react';
+import { Fingerprint, Pencil, Search, Trash2, UserPlus, Users } from 'lucide-react';
 import type { UiClient } from '../lib/crmApi';
 
 type Props = {
   clients: UiClient[];
   onSelectClient: (c: UiClient) => void;
   onAddClient: () => void;
+  onEditClient: (c: UiClient) => void;
   onDeleteClient: (c: UiClient) => void;
 };
 
@@ -18,7 +19,7 @@ function normalizeText(value: string): string {
     .trim();
 }
 
-export function ClientDirectoryPanel({ clients, onSelectClient, onAddClient, onDeleteClient }: Props) {
+export function ClientDirectoryPanel({ clients, onSelectClient, onAddClient, onEditClient, onDeleteClient }: Props) {
   const [q, setQ] = useState('');
 
   const filtered = useMemo(() => {
@@ -74,7 +75,7 @@ export function ClientDirectoryPanel({ clients, onSelectClient, onAddClient, onD
               <tr className="bg-gray-50 text-[10px] font-black text-gray-500 uppercase tracking-tighter border-b border-gray-100">
                 <th className="p-4 bg-gray-50">Наименование</th>
                 <th className="p-4 bg-gray-50">БИН</th>
-                <th className="p-4 w-36 text-right bg-gray-50">Действия</th>
+                <th className="p-4 w-44 text-right bg-gray-50">Действия</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -107,8 +108,20 @@ export function ClientDirectoryPanel({ clients, onSelectClient, onAddClient, onD
                       </span>
                     </td>
                     <td className="p-4 text-right">
-                      <div className="inline-flex items-center gap-2">
+                      <div className="inline-flex items-center gap-1">
                         <span className="text-[10px] font-black text-blue-600 uppercase">История</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onEditClient(c);
+                          }}
+                          className="inline-flex items-center justify-center p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 border border-transparent hover:border-blue-100"
+                          aria-label={`Изменить ${c.name}`}
+                          title="Изменить"
+                        >
+                          <Pencil size={14} />
+                        </button>
                         <button
                           type="button"
                           onClick={(e) => {
