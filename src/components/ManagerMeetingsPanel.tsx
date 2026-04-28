@@ -123,6 +123,18 @@ function meetingResultText(
   return (pack?.evidence.result ?? '').trim();
 }
 
+function meetingRowUniqueKey(a: UiMeetingWithReport): string {
+  return [
+    a.source,
+    a.manager.trim().toLowerCase(),
+    a.bin.trim(),
+    a.entityName.trim().toLowerCase(),
+    a.type.trim().toLowerCase(),
+    a.date.trim(),
+    (a.result ?? '').trim().toLowerCase(),
+  ].join('|');
+}
+
 export function ManagerMeetingsPanel({
   allReports,
   findEvidence,
@@ -153,13 +165,18 @@ export function ManagerMeetingsPanel({
 
   const rows: UiMeetingWithReport[] = useMemo(() => {
     const out: UiMeetingWithReport[] = [];
+    const seen = new Set<string>();
     for (const r of allReports) {
       const mgr = r.manager || '';
       for (const a of r.assignedMeetings) {
-        out.push({ ...a, reportDate: r.date, source: 'assigned', manager: mgr });
+        const row: UiMeetingWithReport = { ...a, reportDate: r.date, source: 'assigned', manager: mgr };
+        const key = meetingRowUniqueKey(row);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(row);
       }
       for (const c of r.conductedMeetings) {
-        out.push({
+        const row: UiMeetingWithReport = {
           entityName: c.entityName,
           bin: c.bin,
           date: c.date,
@@ -168,7 +185,11 @@ export function ManagerMeetingsPanel({
           source: 'conducted',
           manager: mgr,
           result: c.result || '',
-        });
+        };
+        const key = meetingRowUniqueKey(row);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(row);
       }
     }
     out.sort((x, y) => {

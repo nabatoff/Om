@@ -48,6 +48,18 @@ import { ManagerMeetingsPanel } from './components/ManagerMeetingsPanel';
 
 const DAILY_CALL_GOAL = 22;
 
+function reportStrength(r: FullReport): number {
+  return (
+    r.stats.processedTotal +
+    r.stats.newInWork +
+    r.stats.callsTotal +
+    r.stats.validatedTotal +
+    r.assignedMeetings.length +
+    r.conductedMeetings.length +
+    r.confirmedOrders.length
+  );
+}
+
 function formatDisplayDate(raw: string): string {
   const t = (raw || '').trim();
   const ymd = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
@@ -180,10 +192,16 @@ const App = () => {
 
   const managerReportForDate = useMemo(() => {
     if (!sessionUserId) return null;
-    return (
-      allReports.find((r) => r.date === managerReportDate && (r.managerId === sessionUserId || (!r.managerId && r.manager === managerName))) ??
-      null
+    const matches = allReports.filter(
+      (r) => r.date === managerReportDate && (r.managerId === sessionUserId || (!r.managerId && r.manager === managerName)),
     );
+    if (matches.length === 0) return null;
+    return matches.reduce((best, cur) => {
+      const bestScore = reportStrength(best);
+      const curScore = reportStrength(cur);
+      if (curScore !== bestScore) return curScore > bestScore ? cur : best;
+      return cur.id > best.id ? cur : best;
+    });
   }, [allReports, managerReportDate, managerName, sessionUserId]);
 
   useEffect(() => {
