@@ -54,6 +54,45 @@ function normalizeMeetingType(value: string): string {
   return value.trim().toLowerCase().replace(/ё/g, 'е');
 }
 
+function meetingDateSortKey(raw: string): string {
+  const t = raw.trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0, 10);
+  const m = t.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+  if (m) {
+    const d = m[1].padStart(2, '0');
+    const mo = m[2].padStart(2, '0');
+    return `${m[3]}-${mo}-${d}`;
+  }
+  const mDash = t.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+  if (mDash) {
+    const d = mDash[1].padStart(2, '0');
+    const mo = mDash[2].padStart(2, '0');
+    return `${mDash[3]}-${mo}-${d}`;
+  }
+  return t;
+}
+
+/** Первая колонка «Все встречи»: назначенная дата; для строки «проведено» — план из assigned того же отчёта (БИН+название+тип), иначе «—». */
+function assignedPlanColumnLabel(a: UiMeetingWithReport, allReports: FullReport[]): string {
+  if (a.source === 'assigned') {
+    const y = toYmd(a.date);
+    return y ? formatDisplayDate(y) : a.date;
+  }
+  const report = allReports.find((r) => r.date === a.reportDate && r.manager === a.manager);
+  if (!report) return '—';
+  const candidates = report.assignedMeetings.filter(
+    (m) =>
+      m.bin.trim() === a.bin.trim() &&
+      m.entityName.trim().toLowerCase() === a.entityName.trim().toLowerCase() &&
+      normalizeMeetingType(m.type) === normalizeMeetingType(a.type),
+  );
+  if (candidates.length === 0) return '—';
+  const sorted = [...candidates].sort((x, y) => meetingDateSortKey(x.date).localeCompare(meetingDateSortKey(y.date)));
+  const d0 = sorted[0]!.date;
+  const y = toYmd(d0);
+  return y ? formatDisplayDate(y) : d0;
+}
+
 /** Плановая дата в первой колонке; фактическая дата проведения — из проведённой встречи или «—». */
 function meetingConductedLabel(
   a: UiMeetingWithReport,
@@ -320,7 +359,7 @@ export function ManagerMeetingsPanel({
           <table className="w-full text-sm border-collapse min-w-[880px]">
             <thead>
               <tr className="text-[10px] font-black text-gray-400 border-b">
-                <th className="text-left py-2">Дата встречи</th>
+                <th className="text-left py-2">Дата назначения встречи</th>
                 <th className="text-left py-2">Контрагент</th>
                 <th className="text-left py-2">Менеджер</th>
                 <th className="text-center py-2">Тип</th>
@@ -337,11 +376,10 @@ export function ManagerMeetingsPanel({
                 </tr>
               ) : (
                 filteredAssignedRows.map((a, idx) => {
-                  const ymd = toYmd(a.date);
                   const { done: isDone, conductedLabel } = meetingConductedLabel(a, findEvidence);
                   return (
                     <tr key={`${a.manager}-${a.source}-${a.bin}-${a.date}-${idx}`} className="text-gray-800">
-                      <td className="py-3 text-gray-600 whitespace-nowrap">{ymd ? formatDisplayDate(ymd) : a.date}</td>
+                      <td className="py-3 text-gray-600 whitespace-nowrap">{assignedPlanColumnLabel(a, allReports)}</td>
                       <td className="py-3 font-bold">
                         {a.entityName}
                         <div className="text-[10px] font-mono text-gray-400">{a.bin}</div>
@@ -604,7 +642,7 @@ export function ManagerMeetingsPanel({
           <table className="w-full text-sm border-collapse min-w-[700px]">
           <thead>
             <tr className="text-[10px] font-black text-gray-400 border-b">
-              <th className="text-left py-2">Дата встречи</th>
+              <th className="text-left py-2">Дата назначения встречи</th>
               <th className="text-left py-2">Контрагент</th>
               <th className="text-center py-2">Тип</th>
               <th className="text-left py-2">Дата проведения</th>
@@ -620,13 +658,10 @@ export function ManagerMeetingsPanel({
               </tr>
             ) : (
               filteredAssignedRows.map((a, idx) => {
-                const ymd = toYmd(a.date);
                 const { done: isDone, conductedLabel } = meetingConductedLabel(a, findEvidence);
                 return (
                   <tr key={`${a.manager}-${a.source}-${a.bin}-${a.date}-${idx}`} className="text-gray-800">
-                    <td className="py-3 text-gray-600 whitespace-nowrap">
-                      {ymd ? formatDisplayDate(ymd) : a.date}
-                    </td>
+                    <td className="py-3 text-gray-600 whitespace-nowrap">{assignedPlanColumnLabel(a, allReports)}</td>
                     <td className="py-3 font-bold">
                       {a.entityName}
                       <div className="text-[10px] font-mono text-gray-400">{a.bin}</div>
