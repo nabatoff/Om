@@ -162,6 +162,7 @@ export function ManagerMeetingsPanel({
   const [assignedFilterTo, setAssignedFilterTo] = useState('');
   const [assignedStatusFilter, setAssignedStatusFilter] = useState<'all' | 'done' | 'pending'>('all');
   const [assignedTypeFilter, setAssignedTypeFilter] = useState<'all' | 'Новая' | 'Повторная'>('all');
+  const [assignedCounterpartyFilter, setAssignedCounterpartyFilter] = useState('');
   const [adminMeetingsManager, setAdminMeetingsManager] = useState('Все');
   const [resultPreviewText, setResultPreviewText] = useState<string | null>(null);
 
@@ -232,10 +233,16 @@ export function ManagerMeetingsPanel({
   }, [rows, selectedYmd]);
 
   const filteredAssignedRows = useMemo(() => {
+    const counterpartyNeedle = assignedCounterpartyFilter.trim().toLowerCase();
     return rows.filter((a) => {
       const ymd = toYmd(a.date);
       if (!ymd) return false;
       if (variant === 'admin' && adminMeetingsManager !== 'Все' && a.manager !== adminMeetingsManager) return false;
+      if (counterpartyNeedle) {
+        const name = a.entityName.trim().toLowerCase();
+        const bin = a.bin.trim().toLowerCase();
+        if (!name.includes(counterpartyNeedle) && !bin.includes(counterpartyNeedle)) return false;
+      }
       if (assignedFilterFrom && ymd < assignedFilterFrom) return false;
       if (assignedFilterTo && ymd > assignedFilterTo) return false;
       const isDone = a.source === 'conducted' ? true : Boolean(findEvidence(a, a.manager));
@@ -256,6 +263,7 @@ export function ManagerMeetingsPanel({
     assignedFilterTo,
     assignedStatusFilter,
     assignedTypeFilter,
+    assignedCounterpartyFilter,
     findEvidence,
   ]);
 
@@ -318,6 +326,16 @@ export function ManagerMeetingsPanel({
                 className="w-full sm:w-auto px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm"
                 value={assignedFilterTo}
                 onChange={(e) => setAssignedFilterTo(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5 w-full sm:w-auto sm:min-w-[200px]">
+              <label className="text-[10px] font-black text-gray-400 uppercase">Контрагент / БИН</label>
+              <input
+                type="text"
+                className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm"
+                value={assignedCounterpartyFilter}
+                onChange={(e) => setAssignedCounterpartyFilter(e.target.value)}
+                placeholder="Поиск как в заказах"
               />
             </div>
             <div className="space-y-1.5 w-full sm:w-auto sm:min-w-[200px]">
@@ -390,6 +408,7 @@ export function ManagerMeetingsPanel({
                 setAssignedFilterTo('');
                 setAssignedStatusFilter('all');
                 setAssignedTypeFilter('all');
+                setAssignedCounterpartyFilter('');
               }}
               className="w-full sm:w-auto px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider border border-gray-200 text-gray-600 hover:bg-white"
             >
@@ -657,6 +676,16 @@ export function ManagerMeetingsPanel({
               />
             </div>
             <div className="space-y-1.5 w-full sm:w-auto sm:min-w-[200px]">
+              <label className="text-[10px] font-black text-gray-400 uppercase">Контрагент / БИН</label>
+              <input
+                type="text"
+                className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm"
+                value={assignedCounterpartyFilter}
+                onChange={(e) => setAssignedCounterpartyFilter(e.target.value)}
+                placeholder="Поиск как в заказах"
+              />
+            </div>
+            <div className="space-y-1.5 w-full sm:w-auto sm:min-w-[200px]">
               <label className="text-[10px] font-black text-gray-400 uppercase">Тип встречи</label>
               <select
                 className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm font-semibold"
@@ -725,6 +754,7 @@ export function ManagerMeetingsPanel({
                 setAssignedFilterTo('');
                 setAssignedStatusFilter('all');
                 setAssignedTypeFilter('all');
+                setAssignedCounterpartyFilter('');
               }}
               className="w-full sm:w-auto px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider border border-gray-200 text-gray-600 hover:bg-white"
             >

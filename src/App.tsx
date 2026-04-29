@@ -1497,11 +1497,21 @@ const MeetingTable = ({
     return normalizeText(name) === normalizeText(targetName);
   };
 
+  const toComparableYmd = (raw: string): string => {
+    const t = String(raw || '').trim();
+    const ymd = t.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (ymd) return `${ymd[1]}-${ymd[2]}-${ymd[3]}`;
+    const dot = t.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+    if (dot) return `${dot[3]}-${dot[2].padStart(2, '0')}-${dot[1].padStart(2, '0')}`;
+    const dash = t.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+    if (dash) return `${dash[3]}-${dash[2].padStart(2, '0')}-${dash[1].padStart(2, '0')}`;
+    return t;
+  };
+
   const conductedMatchesAssigned = (conducted: UiConducted, assigned: UiAssigned): boolean => {
-    if (normalizeBin(conducted.bin) !== normalizeBin(assigned.bin)) return false;
-    if (normalizeText(conducted.entityName) !== normalizeText(assigned.entityName)) return false;
+    if (!isSameCounterparty(conducted.entityName, conducted.bin, assigned.entityName, assigned.bin)) return false;
     if (normalizeKpiMeetingType(conducted.type) !== normalizeKpiMeetingType(assigned.type)) return false;
-    return conducted.date >= assigned.date;
+    return toComparableYmd(conducted.date) >= toComparableYmd(assigned.date);
   };
 
   const hasEvidenceForAssignedInAllSources = (assigned: UiAssigned, skipCurrentConductedIdx?: number): boolean => {
@@ -1523,9 +1533,13 @@ const MeetingTable = ({
     bin: string,
     currentConductedIdx: number,
   ): 'Новая' | 'Повторная' | null => {
+    const assignedPool: UiAssigned[] = [
+      ...allReports.flatMap((report) => report.assignedMeetings),
+      ...currentAssignedMeetings,
+    ];
     let hasPendingNew = false;
     let hasPendingRepeat = false;
-    for (const assigned of currentAssignedMeetings) {
+    for (const assigned of assignedPool) {
       if (!isSameCounterparty(assigned.entityName, assigned.bin, entityName, bin)) continue;
       const stillPending = !hasEvidenceForAssignedInAllSources(assigned, currentConductedIdx);
       if (!stillPending) continue;
