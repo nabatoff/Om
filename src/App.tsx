@@ -1676,21 +1676,22 @@ const MeetingTable = ({
                     />
                   </td>
                   <td className="py-4 px-4">
-                    {type === 'conducted' && (() => {
-                      const forcedType = getForcedConductedTypeForCounterparty(row.entityName, row.bin, idx);
-                      return forcedType ? (
-                        <p className="mb-1.5 text-[9px] font-black uppercase tracking-wide text-blue-600">
-                          Для этого контрагента доступен только тип «{forcedType}»
-                        </p>
-                      ) : null;
-                    })()}
-                    {type === 'assigned' &&
-                      hasAnyNewMeetingForCounterparty(row.entityName, row.bin, idx) &&
-                      isNewMeetingType(row.type) && (
-                        <p className="mb-1.5 text-[9px] font-black uppercase tracking-wide text-amber-600">
-                          Для этого контрагента доступна только «Повторная»
-                        </p>
-                      )}
+                    <div className="relative">
+                      {type === 'conducted' && (() => {
+                        const forcedType = getForcedConductedTypeForCounterparty(row.entityName, row.bin, idx);
+                        return forcedType ? (
+                          <p className="pointer-events-none absolute -top-4 left-1 text-[9px] font-black uppercase tracking-wide text-blue-600 whitespace-nowrap">
+                            Только «{forcedType}»
+                          </p>
+                        ) : null;
+                      })()}
+                      {type === 'assigned' &&
+                        hasAnyNewMeetingForCounterparty(row.entityName, row.bin, idx) &&
+                        isNewMeetingType(row.type) && (
+                          <p className="pointer-events-none absolute -top-4 left-1 text-[9px] font-black uppercase tracking-wide text-amber-600 whitespace-nowrap">
+                            Только «Повторная»
+                          </p>
+                        )}
                     <select
                       className="w-full bg-gray-50/50 p-3 rounded-2xl text-sm font-bold text-center h-[46px] outline-none cursor-pointer"
                       value={row.type}
@@ -1734,6 +1735,7 @@ const MeetingTable = ({
                         )}
                       {type !== 'conducted' && <option>Повторная</option>}
                     </select>
+                    </div>
                   </td>
                   {type === 'conducted' && (
                     <td className="py-4 px-2 align-top min-w-[220px] max-w-[320px]">

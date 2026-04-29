@@ -77,6 +77,28 @@ function meetingDateSortKey(raw: string): string {
   return t;
 }
 
+function matchesSameCounterparty(aName: string, aBin: string, bName: string, bBin: string): boolean {
+  const binA = aBin.replace(/\D/g, '');
+  const binB = bBin.replace(/\D/g, '');
+  if (binA && binB) return binA === binB;
+  return aName.trim().toLowerCase() === bName.trim().toLowerCase();
+}
+
+function hasAssignedMatchForConducted(conducted: UiConducted, manager: string, allReports: FullReport[]): boolean {
+  const conductedType = normalizeMeetingType(conducted.type);
+  const conductedDate = meetingDateSortKey(conducted.date);
+  for (const report of allReports) {
+    if ((report.manager || '') !== manager) continue;
+    for (const assigned of report.assignedMeetings) {
+      if (!matchesSameCounterparty(assigned.entityName, assigned.bin, conducted.entityName, conducted.bin)) continue;
+      if (normalizeMeetingType(assigned.type) !== conductedType) continue;
+      const assignedDate = meetingDateSortKey(assigned.date);
+      if (assignedDate <= conductedDate) return true;
+    }
+  }
+  return false;
+}
+
 /** Первая колонка «Все встречи»: назначенная дата; для строки «проведено» — план из assigned того же отчёта (БИН+название+тип), иначе «—». */
 function assignedPlanColumnLabel(a: UiMeetingWithReport, allReports: FullReport[]): string {
   if (a.source === 'assigned') {
@@ -179,6 +201,9 @@ export function ManagerMeetingsPanel({
         out.push(row);
       }
       for (const c of r.conductedMeetings) {
+        // Не дублируем строку: если для проведенной уже есть соответствующая назначенная,
+        // то показываем одну агрегированную строку через assigned + evidence.
+        if (hasAssignedMatchForConducted(c, mgr, allReports)) continue;
         const row: UiMeetingWithReport = {
           id: c.id,
           entityName: c.entityName,
