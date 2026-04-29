@@ -1349,6 +1349,7 @@ const OrdersBlock = ({
                   min={1}
                   className="w-full bg-white border-none p-3 rounded-2xl text-sm font-black shadow-sm h-[46px]"
                   value={order.orderCount}
+                  onFocus={(e) => e.currentTarget.select()}
                   onChange={(e) => updateOrder(oIdx, 'orderCount', e.target.value)}
                 />
               </div>
