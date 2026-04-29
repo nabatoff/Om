@@ -793,7 +793,7 @@ const App = () => {
               <OrdersHistoryDashboard
                 isAdmin={isAdmin}
                 orders={allFilteredOrders}
-                  totalOrdersCount={allOrdersByDateAndManager.length}
+                  totalOrdersCount={allOrdersByDateAndManager.reduce((sum, order) => sum + order.orderCount, 0)}
                 filterManager={ordersFilterManager}
                 setFilterManager={setOrdersFilterManager}
                 filterDateFrom={ordersFilterDateFrom}
