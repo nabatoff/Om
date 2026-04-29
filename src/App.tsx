@@ -335,6 +335,7 @@ const App = () => {
     }
     const name = newClientData.name.trim();
     const bin = newClientData.bin.replace(/\D/g, '');
+    const openedFromInlinePicker = Boolean(onClientCreatedCallback);
     try {
       if (editingClientBin) {
         if (bin !== editingClientBin && clients.some((c) => c.bin === bin)) {
@@ -365,7 +366,11 @@ const App = () => {
         onClientCreatedCallback?.(newUser);
         setOnClientCreatedCallback(null);
       }
-      await refresh();
+      // В инлайн-подборе (из встреч/заказов) refresh сбрасывает несохраненные строки формы.
+      // Для таких сценариев достаточно локального обновления clients + callback.
+      if (!openedFromInlinePicker) {
+        await refresh();
+      }
       setIsClientModalOpen(false);
       setEditingClientBin(null);
       setNewClientData({ name: '', bin: '' });
@@ -629,6 +634,7 @@ const App = () => {
             setActiveMeetingIndex={setActiveMeetingIndex}
             setMeetingResultTemp={setMeetingResultTemp}
             clients={clients}
+            allReports={allReports}
             onOpenAddClient={(inputValue, callback) => {
               const isBin = /^\d{12}$/.test(inputValue.trim());
               setEditingClientBin(null);
@@ -793,7 +799,7 @@ const App = () => {
               <OrdersHistoryDashboard
                 isAdmin={isAdmin}
                 orders={allFilteredOrders}
-                  totalOrdersCount={allOrdersByDateAndManager.reduce((sum, order) => sum + order.orderCount, 0)}
+                  totalOrdersCount={allFilteredOrders.reduce((sum, order) => sum + order.orderCount, 0)}
                 filterManager={ordersFilterManager}
                 setFilterManager={setOrdersFilterManager}
                 filterDateFrom={ordersFilterDateFrom}
@@ -1020,6 +1026,7 @@ const ManagerDashboard = ({
   setMeetingResultTemp,
   clients,
   onOpenAddClient,
+  allReports,
 }: {
   stats: FormStats;
   setStats: SetState<FormStats>;
@@ -1041,6 +1048,7 @@ const ManagerDashboard = ({
   setMeetingResultTemp: SetState<string>;
   clients: UiClient[];
   onOpenAddClient: (input: string, cb: (c: UiClient) => void) => void;
+  allReports: FullReport[];
 }) => {
   const [statDraft, setStatDraft] = useState<Record<keyof FormStats, string>>({
     processedTotal: String(stats.processedTotal),
@@ -1163,6 +1171,9 @@ const ManagerDashboard = ({
         data={assignedMeetings}
         setData={setAssignedMeetings}
         type="assigned"
+        allReports={allReports}
+        currentAssignedMeetings={assignedMeetings}
+        currentConductedMeetings={conductedMeetings}
         clients={clients}
         onOpenAddClient={onOpenAddClient}
         seedKey={`assigned-${reportDate}`}
@@ -1174,6 +1185,9 @@ const ManagerDashboard = ({
         data={conductedMeetings}
         setData={setConductedMeetings}
         type="conducted"
+        allReports={allReports}
+        currentAssignedMeetings={assignedMeetings}
+        currentConductedMeetings={conductedMeetings}
         onResultClick={(idx) => {
           setActiveMeetingIndex(idx);
           setMeetingResultTemp(conductedMeetings[idx]?.result ?? '');
@@ -1425,6 +1439,9 @@ const MeetingTable = ({
   data,
   setData,
   type,
+  allReports,
+  currentAssignedMeetings,
+  currentConductedMeetings,
   onResultClick,
   clients,
   onOpenAddClient,
@@ -1436,12 +1453,43 @@ const MeetingTable = ({
   data: (UiAssigned | UiConducted)[];
   setData: SetState<UiAssigned[]> | SetState<UiConducted[]>;
   type: 'assigned' | 'conducted';
+  allReports: FullReport[];
+  currentAssignedMeetings: UiAssigned[];
+  currentConductedMeetings: UiConducted[];
   onResultClick?: (idx: number) => void;
   clients: UiClient[];
   onOpenAddClient: (input: string, cb: (c: UiClient) => void) => void;
   seedKey: string;
   onSaveItem: () => Promise<boolean>;
 }) => {
+  const normalizeText = (value: string) => value.trim().toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ');
+  const normalizeBin = (value: string) => value.replace(/\D/g, '');
+
+  const hasAnyNewMeetingForCounterparty = (entityName: string, bin: string, selfIdx?: number): boolean => {
+    const targetBin = normalizeBin(bin);
+    const targetName = normalizeText(entityName);
+    const isSameCounterparty = (name: string, b: string) => {
+      const bNorm = normalizeBin(b);
+      if (targetBin && bNorm) return bNorm === targetBin;
+      return normalizeText(name) === targetName;
+    };
+
+    for (const report of allReports) {
+      if (report.assignedMeetings.some((m) => isNewMeetingType(m.type) && isSameCounterparty(m.entityName, m.bin))) return true;
+      if (report.conductedMeetings.some((m) => isNewMeetingType(m.type) && isSameCounterparty(m.entityName, m.bin))) return true;
+    }
+
+    for (let i = 0; i < currentAssignedMeetings.length; i++) {
+      if (type === 'assigned' && selfIdx != null && i === selfIdx) continue;
+      const m = currentAssignedMeetings[i];
+      if (isNewMeetingType(m.type) && isSameCounterparty(m.entityName, m.bin)) return true;
+    }
+    for (const m of currentConductedMeetings) {
+      if (isNewMeetingType(m.type) && isSameCounterparty(m.entityName, m.bin)) return true;
+    }
+    return false;
+  };
+
   const rowSig = (row: UiAssigned | UiConducted) => {
     const name = row.entityName.trim().toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ');
     const bin = row.bin.replace(/\D/g, '');
@@ -1476,6 +1524,27 @@ const MeetingTable = ({
     const next = data.filter((_, i) => i !== idx);
     if (type === 'assigned') (setData as SetState<UiAssigned[]>)(next as UiAssigned[]);
     else (setData as SetState<UiConducted[]>)(next as UiConducted[]);
+  };
+  const updateEntityAndBin = (idx: number, entityName: string, bin: string) => {
+    const updated = [...data] as Record<string, unknown>[];
+    const prevSig = rowSig(data[idx]);
+    updated[idx].entityName = entityName;
+    updated[idx].bin = bin;
+    if (
+      type === 'assigned' &&
+      hasAnyNewMeetingForCounterparty(entityName, bin, idx) &&
+      isNewMeetingType(String(updated[idx].type ?? ''))
+    ) {
+      updated[idx].type = 'Повторная';
+    }
+    const nextSig = rowSig(updated[idx] as UiAssigned | UiConducted);
+    setSavedRows((prev) => {
+      const n = new Set(prev);
+      n.delete(prevSig);
+      n.delete(nextSig);
+      return n;
+    });
+    (setData as (u: (UiAssigned | UiConducted)[]) => void)(updated as never);
   };
   const updateRow = (idx: number, field: string, val: string) => {
     const updated = [...data] as Record<string, unknown>[];
@@ -1525,8 +1594,7 @@ const MeetingTable = ({
                     <ContractorLookup
                       value={row.entityName}
                       onSelect={(name, bin) => {
-                        updateRow(idx, 'entityName', name);
-                        updateRow(idx, 'bin', bin);
+                        updateEntityAndBin(idx, name, bin);
                       }}
                       clients={clients}
                       onOpenAddClient={onOpenAddClient}
@@ -1541,12 +1609,31 @@ const MeetingTable = ({
                     />
                   </td>
                   <td className="py-4 px-4">
+                    {type === 'assigned' &&
+                      hasAnyNewMeetingForCounterparty(row.entityName, row.bin, idx) &&
+                      isNewMeetingType(row.type) && (
+                        <p className="mb-1.5 text-[9px] font-black uppercase tracking-wide text-amber-600">
+                          Для этого контрагента доступна только «Повторная»
+                        </p>
+                      )}
                     <select
                       className="w-full bg-gray-50/50 p-3 rounded-2xl text-sm font-bold text-center h-[46px] outline-none cursor-pointer"
                       value={row.type}
-                      onChange={(e) => updateRow(idx, 'type', e.target.value)}
+                      onChange={(e) => {
+                        const nextType = e.target.value;
+                        if (
+                          type === 'assigned' &&
+                          isNewMeetingType(nextType) &&
+                          hasAnyNewMeetingForCounterparty(row.entityName, row.bin, idx)
+                        ) {
+                          alert('С этим контрагентом уже была «Новая» встреча. Доступен только статус «Повторная».');
+                          updateRow(idx, 'type', 'Повторная');
+                          return;
+                        }
+                        updateRow(idx, 'type', nextType);
+                      }}
                     >
-                      <option>Новая</option>
+                      {!(type === 'assigned' && hasAnyNewMeetingForCounterparty(row.entityName, row.bin, idx)) && <option>Новая</option>}
                       <option>Повторная</option>
                     </select>
                   </td>
