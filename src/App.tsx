@@ -793,6 +793,7 @@ const App = () => {
               <OrdersHistoryDashboard
                 isAdmin={isAdmin}
                 orders={allFilteredOrders}
+                  totalOrdersCount={allOrdersByDateAndManager.length}
                 filterManager={ordersFilterManager}
                 setFilterManager={setOrdersFilterManager}
                 filterDateFrom={ordersFilterDateFrom}
@@ -2183,6 +2184,7 @@ const KpiDashboard = ({
 const OrdersHistoryDashboard = ({
   isAdmin,
   orders,
+  totalOrdersCount,
   filterManager,
   setFilterManager,
   filterDateFrom,
@@ -2197,6 +2199,7 @@ const OrdersHistoryDashboard = ({
 }: {
   isAdmin: boolean;
   orders: (UiOrder & { manager: string; date: string })[];
+  totalOrdersCount: number;
   filterManager: string;
   setFilterManager: SetState<string>;
   filterDateFrom: string;
@@ -2294,8 +2297,12 @@ const OrdersHistoryDashboard = ({
       </div>
       <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm flex flex-wrap gap-6 items-center">
         <div>
-          <p className="text-[10px] font-black text-gray-400 uppercase">Заказов по фильтру</p>
+          <p className="text-[10px] font-black text-gray-400 uppercase">Количество записей</p>
           <p className="text-lg font-black text-gray-900">{orders.length}</p>
+        </div>
+        <div>
+          <p className="text-[10px] font-black text-gray-400 uppercase">Количество заказов</p>
+          <p className="text-lg font-black text-gray-900">{totalOrdersCount}</p>
         </div>
         <div>
           <p className="text-[10px] font-black text-gray-400 uppercase">Итого сумма по заказам</p>
