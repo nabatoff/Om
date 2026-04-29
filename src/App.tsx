@@ -1490,6 +1490,53 @@ const MeetingTable = ({
     return false;
   };
 
+  const isSameCounterparty = (name: string, bin: string, targetName: string, targetBin: string): boolean => {
+    const bNorm = normalizeBin(bin);
+    const targetBNorm = normalizeBin(targetBin);
+    if (bNorm && targetBNorm) return bNorm === targetBNorm;
+    return normalizeText(name) === normalizeText(targetName);
+  };
+
+  const conductedMatchesAssigned = (conducted: UiConducted, assigned: UiAssigned): boolean => {
+    if (normalizeBin(conducted.bin) !== normalizeBin(assigned.bin)) return false;
+    if (normalizeText(conducted.entityName) !== normalizeText(assigned.entityName)) return false;
+    if (normalizeKpiMeetingType(conducted.type) !== normalizeKpiMeetingType(assigned.type)) return false;
+    return conducted.date >= assigned.date;
+  };
+
+  const hasEvidenceForAssignedInAllSources = (assigned: UiAssigned, skipCurrentConductedIdx?: number): boolean => {
+    for (const report of allReports) {
+      for (const cm of report.conductedMeetings) {
+        if (conductedMatchesAssigned(cm, assigned)) return true;
+      }
+    }
+    for (let i = 0; i < currentConductedMeetings.length; i++) {
+      if (skipCurrentConductedIdx != null && i === skipCurrentConductedIdx) continue;
+      const cm = currentConductedMeetings[i];
+      if (conductedMatchesAssigned(cm, assigned)) return true;
+    }
+    return false;
+  };
+
+  const getForcedConductedTypeForCounterparty = (
+    entityName: string,
+    bin: string,
+    currentConductedIdx: number,
+  ): 'Новая' | 'Повторная' | null => {
+    let hasPendingNew = false;
+    let hasPendingRepeat = false;
+    for (const assigned of currentAssignedMeetings) {
+      if (!isSameCounterparty(assigned.entityName, assigned.bin, entityName, bin)) continue;
+      const stillPending = !hasEvidenceForAssignedInAllSources(assigned, currentConductedIdx);
+      if (!stillPending) continue;
+      if (isNewMeetingType(assigned.type)) hasPendingNew = true;
+      if (isRepeatMeetingType(assigned.type)) hasPendingRepeat = true;
+    }
+    if (hasPendingNew && !hasPendingRepeat) return 'Новая';
+    if (hasPendingRepeat && !hasPendingNew) return 'Повторная';
+    return null;
+  };
+
   const rowSig = (row: UiAssigned | UiConducted) => {
     const name = row.entityName.trim().toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ');
     const bin = row.bin.replace(/\D/g, '');
@@ -1536,6 +1583,12 @@ const MeetingTable = ({
       isNewMeetingType(String(updated[idx].type ?? ''))
     ) {
       updated[idx].type = 'Повторная';
+    }
+    if (type === 'conducted') {
+      const forcedType = getForcedConductedTypeForCounterparty(entityName, bin, idx);
+      if (forcedType) {
+        updated[idx].type = forcedType;
+      }
     }
     const nextSig = rowSig(updated[idx] as UiAssigned | UiConducted);
     setSavedRows((prev) => {
@@ -1609,6 +1662,14 @@ const MeetingTable = ({
                     />
                   </td>
                   <td className="py-4 px-4">
+                    {type === 'conducted' && (() => {
+                      const forcedType = getForcedConductedTypeForCounterparty(row.entityName, row.bin, idx);
+                      return forcedType ? (
+                        <p className="mb-1.5 text-[9px] font-black uppercase tracking-wide text-blue-600">
+                          Для этого контрагента доступен только тип «{forcedType}»
+                        </p>
+                      ) : null;
+                    })()}
                     {type === 'assigned' &&
                       hasAnyNewMeetingForCounterparty(row.entityName, row.bin, idx) &&
                       isNewMeetingType(row.type) && (
@@ -1621,6 +1682,14 @@ const MeetingTable = ({
                       value={row.type}
                       onChange={(e) => {
                         const nextType = e.target.value;
+                        if (type === 'conducted') {
+                          const forcedType = getForcedConductedTypeForCounterparty(row.entityName, row.bin, idx);
+                          if (forcedType && nextType !== forcedType) {
+                            alert(`С этим контрагентом есть непроведенная назначенная «${forcedType}». Доступен только этот тип.`);
+                            updateRow(idx, 'type', forcedType);
+                            return;
+                          }
+                        }
                         if (
                           type === 'assigned' &&
                           isNewMeetingType(nextType) &&
@@ -1633,8 +1702,23 @@ const MeetingTable = ({
                         updateRow(idx, 'type', nextType);
                       }}
                     >
-                      {!(type === 'assigned' && hasAnyNewMeetingForCounterparty(row.entityName, row.bin, idx)) && <option>Новая</option>}
-                      <option>Повторная</option>
+                      {type === 'conducted'
+                        ? (() => {
+                            const forcedType = getForcedConductedTypeForCounterparty(row.entityName, row.bin, idx);
+                            if (forcedType) return <option>{forcedType}</option>;
+                            return (
+                              <>
+                                <option>Новая</option>
+                                <option>Повторная</option>
+                              </>
+                            );
+                          })()
+                        : null}
+                      {type !== 'conducted' &&
+                        !(type === 'assigned' && hasAnyNewMeetingForCounterparty(row.entityName, row.bin, idx)) && (
+                          <option>Новая</option>
+                        )}
+                      {type !== 'conducted' && <option>Повторная</option>}
                     </select>
                   </td>
                   {type === 'conducted' && (
