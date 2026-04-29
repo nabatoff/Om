@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Calendar, CalendarDays, ChevronLeft, ChevronRight, Clock, Trash2 } from 'lucide-react';
-import type { FullReport, UiAssigned, UiConducted } from '../lib/crmApi';
+import { Calendar, CalendarDays, ChevronLeft, ChevronRight, Clock, RotateCcw, Trash2 } from 'lucide-react';
+import type { DeletedMeeting, FullReport, UiAssigned, UiConducted } from '../lib/crmApi';
 
 export type UiAssignedWithReport = UiAssigned & { reportDate: string };
 type UiMeetingWithReport = UiAssignedWithReport & {
@@ -164,6 +164,9 @@ export function ManagerMeetingsPanel({
   variant = 'manager',
   managerOptions,
   onAdminDeleteMeeting,
+  deletedMeetings,
+  onAdminRestoreMeeting,
+  onAdminHardDeleteMeeting,
 }: {
   allReports: FullReport[];
   findEvidence: (planned: UiAssigned, manager: string) => { evidence: UiConducted; reportDate: string } | null;
@@ -173,6 +176,9 @@ export function ManagerMeetingsPanel({
   /** Для variant=admin: опции фильтра, первый элемент — «Все». */
   managerOptions?: string[];
   onAdminDeleteMeeting?: (row: UiMeetingWithReport) => void | Promise<void>;
+  deletedMeetings?: DeletedMeeting[];
+  onAdminRestoreMeeting?: (row: DeletedMeeting) => void | Promise<void>;
+  onAdminHardDeleteMeeting?: (row: DeletedMeeting) => void | Promise<void>;
 }) {
   const todayYmd = localYmd(new Date());
   const [view, setView] = useState(() => {
@@ -186,6 +192,7 @@ export function ManagerMeetingsPanel({
   const [assignedTypeFilter, setAssignedTypeFilter] = useState<'all' | 'Новая' | 'Повторная'>('all');
   const [assignedCounterpartyFilter, setAssignedCounterpartyFilter] = useState('');
   const [adminMeetingsManager, setAdminMeetingsManager] = useState('Все');
+  const [basketQuery, setBasketQuery] = useState('');
   const [resultPreviewText, setResultPreviewText] = useState<string | null>(null);
 
   const rows: UiMeetingWithReport[] = useMemo(() => {
@@ -310,6 +317,20 @@ export function ManagerMeetingsPanel({
   };
 
   const selectedDateLabel = useMemo(() => formatDisplayDate(selectedYmd), [selectedYmd]);
+
+  const filteredDeletedMeetings = useMemo(() => {
+    if (variant !== 'admin') return [];
+    const query = basketQuery.trim().toLowerCase();
+    return (deletedMeetings || []).filter((row) => {
+      if (adminMeetingsManager !== 'Все' && row.manager !== adminMeetingsManager) return false;
+      if (!query) return true;
+      return (
+        row.entityName.toLowerCase().includes(query) ||
+        row.bin.toLowerCase().includes(query) ||
+        row.manager.toLowerCase().includes(query)
+      );
+    });
+  }, [variant, deletedMeetings, adminMeetingsManager, basketQuery]);
 
   if (variant === 'admin') {
     const opts = managerOptions?.length ? managerOptions : ['Все'];
@@ -520,6 +541,82 @@ export function ManagerMeetingsPanel({
                     </tr>
                   );
                 })
+              )}
+            </tbody>
+          </table>
+        </section>
+        <section className="bg-white border border-red-100 rounded-3xl p-4 sm:p-6 shadow-sm overflow-x-auto">
+          <h3 className="text-xs font-black text-red-700 uppercase tracking-widest flex items-center gap-2 mb-4">
+            <Trash2 size={16} className="text-red-500" />
+            Корзина встреч (только админ)
+          </h3>
+          <div className="bg-red-50/60 border border-red-100 rounded-2xl p-3 sm:p-4 mb-4 flex flex-wrap gap-3 items-end">
+            <div className="space-y-1.5 w-full sm:w-auto sm:min-w-[240px]">
+              <label className="text-[10px] font-black text-gray-500 uppercase">Поиск</label>
+              <input
+                type="text"
+                className="w-full px-3 py-2 bg-white border border-red-200 rounded-xl text-sm"
+                value={basketQuery}
+                onChange={(e) => setBasketQuery(e.target.value)}
+                placeholder="Контрагент / БИН / менеджер"
+              />
+            </div>
+          </div>
+          <table className="w-full text-sm border-collapse min-w-[980px]">
+            <thead>
+              <tr className="text-[10px] font-black text-gray-400 border-b">
+                <th className="text-left py-2">Удалено</th>
+                <th className="text-left py-2">Дата встречи</th>
+                <th className="text-left py-2">Контрагент</th>
+                <th className="text-left py-2">Менеджер</th>
+                <th className="text-center py-2">Тип</th>
+                <th className="text-center py-2">Источник</th>
+                <th className="text-right py-2">Действие</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {filteredDeletedMeetings.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-gray-400">
+                    Корзина пуста
+                  </td>
+                </tr>
+              ) : (
+                filteredDeletedMeetings.map((row) => (
+                  <tr key={`${row.source}-${row.id}`} className="text-gray-800">
+                    <td className="py-3 text-xs text-gray-600 whitespace-nowrap">{formatDisplayDate(row.deletedAt.slice(0, 10))}</td>
+                    <td className="py-3 text-xs text-gray-600 whitespace-nowrap">{formatDisplayDate(row.date)}</td>
+                    <td className="py-3 font-bold">
+                      {row.entityName}
+                      <div className="text-[10px] font-mono text-gray-400">{row.bin}</div>
+                    </td>
+                    <td className="py-3 text-sm font-bold text-gray-800 whitespace-nowrap">{row.manager || '—'}</td>
+                    <td className="py-3 text-center">{row.type}</td>
+                    <td className="py-3 text-center">
+                      <span className="text-[10px] font-black uppercase text-gray-500">{row.source === 'assigned' ? 'Назначено' : 'Проведено'}</span>
+                    </td>
+                    <td className="py-3 text-right">
+                      <div className="inline-flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => onAdminRestoreMeeting?.(row)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-emerald-700 border border-emerald-100 bg-emerald-50 hover:bg-emerald-100 text-[10px] font-black uppercase"
+                        >
+                          <RotateCcw size={12} />
+                          Вернуть
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onAdminHardDeleteMeeting?.(row)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-red-700 border border-red-100 bg-red-50 hover:bg-red-100 text-[10px] font-black uppercase"
+                        >
+                          <Trash2 size={12} />
+                          Навсегда
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
               )}
             </tbody>
           </table>

@@ -20,6 +20,19 @@ export type UiOrder = {
   totalAmount: number;
 };
 
+export type DeletedMeeting = {
+  id: string;
+  source: 'assigned' | 'conducted';
+  entityName: string;
+  bin: string;
+  date: string;
+  type: string;
+  result?: string;
+  manager: string;
+  reportDate: string;
+  deletedAt: string;
+};
+
 export type FullReport = {
   id: string;
   date: string;
@@ -136,9 +149,54 @@ export async function fetchReportsApi(): Promise<FullReport[]> {
   const { data, error } = await getSupabase()
     .from('crm_reports')
     .select(reportSelect)
+    .is('crm_assigned_meetings.deleted_at', null)
+    .is('crm_conducted_meetings.deleted_at', null)
     .order('report_date', { ascending: false });
   if (error) throw error;
   return (data as unknown as ReportRow[]).map(mapReport);
+}
+
+export async function fetchDeletedMeetingsApi(): Promise<DeletedMeeting[]> {
+  const supabase = getSupabase();
+  const [assignedRes, conductedRes] = await Promise.all([
+    supabase
+      .from('crm_assigned_meetings')
+      .select('id, entity_name, bin, meeting_date, meeting_type, deleted_at, report:crm_reports(manager, report_date)')
+      .not('deleted_at', 'is', null)
+      .order('deleted_at', { ascending: false }),
+    supabase
+      .from('crm_conducted_meetings')
+      .select('id, entity_name, bin, meeting_date, meeting_type, result, deleted_at, report:crm_reports(manager, report_date)')
+      .not('deleted_at', 'is', null)
+      .order('deleted_at', { ascending: false }),
+  ]);
+  if (assignedRes.error) throw assignedRes.error;
+  if (conductedRes.error) throw conductedRes.error;
+
+  const assignedRows: DeletedMeeting[] = (assignedRes.data || []).map((m) => ({
+    id: m.id,
+    source: 'assigned',
+    entityName: m.entity_name,
+    bin: String(m.bin || '').trim(),
+    date: m.meeting_date,
+    type: m.meeting_type,
+    manager: String((m as { report?: { manager?: string } | null }).report?.manager || ''),
+    reportDate: String((m as { report?: { report_date?: string } | null }).report?.report_date || ''),
+    deletedAt: String(m.deleted_at),
+  }));
+  const conductedRows: DeletedMeeting[] = (conductedRes.data || []).map((m) => ({
+    id: m.id,
+    source: 'conducted',
+    entityName: m.entity_name,
+    bin: String(m.bin || '').trim(),
+    date: m.meeting_date,
+    type: m.meeting_type,
+    result: m.result || '',
+    manager: String((m as { report?: { manager?: string } | null }).report?.manager || ''),
+    reportDate: String((m as { report?: { report_date?: string } | null }).report?.report_date || ''),
+    deletedAt: String(m.deleted_at),
+  }));
+  return [...assignedRows, ...conductedRows].sort((a, b) => b.deletedAt.localeCompare(a.deletedAt));
 }
 
 export async function createClientRow(c: UiClient): Promise<UiClient> {
@@ -210,11 +268,31 @@ export async function deleteReportById(reportId: string): Promise<void> {
 }
 
 export async function deleteAssignedMeetingById(meetingId: string): Promise<void> {
-  const { error } = await getSupabase().from('crm_assigned_meetings').delete().eq('id', meetingId);
+  const { error } = await getSupabase().from('crm_assigned_meetings').update({ deleted_at: new Date().toISOString() }).eq('id', meetingId);
   if (error) throw error;
 }
 
 export async function deleteConductedMeetingById(meetingId: string): Promise<void> {
+  const { error } = await getSupabase().from('crm_conducted_meetings').update({ deleted_at: new Date().toISOString() }).eq('id', meetingId);
+  if (error) throw error;
+}
+
+export async function restoreAssignedMeetingById(meetingId: string): Promise<void> {
+  const { error } = await getSupabase().from('crm_assigned_meetings').update({ deleted_at: null }).eq('id', meetingId);
+  if (error) throw error;
+}
+
+export async function restoreConductedMeetingById(meetingId: string): Promise<void> {
+  const { error } = await getSupabase().from('crm_conducted_meetings').update({ deleted_at: null }).eq('id', meetingId);
+  if (error) throw error;
+}
+
+export async function hardDeleteAssignedMeetingById(meetingId: string): Promise<void> {
+  const { error } = await getSupabase().from('crm_assigned_meetings').delete().eq('id', meetingId);
+  if (error) throw error;
+}
+
+export async function hardDeleteConductedMeetingById(meetingId: string): Promise<void> {
   const { error } = await getSupabase().from('crm_conducted_meetings').delete().eq('id', meetingId);
   if (error) throw error;
 }

@@ -28,7 +28,9 @@ import {
   type UiAssigned,
   type UiConducted,
   type UiOrder,
+  type DeletedMeeting,
   fetchClientsApi,
+  fetchDeletedMeetingsApi,
   fetchReportsApi,
   createClientRow,
   updateClientRow,
@@ -36,6 +38,10 @@ import {
   deleteReportById,
   deleteAssignedMeetingById,
   deleteConductedMeetingById,
+  restoreAssignedMeetingById,
+  restoreConductedMeetingById,
+  hardDeleteAssignedMeetingById,
+  hardDeleteConductedMeetingById,
   saveReportToDb,
   saveKpiToDb,
 } from './lib/crmApi';
@@ -102,6 +108,7 @@ const App = () => {
   const [currentView, setCurrentView] = useState<'manager' | 'admin' | 'orders' | 'clients'>(() => getSavedCurrentView());
   const [clients, setClients] = useState<UiClient[]>([]);
   const [allReports, setAllReports] = useState<FullReport[]>([]);
+  const [deletedMeetings, setDeletedMeetings] = useState<DeletedMeeting[]>([]);
   const [formStats, setFormStats] = useState<FormStats>({
     processedTotal: 0,
     newInWork: 0,
@@ -172,9 +179,10 @@ const App = () => {
     }
     setLoadError(null);
     try {
-      const [c, r] = await Promise.all([fetchClientsApi(), fetchReportsApi()]);
+      const [c, r, basket] = await Promise.all([fetchClientsApi(), fetchReportsApi(), isAdmin ? fetchDeletedMeetingsApi() : Promise.resolve([])]);
       setClients(c);
       setAllReports(r);
+      setDeletedMeetings(basket);
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Ошибка загрузки');
     } finally {
@@ -408,22 +416,148 @@ const App = () => {
     }
   };
 
-  const removeAdminMeeting = async (row: { source: 'assigned' | 'conducted'; id?: string; entityName: string; date: string }) => {
+  const removeAdminMeeting = async (row: {
+    source: 'assigned' | 'conducted';
+    id?: string;
+    entityName: string;
+    bin?: string;
+    type?: string;
+    manager?: string;
+    date: string;
+  }) => {
     if (!isAdmin) return;
-    if (!row.id) {
-      alert('Не удалось удалить: у встречи отсутствует id');
+    const normalizeText = (value: string) => value.trim().toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ');
+    const normalizeBin = (value: string) => value.replace(/\D/g, '');
+    const sameCounterparty = (aName: string, aBin: string, bName: string, bBin: string) => {
+      const a = normalizeBin(aBin);
+      const b = normalizeBin(bBin);
+      if (a && b) return a === b;
+      return normalizeText(aName) === normalizeText(bName);
+    };
+    const sameType = (a: string, b: string) => normalizeKpiMeetingType(a) === normalizeKpiMeetingType(b);
+
+    const manager = row.manager ?? '';
+    const rowType = row.type ?? '';
+    const rowBin = row.bin ?? '';
+    const rowDate = row.date;
+
+    let linkedAssigned: UiAssigned | null = null;
+    let linkedConducted: UiConducted | null = null;
+
+    if (row.source === 'assigned') {
+      for (const report of allReports) {
+        if ((report.manager || '') !== manager) continue;
+        const candidates = report.conductedMeetings
+          .filter(
+            (m) =>
+              sameCounterparty(m.entityName, m.bin, row.entityName, rowBin) &&
+              sameType(m.type, rowType) &&
+              m.date >= rowDate,
+          )
+          .sort((a, b) => a.date.localeCompare(b.date));
+        if (candidates.length > 0) {
+          linkedConducted = candidates[0]!;
+          break;
+        }
+      }
+    } else {
+      for (const report of allReports) {
+        if ((report.manager || '') !== manager) continue;
+        const candidates = report.assignedMeetings
+          .filter(
+            (m) =>
+              sameCounterparty(m.entityName, m.bin, row.entityName, rowBin) &&
+              sameType(m.type, rowType) &&
+              m.date <= rowDate,
+          )
+          .sort((a, b) => b.date.localeCompare(a.date));
+        if (candidates.length > 0) {
+          linkedAssigned = candidates[0]!;
+          break;
+        }
+      }
+    }
+
+    const assignedId = row.source === 'assigned' ? row.id : linkedAssigned?.id;
+    const conductedId = row.source === 'conducted' ? row.id : linkedConducted?.id;
+
+    const hasAssigned = Boolean(assignedId);
+    const hasConducted = Boolean(conductedId);
+    if (!hasAssigned && !hasConducted) {
+      alert('Не удалось удалить: у встречи отсутствуют id для удаления.');
       return;
     }
-    const ok = window.confirm(
-      `Удалить встречу "${row.entityName}" от ${formatDisplayDate(row.date)}?\n\nДействие необратимо.`,
-    );
-    if (!ok) return;
+
+    let deleteAssigned = false;
+    let deleteConducted = false;
+
+    if (hasAssigned && hasConducted) {
+      const choice = window.prompt(
+        [
+          `Выбери, что удалить по "${row.entityName}" (${formatDisplayDate(row.date)}):`,
+          '1 — только назначенную встречу',
+          '2 — только проведенную встречу',
+          '3 — удалить обе',
+          '',
+          'Введи 1, 2 или 3 (пусто = отмена).',
+        ].join('\n'),
+      );
+      if (!choice) return;
+      if (choice === '1') deleteAssigned = true;
+      else if (choice === '2') deleteConducted = true;
+      else if (choice === '3') {
+        deleteAssigned = true;
+        deleteConducted = true;
+      } else {
+        alert('Неверный выбор. Введи 1, 2 или 3.');
+        return;
+      }
+    } else if (hasAssigned) {
+      const ok = window.confirm(
+        `Удалить назначенную встречу "${row.entityName}" от ${formatDisplayDate(row.date)}?\n\nДействие необратимо.`,
+      );
+      if (!ok) return;
+      deleteAssigned = true;
+    } else if (hasConducted) {
+      const ok = window.confirm(
+        `Удалить проведенную встречу "${row.entityName}" от ${formatDisplayDate(row.date)}?\n\nДействие необратимо.`,
+      );
+      if (!ok) return;
+      deleteConducted = true;
+    }
+
     try {
-      if (row.source === 'assigned') await deleteAssignedMeetingById(row.id);
-      else await deleteConductedMeetingById(row.id);
+      if (deleteAssigned && assignedId) await deleteAssignedMeetingById(assignedId);
+      if (deleteConducted && conductedId) await deleteConductedMeetingById(conductedId);
       await refresh();
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Не удалось удалить встречу');
+    }
+  };
+
+  const restoreAdminMeeting = async (row: DeletedMeeting) => {
+    if (!isAdmin) return;
+    try {
+      if (row.source === 'assigned') await restoreAssignedMeetingById(row.id);
+      else await restoreConductedMeetingById(row.id);
+      await refresh();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Не удалось восстановить встречу');
+    }
+  };
+
+  const hardDeleteAdminMeeting = async (row: DeletedMeeting) => {
+    if (!isAdmin) return;
+    const ok = window.confirm(
+      `Удалить навсегда "${row.entityName}" (${formatDisplayDate(row.date)})?\n\nЭто действие необратимо.`,
+    );
+    if (!ok) return;
+    try {
+      if (row.source === 'assigned') await hardDeleteAssignedMeetingById(row.id);
+      else await hardDeleteConductedMeetingById(row.id);
+      await refresh();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Не удалось удалить встречу навсегда');
     }
   };
 
@@ -727,6 +861,9 @@ const App = () => {
                 findEvidence={findSpecificConductedEvidence}
                 managerOptions={managerFilterOptions}
                 onAdminDeleteMeeting={removeAdminMeeting}
+                deletedMeetings={deletedMeetings}
+                onAdminRestoreMeeting={restoreAdminMeeting}
+                onAdminHardDeleteMeeting={hardDeleteAdminMeeting}
               />
             )}
           </div>
