@@ -312,6 +312,17 @@ export async function hardDeleteConductedMeetingById(meetingId: string): Promise
   if (error) throw error;
 }
 
+/** Обновить ЦП у проведённой встречи (по id строки в crm_conducted_meetings). */
+export async function updateConductedMeetingCpById(meetingId: string, cpSent: boolean, cpQuantity: number): Promise<void> {
+  const q = Math.max(0, Math.floor(Number(cpQuantity) || 0));
+  const sent = Boolean(cpSent) && q >= 1;
+  const { error } = await getSupabase()
+    .from('crm_conducted_meetings')
+    .update({ cp_sent: sent, cp_quantity: sent ? q : 0 })
+    .eq('id', meetingId);
+  if (error) throw error;
+}
+
 export type SaveReportPayload = {
   reportId?: string;
   reportDate: string;

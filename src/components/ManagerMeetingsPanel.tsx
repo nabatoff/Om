@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Calendar, CalendarDays, ChevronLeft, ChevronRight, Clock, RotateCcw, Trash2 } from 'lucide-react';
-import type { DeletedMeeting, FullReport, UiAssigned, UiConducted } from '../lib/crmApi';
+import { type DeletedMeeting, type FullReport, type UiAssigned, type UiConducted, updateConductedMeetingCpById } from '../lib/crmApi';
 
 export type UiAssignedWithReport = UiAssigned & { reportDate: string };
 type UiMeetingWithReport = UiAssignedWithReport & {
@@ -161,6 +161,150 @@ function meetingCpLabel(
   return '—';
 }
 
+type FindEvidenceFn = (planned: UiAssigned, manager: string) => { evidence: UiConducted; reportDate: string } | null;
+
+function conductedMeetingIdForCp(row: UiMeetingWithReport, findEvidence: FindEvidenceFn): string | null {
+  if (row.source === 'conducted') {
+    const id = row.id?.trim();
+    return id || null;
+  }
+  const ev = findEvidence(row as UiAssigned, row.manager)?.evidence;
+  const id = ev?.id?.trim();
+  return id || null;
+}
+
+function cpValuesFromRow(row: UiMeetingWithReport, findEvidence: FindEvidenceFn): { sent: boolean; qty: number } {
+  if (row.source === 'conducted') {
+    const sent = Boolean(row.cpSent) && (row.cpQuantity ?? 0) >= 1;
+    return { sent, qty: row.cpQuantity ?? 0 };
+  }
+  const ev = findEvidence(row as UiAssigned, row.manager)?.evidence;
+  const sent = Boolean(ev?.cpSent) && (ev?.cpQuantity ?? 0) >= 1;
+  return { sent, qty: ev?.cpQuantity ?? 0 };
+}
+
+function MeetingsTableCpCell({
+  row,
+  findEvidence,
+  onRefreshReports,
+}: {
+  row: UiMeetingWithReport;
+  findEvidence: FindEvidenceFn;
+  onRefreshReports?: () => Promise<void>;
+}) {
+  const [modal, setModal] = useState<{ conductedId: string; input: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const conductedId = conductedMeetingIdForCp(row, findEvidence);
+  const { sent, qty } = cpValuesFromRow(row, findEvidence);
+  const editable = Boolean(onRefreshReports && conductedId);
+
+  if (!editable) {
+    return <span className="text-xs font-bold text-gray-700 whitespace-nowrap">{meetingCpLabel(row, findEvidence)}</span>;
+  }
+
+  const applyNo = async () => {
+    if (!conductedId) return;
+    setBusy(true);
+    try {
+      await updateConductedMeetingCpById(conductedId, false, 0);
+      await onRefreshReports?.();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Не удалось сохранить ЦП');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="flex flex-col gap-1 items-stretch min-w-[108px]">
+        <select
+          disabled={busy}
+          className="w-full bg-white border border-gray-200 rounded-lg px-2 py-1.5 text-[11px] font-bold text-gray-800 outline-none"
+          value={sent && qty >= 1 ? 'yes' : 'no'}
+          onChange={(e) => {
+            if (e.target.value === 'no') void applyNo();
+            else setModal({ conductedId: conductedId!, input: qty >= 1 ? String(qty) : '' });
+          }}
+        >
+          <option value="no">Нет</option>
+          <option value="yes">Да</option>
+        </select>
+        {sent && qty >= 1 ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => setModal({ conductedId: conductedId!, input: String(qty) })}
+            className="text-[9px] font-black uppercase text-blue-600 hover:underline disabled:opacity-50"
+          >
+            Кол-во
+          </button>
+        ) : null}
+      </div>
+      {modal && (
+        <div
+          className="fixed inset-0 bg-black/50 z-[620] flex items-center justify-center p-4"
+          onClick={() => {
+            setModal(null);
+          }}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl border border-gray-200 p-5 max-w-sm w-full text-left"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h4 className="text-xs font-black text-gray-800 uppercase tracking-widest mb-2">Количество ЦП</h4>
+            <input
+              type="number"
+              min={1}
+              step={1}
+              disabled={busy}
+              className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm font-bold mb-4"
+              autoFocus
+              value={modal.input}
+              onChange={(e) => setModal((m) => (m ? { ...m, input: e.target.value } : m))}
+            />
+            <div className="flex gap-2 justify-end">
+              <button
+                type="button"
+                disabled={busy}
+                className="px-3 py-2 rounded-xl text-[10px] font-black uppercase border border-gray-200 text-gray-600"
+                onClick={() => setModal(null)}
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                className="px-3 py-2 rounded-xl text-[10px] font-black uppercase bg-blue-600 text-white"
+                onClick={async () => {
+                  const n = parseInt(modal.input.trim(), 10);
+                  if (!Number.isFinite(n) || n < 1) {
+                    alert('Введите целое число от 1.');
+                    return;
+                  }
+                  setBusy(true);
+                  try {
+                    await updateConductedMeetingCpById(modal.conductedId, true, n);
+                    await onRefreshReports?.();
+                    setModal(null);
+                  } catch (e) {
+                    alert(e instanceof Error ? e.message : 'Не удалось сохранить ЦП');
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                Сохранить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 function meetingRowUniqueKey(a: UiMeetingWithReport): string {
   return [
     a.source,
@@ -183,6 +327,7 @@ export function ManagerMeetingsPanel({
   deletedMeetings,
   onAdminRestoreMeeting,
   onAdminHardDeleteMeeting,
+  onRefreshReports,
 }: {
   allReports: FullReport[];
   findEvidence: (planned: UiAssigned, manager: string) => { evidence: UiConducted; reportDate: string } | null;
@@ -195,6 +340,8 @@ export function ManagerMeetingsPanel({
   deletedMeetings?: DeletedMeeting[];
   onAdminRestoreMeeting?: (row: DeletedMeeting) => void | Promise<void>;
   onAdminHardDeleteMeeting?: (row: DeletedMeeting) => void | Promise<void>;
+  /** После правки ЦП из таблицы «Все встречи» — перезагрузить отчёты. */
+  onRefreshReports?: () => Promise<void>;
 }) {
   const todayYmd = localYmd(new Date());
   const [view, setView] = useState(() => {
@@ -504,7 +651,6 @@ export function ManagerMeetingsPanel({
                 filteredAssignedRows.map((a, idx) => {
                   const { done: isDone, conductedLabel } = meetingConductedLabel(a, findEvidence);
                   const resultText = meetingResultText(a, findEvidence);
-                  const cpText = meetingCpLabel(a, findEvidence);
                   return (
                     <tr key={`${a.manager}-${a.source}-${a.bin}-${a.date}-${idx}`} className="text-gray-800">
                       <td className="py-3 text-gray-600 whitespace-nowrap">{assignedPlanColumnLabel(a, allReports)}</td>
@@ -523,7 +669,9 @@ export function ManagerMeetingsPanel({
                         </span>
                       </td>
                       <td className="py-3 text-gray-600 text-xs whitespace-nowrap">{conductedLabel}</td>
-                      <td className="py-3 text-center text-xs font-bold text-gray-700 whitespace-nowrap">{cpText}</td>
+                      <td className="py-3 text-center text-xs align-top">
+                        <MeetingsTableCpCell row={a} findEvidence={findEvidence} onRefreshReports={onRefreshReports} />
+                      </td>
                       <td className="py-3 text-gray-700 text-xs max-w-[220px] align-top">
                         {resultText ? (
                           <button
@@ -927,7 +1075,6 @@ export function ManagerMeetingsPanel({
               filteredAssignedRows.map((a, idx) => {
                 const { done: isDone, conductedLabel } = meetingConductedLabel(a, findEvidence);
                 const resultText = meetingResultText(a, findEvidence);
-                const cpText = meetingCpLabel(a, findEvidence);
                 return (
                   <tr key={`${a.manager}-${a.source}-${a.bin}-${a.date}-${idx}`} className="text-gray-800">
                     <td className="py-3 text-gray-600 whitespace-nowrap">{assignedPlanColumnLabel(a, allReports)}</td>
@@ -945,7 +1092,9 @@ export function ManagerMeetingsPanel({
                       </span>
                     </td>
                     <td className="py-3 text-gray-600 text-xs whitespace-nowrap">{conductedLabel}</td>
-                    <td className="py-3 text-center text-xs font-bold text-gray-700 whitespace-nowrap">{cpText}</td>
+                    <td className="py-3 text-center text-xs align-top">
+                      <MeetingsTableCpCell row={a} findEvidence={findEvidence} onRefreshReports={onRefreshReports} />
+                    </td>
                     <td className="py-3 text-gray-700 text-xs max-w-[200px] align-top">
                       {resultText ? (
                         <button

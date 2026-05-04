@@ -886,6 +886,7 @@ const App = () => {
                 deletedMeetings={deletedMeetings}
                 onAdminRestoreMeeting={restoreAdminMeeting}
                 onAdminHardDeleteMeeting={hardDeleteAdminMeeting}
+                onRefreshReports={refresh}
               />
             )}
           </div>
@@ -952,6 +953,7 @@ const App = () => {
                 allReports={allReports}
                 findEvidence={findSpecificConductedEvidence}
                 mode={managerOrdersSection === 'calendar' ? 'calendar' : 'assigned'}
+                onRefreshReports={refresh}
               />
             )}
             {(isAdmin || managerOrdersSection === 'orders') && (
