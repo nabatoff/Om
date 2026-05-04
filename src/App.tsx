@@ -2276,6 +2276,30 @@ function countConductedRepeatMeetings(report: FullReport): number {
   return report.conductedMeetings.filter((m) => isRepeatMeetingType(m.type)).length;
 }
 
+/** Границы для блока «Общая сводка»: пустые даты KPI = текущий календарный месяц (локально), иначе как у фильтра таблицы. */
+function kpiSummaryPeriodBounds(filterDateFrom: string, filterDateTo: string): {
+  from: string;
+  to: string;
+  isDefaultMonth: boolean;
+} {
+  const from = filterDateFrom.trim();
+  const to = filterDateTo.trim();
+  if (from || to) return { from, to, isDefaultMonth: false };
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = d.getMonth();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const mo = pad(m + 1);
+  const last = String(new Date(y, m + 1, 0).getDate()).padStart(2, '0');
+  return { from: `${y}-${mo}-01`, to: `${y}-${mo}-${last}`, isDefaultMonth: true };
+}
+
+function reportDateInKpiSummaryRange(reportDate: string, bounds: { from: string; to: string }): boolean {
+  if (bounds.from && reportDate < bounds.from) return false;
+  if (bounds.to && reportDate > bounds.to) return false;
+  return true;
+}
+
 const KpiDashboard = ({
   allReports,
   reports,
@@ -2331,10 +2355,12 @@ const KpiDashboard = ({
   }, [kpiRows, allReports]);
 
   const monthlyManagerSummary = useMemo(() => {
-    const monthPrefix = new Date().toISOString().slice(0, 7);
+    const bounds = kpiSummaryPeriodBounds(filterDateFrom, filterDateTo);
+    const periodLabel = `${formatDisplayDate(bounds.from)} — ${formatDisplayDate(bounds.to)}`;
+    const monthPrefix = bounds.from.slice(0, 7);
     const source = allReports.filter((r) => {
       const matchManager = filterManager === 'Все' || r.manager === filterManager;
-      return matchManager && r.date.startsWith(monthPrefix);
+      return matchManager && reportDateInKpiSummaryRange(r.date, bounds);
     });
     const byKey = new Map<string, FullReport>();
     for (const r of source) {
@@ -2367,6 +2393,8 @@ const KpiDashboard = ({
     }
     return {
       monthPrefix,
+      periodLabel,
+      isDefaultMonth: bounds.isDefaultMonth,
       reportsCount: byKey.size,
       processedTotal,
       newInWork,
@@ -2376,7 +2404,7 @@ const KpiDashboard = ({
       conductedNew,
       conductedRepeat,
     };
-  }, [allReports, filterManager]);
+  }, [allReports, filterManager, filterDateFrom, filterDateTo]);
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-500">
@@ -2397,10 +2425,14 @@ const KpiDashboard = ({
       <section className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-5 shadow-sm">
         <div className="mb-3 text-left">
           <h3 className="text-[11px] font-black text-gray-700 uppercase tracking-widest">
-            Общая сводка за месяц ({monthlyManagerSummary.monthPrefix})
+            {monthlyManagerSummary.isDefaultMonth
+              ? `Общая сводка за месяц (${monthlyManagerSummary.monthPrefix})`
+              : 'Общая сводка за период'}
           </h3>
           <p className="text-[10px] text-gray-500 mt-1">
-            Реагирует только на фильтр менеджера. Найдено отчётов: {monthlyManagerSummary.reportsCount}
+            {monthlyManagerSummary.periodLabel}
+            {' · '}
+            менеджер: {filterManager === 'Все' ? 'все' : filterManager}. Отчётов: {monthlyManagerSummary.reportsCount}
           </p>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-2">
