@@ -2428,6 +2428,52 @@ function countConductedNewMeetings(report: FullReport, allReports: FullReport[])
   return count;
 }
 
+/** Уникальные контрагенты (БИН+название), по которым в сводке выполняется KPI «проведено новых» (та же логика, что countConductedNewMeetings). */
+function collectCounterpartyKeysWithKpiConductedNew(summaryReports: FullReport[], allReports: FullReport[]): Set<string> {
+  const keys = new Set<string>();
+  for (const report of summaryReports) {
+    const managerNorm = normalizeKpiText(report.manager);
+    const targetReports = allReports.filter((r) => normalizeKpiText(r.manager) === managerNorm && r.date >= report.date);
+    for (const assigned of report.assignedMeetings) {
+      if (!isNewMeetingType(assigned.type)) continue;
+      const plannedName = normalizeKpiText(assigned.entityName);
+      const plannedBin = normalizeKpiBin(assigned.bin);
+      const plannedType = normalizeKpiMeetingType(assigned.type);
+      const hasEvidence = targetReports.some((lr) =>
+        lr.conductedMeetings.some(
+          (cm) =>
+            normalizeKpiBin(cm.bin) === plannedBin &&
+            normalizeKpiText(cm.entityName) === plannedName &&
+            normalizeKpiMeetingType(cm.type) === plannedType &&
+            cm.date >= assigned.date,
+        ),
+      );
+      if (hasEvidence) keys.add(`${plannedBin}|${plannedName}`);
+    }
+  }
+  return keys;
+}
+
+function collectCounterpartyKeysWithConfirmedOrder(summaryReports: FullReport[]): Set<string> {
+  const keys = new Set<string>();
+  for (const report of summaryReports) {
+    for (const o of report.confirmedOrders) {
+      keys.add(`${normalizeKpiBin(o.bin)}|${normalizeKpiText(o.entityName)}`);
+    }
+  }
+  return keys;
+}
+
+function countCounterpartiesConductedNewWithOrder(summaryReports: FullReport[], allReports: FullReport[]): number {
+  const withNew = collectCounterpartyKeysWithKpiConductedNew(summaryReports, allReports);
+  const withOrder = collectCounterpartyKeysWithConfirmedOrder(summaryReports);
+  let n = 0;
+  for (const k of withNew) {
+    if (withOrder.has(k)) n += 1;
+  }
+  return n;
+}
+
 function countConductedRepeatMeetings(report: FullReport): number {
   return report.conductedMeetings.filter((m) => isRepeatMeetingType(m.type)).length;
 }
@@ -2541,6 +2587,9 @@ const KpiDashboard = ({
     const passedQualificationPct = kpiConversionPercent(validatedTotal, callsTotal);
     const assignedGepPct = kpiConversionPercent(assignedNew, validatedTotal);
     const conductedGepPct = kpiConversionPercent(conductedNew, assignedNew);
+    const summaryReports = Array.from(byKey.values());
+    const confirmedOrderConvNumerator = countCounterpartiesConductedNewWithOrder(summaryReports, allReports);
+    const confirmedOrderConvPct = kpiConversionPercent(confirmedOrderConvNumerator, conductedNew);
     return {
       monthPrefix,
       periodLabel,
@@ -2556,6 +2605,8 @@ const KpiDashboard = ({
       passedQualificationPct,
       assignedGepPct,
       conductedGepPct,
+      confirmedOrderConvNumerator,
+      confirmedOrderConvPct,
     };
   }, [allReports, filterManager, filterDateFrom, filterDateTo]);
 
@@ -2620,7 +2671,7 @@ const KpiDashboard = ({
         </div>
         <div className="mt-4 pt-4 border-t border-gray-100 text-left">
           <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Конверсия</p>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <div className="rounded-xl bg-amber-50/60 border border-amber-100 p-3">
               <p className="text-[10px] text-amber-800 font-black uppercase leading-snug">Прошли квалификацию</p>
               <p className="text-xl font-black text-amber-950 mt-1">
@@ -2646,6 +2697,18 @@ const KpiDashboard = ({
               </p>
               <p className="text-[9px] text-teal-800/80 mt-1 leading-snug">
                 Проведено новых ÷ Назначено новых × 100%
+              </p>
+            </div>
+            <div className="rounded-xl bg-orange-50/70 border border-orange-100 p-3">
+              <p className="text-[10px] text-orange-900 font-black uppercase leading-snug">Подтвержден заказ</p>
+              <p className="text-xl font-black text-orange-950 mt-1">
+                {formatKpiPercent(monthlyManagerSummary.confirmedOrderConvPct)}
+              </p>
+              <p className="text-[9px] text-orange-900/80 mt-1 leading-snug">
+                Уникальные контрагенты с «проведено новых» (KPI) и заказом в периоде ÷ Проведено новых × 100%
+              </p>
+              <p className="text-[9px] text-orange-800/70 mt-1 font-mono">
+                {monthlyManagerSummary.confirmedOrderConvNumerator} / {monthlyManagerSummary.conductedNew}
               </p>
             </div>
           </div>
