@@ -65,6 +65,7 @@ export function ClientHistoryModal({ client, conducted, orders, onClose }: Props
                       <th className="p-3">Дата встречи</th>
                       <th className="p-3">Тип</th>
                       <th className="p-3">Сущность</th>
+                      <th className="p-3 text-center">ЦП</th>
                       <th className="p-3 min-w-[120px]">Результат</th>
                     </tr>
                   </thead>
@@ -76,6 +77,9 @@ export function ClientHistoryModal({ client, conducted, orders, onClose }: Props
                         <td className="p-3 font-mono text-xs text-gray-600 whitespace-nowrap">{row.date ? formatDisplayDate(row.date) : '—'}</td>
                         <td className="p-3 text-gray-600">{row.type}</td>
                         <td className="p-3 text-gray-800">{row.entityName}</td>
+                        <td className="p-3 text-center text-sm font-bold text-gray-800 whitespace-nowrap">
+                          {row.cpSent && row.cpQuantity >= 1 ? `${row.cpQuantity} шт.` : '—'}
+                        </td>
                         <td className="p-3 text-gray-600 text-xs leading-snug">{row.result || '—'}</td>
                       </tr>
                     ))}

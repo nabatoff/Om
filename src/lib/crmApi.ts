@@ -8,7 +8,18 @@ export type FormStats = {
   validatedTotal: number;
 };
 export type UiAssigned = { id?: string; entityName: string; bin: string; date: string; type: string };
-export type UiConducted = { id?: string; entityName: string; bin: string; date: string; type: string; result: string };
+export type UiConducted = {
+  id?: string;
+  entityName: string;
+  bin: string;
+  date: string;
+  type: string;
+  result: string;
+  /** ЦП отправлено (цепь). */
+  cpSent: boolean;
+  /** Количество отправленного ЦП (если cpSent). */
+  cpQuantity: number;
+};
 export type UiOrder = {
   entityName: string;
   bin: string;
@@ -69,6 +80,8 @@ type ReportRow = {
     meeting_type: string;
     result: string;
     sort_order: number;
+    cp_sent?: boolean | null;
+    cp_quantity?: number | null;
   }[];
   crm_confirmed_orders: {
     id: string;
@@ -113,6 +126,8 @@ function mapReport(r: ReportRow): FullReport {
         date: m.meeting_date,
         type: m.meeting_type,
         result: m.result || '',
+        cpSent: Boolean(m.cp_sent),
+        cpQuantity: Math.max(0, Number(m.cp_quantity ?? 0) || 0),
       })),
     confirmedOrders: (r.crm_confirmed_orders || [])
       .sort((a, b) => a.sort_order - b.sort_order)
@@ -135,7 +150,7 @@ const reportSelect = `
   id, report_date, manager, manager_id,
   processed_total, new_in_work, calls_total, validated_total,
   crm_assigned_meetings ( id, entity_name, bin, meeting_date, meeting_type, sort_order ),
-  crm_conducted_meetings ( id, entity_name, bin, meeting_date, meeting_type, result, sort_order ),
+  crm_conducted_meetings ( id, entity_name, bin, meeting_date, meeting_type, result, sort_order, cp_sent, cp_quantity ),
   crm_confirmed_orders ( id, entity_name, bin, via_entity_name, via_bin, order_count, amounts, total_amount, sort_order )
 `;
 

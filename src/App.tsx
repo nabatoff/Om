@@ -1714,10 +1714,16 @@ const MeetingTable = ({
     const name = row.entityName.trim().toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ');
     const bin = row.bin.replace(/\D/g, '');
     const date = String(row.date || '').trim();
-    const type = String(row.type || '').trim().toLowerCase().replace(/ё/g, 'е');
-    const result = 'result' in row ? String(row.result || '').trim().toLowerCase().replace(/ё/g, 'е') : '';
-    return `${name}|${bin}|${date}|${type}|${result}`;
+    const meetType = String(row.type || '').trim().toLowerCase().replace(/ё/g, 'е');
+    const result =
+      type === 'conducted' ? String((row as UiConducted).result || '').trim().toLowerCase().replace(/ё/g, 'е') : '';
+    if (type === 'conducted') {
+      const c = row as UiConducted;
+      return `${name}|${bin}|${date}|${meetType}|${result}|${c.cpSent ? 1 : 0}|${c.cpQuantity}`;
+    }
+    return `${name}|${bin}|${date}|${meetType}|${result}`;
   };
+  const [cpQtyModal, setCpQtyModal] = useState<{ idx: number; input: string } | null>(null);
   const [savedRows, setSavedRows] = useState<Set<string>>(() => new Set(data.map(rowSig)));
   useEffect(() => {
     setSavedRows(new Set(data.map(rowSig)));
@@ -1730,7 +1736,7 @@ const MeetingTable = ({
     } else {
       (setData as SetState<UiConducted[]>)([
         ...(data as UiConducted[]),
-        { entityName: '', bin: '', date: d, type: 'Новая', result: '' },
+        { entityName: '', bin: '', date: d, type: 'Новая', result: '', cpSent: false, cpQuantity: 0 },
       ]);
     }
   };
@@ -1785,6 +1791,22 @@ const MeetingTable = ({
     });
     (setData as (u: (UiAssigned | UiConducted)[]) => void)(updated as never);
   };
+
+  const patchConductedRow = (idx: number, patch: Partial<Pick<UiConducted, 'cpSent' | 'cpQuantity'>>) => {
+    if (type !== 'conducted') return;
+    const list = [...(data as UiConducted[])];
+    const prevSig = rowSig(list[idx]);
+    list[idx] = { ...list[idx], ...patch };
+    const nextSig = rowSig(list[idx]);
+    setSavedRows((prev) => {
+      const n = new Set(prev);
+      n.delete(prevSig);
+      n.delete(nextSig);
+      return n;
+    });
+    (setData as SetState<UiConducted[]>)(list);
+  };
+
   return (
     <div className="bg-white border border-gray-200 rounded-[32px] p-8 shadow-sm">
       <div className="flex items-center justify-between mb-8">
@@ -1808,6 +1830,11 @@ const MeetingTable = ({
                 <th className="pb-4">Контрагент / БИН</th>
                 <th className="pb-4 w-40 px-4 text-center">Дата</th>
                 <th className="pb-4 w-36 px-4 text-center">Тип</th>
+                {type === 'conducted' && (
+                  <th className="pb-4 w-44 px-2 text-center text-[9px] font-black text-gray-400 uppercase tracking-widest">
+                    ЦП
+                  </th>
+                )}
                 {type === 'conducted' && <th className="pb-4 min-w-[220px] max-w-[320px] px-2 text-left">Итог</th>}
                 <th className="pb-4 w-36 text-center">Сохранить</th>
                 <th className="pb-4 w-10" />
@@ -1897,6 +1924,42 @@ const MeetingTable = ({
                     </div>
                   </td>
                   {type === 'conducted' && (
+                    <td className="py-4 px-2 align-top w-44">
+                      <select
+                        className="w-full bg-gray-50/50 p-2 rounded-2xl text-xs font-bold h-[46px] outline-none cursor-pointer"
+                        value={(row as UiConducted).cpSent && (row as UiConducted).cpQuantity >= 1 ? 'yes' : 'no'}
+                        onChange={(e) => {
+                          if (e.target.value === 'no') {
+                            patchConductedRow(idx, { cpSent: false, cpQuantity: 0 });
+                          } else {
+                            setCpQtyModal({
+                              idx,
+                              input:
+                                (row as UiConducted).cpQuantity >= 1 ? String((row as UiConducted).cpQuantity) : '',
+                            });
+                          }
+                        }}
+                      >
+                        <option value="no">Нет</option>
+                        <option value="yes">Да, ЦП отправлено</option>
+                      </select>
+                      {(row as UiConducted).cpSent && (row as UiConducted).cpQuantity >= 1 ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setCpQtyModal({
+                              idx,
+                              input: String((row as UiConducted).cpQuantity),
+                            })
+                          }
+                          className="mt-1.5 w-full text-[9px] font-black uppercase text-blue-600 hover:underline"
+                        >
+                          Изменить кол-во
+                        </button>
+                      ) : null}
+                    </td>
+                  )}
+                  {type === 'conducted' && (
                     <td className="py-4 px-2 align-top min-w-[220px] max-w-[320px]">
                       <button
                         type="button"
@@ -1931,6 +1994,10 @@ const MeetingTable = ({
                             const current = row as UiConducted;
                             if (!current.result || !current.result.trim()) {
                               alert('Заполните результат встречи перед сохранением.');
+                              return;
+                            }
+                            if (current.cpSent && (!current.cpQuantity || current.cpQuantity < 1)) {
+                              alert('Если ЦП отправлено — укажите количество (целое число от 1) или выберите «Нет».');
                               return;
                             }
                           }
@@ -1968,6 +2035,65 @@ const MeetingTable = ({
       ) : (
         <div className="py-12 text-center text-gray-300 text-[10px] font-black uppercase border-2 border-dashed border-gray-50 rounded-[24px]">
           Нет записей
+        </div>
+      )}
+      {cpQtyModal && type === 'conducted' && (
+        <div
+          className="fixed inset-0 bg-black/50 z-[550] flex items-center justify-center p-4"
+          onClick={() => {
+            const r = (data as UiConducted[])[cpQtyModal.idx];
+            if (!(r.cpSent && r.cpQuantity >= 1)) {
+              patchConductedRow(cpQtyModal.idx, { cpSent: false, cpQuantity: 0 });
+            }
+            setCpQtyModal(null);
+          }}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl border border-gray-200 p-6 max-w-sm w-full text-left"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h4 className="text-xs font-black text-gray-800 uppercase tracking-widest mb-2">Количество ЦП</h4>
+            <p className="text-[11px] text-gray-500 mb-3">Укажите, сколько единиц ЦП отправлено.</p>
+            <input
+              type="number"
+              min={1}
+              step={1}
+              className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm font-bold mb-4"
+              autoFocus
+              value={cpQtyModal.input}
+              onChange={(e) => setCpQtyModal((m) => (m ? { ...m, input: e.target.value } : m))}
+            />
+            <div className="flex gap-2 justify-end">
+              <button
+                type="button"
+                className="px-3 py-2 rounded-xl text-[10px] font-black uppercase border border-gray-200 text-gray-600"
+                onClick={() => {
+                  const r = (data as UiConducted[])[cpQtyModal.idx];
+                  if (!(r.cpSent && r.cpQuantity >= 1)) {
+                    patchConductedRow(cpQtyModal.idx, { cpSent: false, cpQuantity: 0 });
+                  }
+                  setCpQtyModal(null);
+                }}
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                className="px-3 py-2 rounded-xl text-[10px] font-black uppercase bg-blue-600 text-white"
+                onClick={() => {
+                  const n = parseInt(cpQtyModal.input.trim(), 10);
+                  if (!Number.isFinite(n) || n < 1) {
+                    alert('Введите целое число от 1.');
+                    return;
+                  }
+                  patchConductedRow(cpQtyModal.idx, { cpSent: true, cpQuantity: n });
+                  setCpQtyModal(null);
+                }}
+              >
+                Сохранить
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

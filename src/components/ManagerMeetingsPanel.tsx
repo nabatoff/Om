@@ -8,6 +8,8 @@ type UiMeetingWithReport = UiAssignedWithReport & {
   manager: string;
   /** Только для source=conducted — текст итога из отчёта. */
   result?: string;
+  cpSent?: boolean;
+  cpQuantity?: number;
 };
 
 function formatDisplayDate(raw: string): string {
@@ -145,6 +147,20 @@ function meetingResultText(
   return (pack?.evidence.result ?? '').trim();
 }
 
+function meetingCpLabel(
+  a: UiMeetingWithReport,
+  findEvidence: (planned: UiAssigned, manager: string) => { evidence: UiConducted; reportDate: string } | null,
+): string {
+  if (a.source === 'conducted') {
+    if (a.cpSent && (a.cpQuantity ?? 0) >= 1) return `${a.cpQuantity} шт.`;
+    return '—';
+  }
+  const pack = findEvidence(a, a.manager);
+  const e = pack?.evidence;
+  if (e?.cpSent && (e.cpQuantity ?? 0) >= 1) return `${e.cpQuantity} шт.`;
+  return '—';
+}
+
 function meetingRowUniqueKey(a: UiMeetingWithReport): string {
   return [
     a.source,
@@ -221,6 +237,8 @@ export function ManagerMeetingsPanel({
           source: 'conducted',
           manager: mgr,
           result: c.result || '',
+          cpSent: c.cpSent,
+          cpQuantity: c.cpQuantity,
         };
         const key = meetingRowUniqueKey(row);
         if (seen.has(key)) continue;
@@ -461,7 +479,7 @@ export function ManagerMeetingsPanel({
               Сбросить фильтр
             </button>
           </div>
-          <table className="w-full text-sm border-collapse min-w-[960px]">
+          <table className="w-full text-sm border-collapse min-w-[1020px]">
             <thead>
               <tr className="text-[10px] font-black text-gray-400 border-b">
                 <th className="text-left py-2">Дата назначения встречи</th>
@@ -469,6 +487,7 @@ export function ManagerMeetingsPanel({
                 <th className="text-left py-2">Менеджер</th>
                 <th className="text-center py-2">Тип</th>
                 <th className="text-left py-2">Дата проведения</th>
+                <th className="text-center py-2">ЦП</th>
                 <th className="text-left py-2 min-w-[140px]">Итог</th>
                 <th className="text-right py-2">Статус</th>
                 <th className="text-right py-2">Действие</th>
@@ -477,7 +496,7 @@ export function ManagerMeetingsPanel({
             <tbody className="divide-y divide-gray-100">
               {filteredAssignedRows.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-gray-400">
+                  <td colSpan={9} className="py-8 text-center text-gray-400">
                     Нет встреч по выбранным фильтрам
                   </td>
                 </tr>
@@ -485,6 +504,7 @@ export function ManagerMeetingsPanel({
                 filteredAssignedRows.map((a, idx) => {
                   const { done: isDone, conductedLabel } = meetingConductedLabel(a, findEvidence);
                   const resultText = meetingResultText(a, findEvidence);
+                  const cpText = meetingCpLabel(a, findEvidence);
                   return (
                     <tr key={`${a.manager}-${a.source}-${a.bin}-${a.date}-${idx}`} className="text-gray-800">
                       <td className="py-3 text-gray-600 whitespace-nowrap">{assignedPlanColumnLabel(a, allReports)}</td>
@@ -503,6 +523,7 @@ export function ManagerMeetingsPanel({
                         </span>
                       </td>
                       <td className="py-3 text-gray-600 text-xs whitespace-nowrap">{conductedLabel}</td>
+                      <td className="py-3 text-center text-xs font-bold text-gray-700 whitespace-nowrap">{cpText}</td>
                       <td className="py-3 text-gray-700 text-xs max-w-[220px] align-top">
                         {resultText ? (
                           <button
@@ -883,13 +904,14 @@ export function ManagerMeetingsPanel({
               Сбросить фильтр
             </button>
           </div>
-          <table className="w-full text-sm border-collapse min-w-[820px]">
+          <table className="w-full text-sm border-collapse min-w-[900px]">
           <thead>
             <tr className="text-[10px] font-black text-gray-400 border-b">
               <th className="text-left py-2">Дата назначения встречи</th>
               <th className="text-left py-2">Контрагент</th>
               <th className="text-center py-2">Тип</th>
               <th className="text-left py-2">Дата проведения</th>
+              <th className="text-center py-2">ЦП</th>
               <th className="text-left py-2 min-w-[120px]">Итог</th>
               <th className="text-right py-2">Статус</th>
             </tr>
@@ -897,7 +919,7 @@ export function ManagerMeetingsPanel({
           <tbody className="divide-y divide-gray-100">
             {filteredAssignedRows.length === 0 ? (
               <tr>
-                <td colSpan={6} className="py-8 text-center text-gray-400">
+                <td colSpan={7} className="py-8 text-center text-gray-400">
                   Нет встреч по выбранным фильтрам
                 </td>
               </tr>
@@ -905,6 +927,7 @@ export function ManagerMeetingsPanel({
               filteredAssignedRows.map((a, idx) => {
                 const { done: isDone, conductedLabel } = meetingConductedLabel(a, findEvidence);
                 const resultText = meetingResultText(a, findEvidence);
+                const cpText = meetingCpLabel(a, findEvidence);
                 return (
                   <tr key={`${a.manager}-${a.source}-${a.bin}-${a.date}-${idx}`} className="text-gray-800">
                     <td className="py-3 text-gray-600 whitespace-nowrap">{assignedPlanColumnLabel(a, allReports)}</td>
@@ -922,6 +945,7 @@ export function ManagerMeetingsPanel({
                       </span>
                     </td>
                     <td className="py-3 text-gray-600 text-xs whitespace-nowrap">{conductedLabel}</td>
+                    <td className="py-3 text-center text-xs font-bold text-gray-700 whitespace-nowrap">{cpText}</td>
                     <td className="py-3 text-gray-700 text-xs max-w-[200px] align-top">
                       {resultText ? (
                         <button
