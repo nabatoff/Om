@@ -2432,6 +2432,16 @@ function countConductedRepeatMeetings(report: FullReport): number {
   return report.conductedMeetings.filter((m) => isRepeatMeetingType(m.type)).length;
 }
 
+function kpiConversionPercent(numerator: number, denominator: number): number | null {
+  if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator <= 0) return null;
+  return (numerator / denominator) * 100;
+}
+
+function formatKpiPercent(value: number | null): string {
+  if (value == null || !Number.isFinite(value)) return '—';
+  return `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1, minimumFractionDigits: 0 }).format(value)}%`;
+}
+
 const KpiDashboard = ({
   allReports,
   reports,
@@ -2528,6 +2538,9 @@ const KpiDashboard = ({
       conductedNew += countConductedNewMeetings(r, allReports);
       conductedRepeat += countConductedRepeatMeetings(r);
     }
+    const passedQualificationPct = kpiConversionPercent(validatedTotal, callsTotal);
+    const assignedGepPct = kpiConversionPercent(assignedNew, validatedTotal);
+    const conductedGepPct = kpiConversionPercent(conductedNew, assignedNew);
     return {
       monthPrefix,
       periodLabel,
@@ -2540,6 +2553,9 @@ const KpiDashboard = ({
       assignedNew,
       conductedNew,
       conductedRepeat,
+      passedQualificationPct,
+      assignedGepPct,
+      conductedGepPct,
     };
   }, [allReports, filterManager, filterDateFrom, filterDateTo]);
 
@@ -2600,6 +2616,38 @@ const KpiDashboard = ({
           <div className="rounded-xl bg-violet-50 border border-violet-100 p-3 text-left">
             <p className="text-[10px] text-violet-700 font-black uppercase">Проведено повторных</p>
             <p className="text-lg font-black text-violet-800">{monthlyManagerSummary.conductedRepeat}</p>
+          </div>
+        </div>
+        <div className="mt-4 pt-4 border-t border-gray-100 text-left">
+          <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Конверсия</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="rounded-xl bg-amber-50/60 border border-amber-100 p-3">
+              <p className="text-[10px] text-amber-800 font-black uppercase leading-snug">Прошли квалификацию</p>
+              <p className="text-xl font-black text-amber-950 mt-1">
+                {formatKpiPercent(monthlyManagerSummary.passedQualificationPct)}
+              </p>
+              <p className="text-[9px] text-amber-700/80 mt-1 leading-snug">
+                Квалификация ÷ Звонки × 100%
+              </p>
+            </div>
+            <div className="rounded-xl bg-slate-50/80 border border-slate-200 p-3">
+              <p className="text-[10px] text-slate-700 font-black uppercase leading-snug">Назначено ГЭП</p>
+              <p className="text-xl font-black text-slate-900 mt-1">
+                {formatKpiPercent(monthlyManagerSummary.assignedGepPct)}
+              </p>
+              <p className="text-[9px] text-slate-600 mt-1 leading-snug">
+                Назначено новых ÷ Квалификация × 100%
+              </p>
+            </div>
+            <div className="rounded-xl bg-teal-50/60 border border-teal-100 p-3">
+              <p className="text-[10px] text-teal-800 font-black uppercase leading-snug">Проведен ГЭП</p>
+              <p className="text-xl font-black text-teal-950 mt-1">
+                {formatKpiPercent(monthlyManagerSummary.conductedGepPct)}
+              </p>
+              <p className="text-[9px] text-teal-800/80 mt-1 leading-snug">
+                Проведено новых ÷ Назначено новых × 100%
+              </p>
+            </div>
           </div>
         </div>
       </section>
