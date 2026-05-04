@@ -21,6 +21,8 @@ import {
   LayoutGrid,
   UserCog,
 } from 'lucide-react';
+import { adminDateFilterBounds, reportDateMatchesAdminBounds } from './lib/periodBounds';
+import { PeriodFilterFields } from './components/PeriodFilterFields';
 import {
   type FormStats,
   type UiClient,
@@ -75,30 +77,6 @@ function formatDisplayDate(raw: string): string {
   const dmyDots = t.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
   if (dmyDots) return `${dmyDots[1].padStart(2, '0')}-${dmyDots[2].padStart(2, '0')}-${dmyDots[3]}`;
   return t;
-}
-
-/** Пустые даты в админских фильтрах = текущий календарный месяц (локально). */
-function adminDateFilterBounds(filterDateFrom: string, filterDateTo: string): {
-  from: string;
-  to: string;
-  isDefaultMonth: boolean;
-} {
-  const from = filterDateFrom.trim();
-  const to = filterDateTo.trim();
-  if (from || to) return { from, to, isDefaultMonth: false };
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = d.getMonth();
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const mo = pad(m + 1);
-  const last = String(new Date(y, m + 1, 0).getDate()).padStart(2, '0');
-  return { from: `${y}-${mo}-01`, to: `${y}-${mo}-${last}`, isDefaultMonth: true };
-}
-
-function reportDateMatchesAdminBounds(reportDate: string, bounds: { from: string; to: string }): boolean {
-  if (bounds.from && reportDate < bounds.from) return false;
-  if (bounds.to && reportDate > bounds.to) return false;
-  return true;
 }
 
 type SaveReportOptions = {
@@ -172,11 +150,11 @@ const App = () => {
   const [editingClientBin, setEditingClientBin] = useState<string | null>(null);
   const [clientHistoryFor, setClientHistoryFor] = useState<UiClient | null>(null);
   const [adminFilterManager, setAdminFilterManager] = useState('Все');
-  const [adminFilterDateFrom, setAdminFilterDateFrom] = useState('');
-  const [adminFilterDateTo, setAdminFilterDateTo] = useState('');
+  const [adminFilterDateFrom, setAdminFilterDateFrom] = useState(() => adminDateFilterBounds('', '').from);
+  const [adminFilterDateTo, setAdminFilterDateTo] = useState(() => adminDateFilterBounds('', '').to);
   const [ordersFilterManager, setOrdersFilterManager] = useState('Все');
-  const [ordersFilterDateFrom, setOrdersFilterDateFrom] = useState('');
-  const [ordersFilterDateTo, setOrdersFilterDateTo] = useState('');
+  const [ordersFilterDateFrom, setOrdersFilterDateFrom] = useState(() => adminDateFilterBounds('', '').from);
+  const [ordersFilterDateTo, setOrdersFilterDateTo] = useState(() => adminDateFilterBounds('', '').to);
   const [ordersFilterCounterparty, setOrdersFilterCounterparty] = useState('');
   const [managerOrdersSection, setManagerOrdersSection] = useState<'calendar' | 'meetings' | 'orders'>(() =>
     getSavedManagerOrdersSection(),
@@ -186,8 +164,8 @@ const App = () => {
   const [booting, setBooting] = useState(true);
   const [adminSubView, setAdminSubView] = useState<'dashboard' | 'kpi' | 'staff' | 'meetings'>(() => getSavedAdminSubView());
   const [kpiFilterManager, setKpiFilterManager] = useState('Все');
-  const [kpiFilterDateFrom, setKpiFilterDateFrom] = useState('');
-  const [kpiFilterDateTo, setKpiFilterDateTo] = useState('');
+  const [kpiFilterDateFrom, setKpiFilterDateFrom] = useState(() => adminDateFilterBounds('', '').from);
+  const [kpiFilterDateTo, setKpiFilterDateTo] = useState(() => adminDateFilterBounds('', '').to);
   const [kpiSaving, setKpiSaving] = useState(false);
 
   const supabaseOk = isSupabaseConfigured();
@@ -2277,8 +2255,9 @@ const AdminDashboard = ({
         managerOptions={managerOptions}
         onReset={() => {
           setFilterManager('Все');
-          setFilterDateFrom('');
-          setFilterDateTo('');
+          const b = adminDateFilterBounds('', '');
+          setFilterDateFrom(b.from);
+          setFilterDateTo(b.to);
         }}
       />
       <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 text-left">
@@ -2622,8 +2601,9 @@ const KpiDashboard = ({
         managerOptions={managerOptions}
         onReset={() => {
           setFilterManager('Все');
-          setFilterDateFrom('');
-          setFilterDateTo('');
+          const b = adminDateFilterBounds('', '');
+          setFilterDateFrom(b.from);
+          setFilterDateTo(b.to);
         }}
       />
       <section className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-5 shadow-sm">
@@ -2822,6 +2802,14 @@ const OrdersHistoryDashboard = ({
     [orders],
   );
 
+  const uniqueCounterpartiesCount = useMemo(() => {
+    const seen = new Set<string>();
+    for (const o of orders) {
+      seen.add(`${o.entityName.trim().toLowerCase()}|${o.bin.trim()}`);
+    }
+    return seen.size;
+  }, [orders]);
+
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-500 text-left">
       {isAdmin ? (
@@ -2835,37 +2823,27 @@ const OrdersHistoryDashboard = ({
           managerOptions={managerOptions}
           onReset={() => {
             setFilterManager('Все');
-            setFilterDateFrom('');
-            setFilterDateTo('');
+            const b = adminDateFilterBounds('', '');
+            setFilterDateFrom(b.from);
+            setFilterDateTo(b.to);
             setFilterCounterparty('');
           }}
         />
       ) : (
-        <div className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-6 shadow-sm flex flex-wrap gap-4 sm:gap-6 items-end">
-          <div className="w-full sm:flex-1 sm:min-w-[150px] space-y-1.5 text-left">
-            <label className="text-[10px] font-black text-gray-400 uppercase">Дата с</label>
-            <input
-              type="date"
-              className="w-full px-4 py-2.5 bg-gray-50 border rounded-xl text-sm"
-              value={filterDateFrom}
-              onChange={(e) => setFilterDateFrom(e.target.value)}
-            />
-          </div>
-          <div className="w-full sm:flex-1 sm:min-w-[150px] space-y-1.5 text-left">
-            <label className="text-[10px] font-black text-gray-400 uppercase">Дата по</label>
-            <input
-              type="date"
-              className="w-full px-4 py-2.5 bg-gray-50 border rounded-xl text-sm"
-              value={filterDateTo}
-              onChange={(e) => setFilterDateTo(e.target.value)}
-            />
-          </div>
-          <div className="w-full sm:w-auto">
+        <div className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4">
+          <PeriodFilterFields
+            from={filterDateFrom}
+            to={filterDateTo}
+            setFrom={setFilterDateFrom}
+            setTo={setFilterDateTo}
+          />
+          <div className="flex justify-end">
             <button
               type="button"
               onClick={() => {
-                setFilterDateFrom('');
-                setFilterDateTo('');
+                const b = adminDateFilterBounds('', '');
+                setFilterDateFrom(b.from);
+                setFilterDateTo(b.to);
                 setFilterCounterparty('');
               }}
               className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-gray-200 text-xs font-black uppercase tracking-wider text-gray-600 hover:bg-gray-50"
@@ -2908,6 +2886,10 @@ const OrdersHistoryDashboard = ({
         <div>
           <p className="text-[10px] font-black text-gray-400 uppercase">Количество заказов</p>
           <p className="text-lg font-black text-gray-900">{totalOrdersCount}</p>
+        </div>
+        <div>
+          <p className="text-[10px] font-black text-gray-400 uppercase">Уникальных контрагентов</p>
+          <p className="text-lg font-black text-gray-900">{uniqueCounterpartiesCount}</p>
         </div>
         <div>
           <p className="text-[10px] font-black text-gray-400 uppercase">Итого сумма по заказам</p>
@@ -2987,38 +2969,33 @@ const AdminFilters = ({
   managerOptions: string[];
   onReset: () => void;
 }) => (
-  <div className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-6 shadow-sm flex flex-wrap gap-4 sm:gap-6 items-end">
-    <div className="w-full sm:flex-1 sm:min-w-[200px] space-y-1.5 text-left">
-      <label className="text-[10px] font-black text-gray-400 uppercase">Менеджер</label>
-      <select
-        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-sm font-bold"
-        value={manager}
-        onChange={(e) => setManager(e.target.value)}
-      >
-        {managerOptions.map((m) => (
-          <option key={m} value={m}>
-            {m}
-          </option>
-        ))}
-      </select>
+  <div className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4">
+    <div className="flex flex-wrap gap-4 sm:gap-6 items-end justify-between">
+      <div className="w-full sm:flex-1 sm:min-w-[200px] space-y-1.5 text-left">
+        <label className="text-[10px] font-black text-gray-400 uppercase">Менеджер</label>
+        <select
+          className="w-full px-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-sm font-bold"
+          value={manager}
+          onChange={(e) => setManager(e.target.value)}
+        >
+          {managerOptions.map((m) => (
+            <option key={m} value={m}>
+              {m}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="w-full sm:w-auto flex-none self-end">
+        <button
+          type="button"
+          onClick={onReset}
+          className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-gray-200 text-xs font-black uppercase tracking-wider text-gray-600 hover:bg-gray-50"
+        >
+          Сбросить фильтр
+        </button>
+      </div>
     </div>
-    <div className="w-full sm:flex-1 sm:min-w-[150px] space-y-1.5 text-left">
-      <label className="text-[10px] font-black text-gray-400 uppercase">Дата с</label>
-      <input type="date" className="w-full px-4 py-2.5 bg-gray-50 border rounded-xl text-sm" value={from} onChange={(e) => setFrom(e.target.value)} />
-    </div>
-    <div className="w-full sm:flex-1 sm:min-w-[150px] space-y-1.5 text-left">
-      <label className="text-[10px] font-black text-gray-400 uppercase">Дата по</label>
-      <input type="date" className="w-full px-4 py-2.5 bg-gray-50 border rounded-xl text-sm" value={to} onChange={(e) => setTo(e.target.value)} />
-    </div>
-    <div className="flex-none">
-    <button
-        type="button"
-        onClick={onReset}
-      className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-gray-200 text-xs font-black uppercase tracking-wider text-gray-600 hover:bg-gray-50"
-      >
-        Сбросить фильтр
-      </button>
-    </div>
+    <PeriodFilterFields from={from} to={to} setFrom={setFrom} setTo={setTo} />
   </div>
 );
 
