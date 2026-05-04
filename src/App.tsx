@@ -77,6 +77,30 @@ function formatDisplayDate(raw: string): string {
   return t;
 }
 
+/** Пустые даты в админских фильтрах = текущий календарный месяц (локально). */
+function adminDateFilterBounds(filterDateFrom: string, filterDateTo: string): {
+  from: string;
+  to: string;
+  isDefaultMonth: boolean;
+} {
+  const from = filterDateFrom.trim();
+  const to = filterDateTo.trim();
+  if (from || to) return { from, to, isDefaultMonth: false };
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = d.getMonth();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const mo = pad(m + 1);
+  const last = String(new Date(y, m + 1, 0).getDate()).padStart(2, '0');
+  return { from: `${y}-${mo}-01`, to: `${y}-${mo}-${last}`, isDefaultMonth: true };
+}
+
+function reportDateMatchesAdminBounds(reportDate: string, bounds: { from: string; to: string }): boolean {
+  if (bounds.from && reportDate < bounds.from) return false;
+  if (bounds.to && reportDate > bounds.to) return false;
+  return true;
+}
+
 type SaveReportOptions = {
   silent?: boolean;
   skipValidation?: boolean;
@@ -579,20 +603,18 @@ const App = () => {
   };
 
   const filteredReports = useMemo(() => {
+    const bounds = adminDateFilterBounds(adminFilterDateFrom, adminFilterDateTo);
     return allReports.filter((report) => {
       const matchManager = adminFilterManager === 'Все' || report.manager === adminFilterManager;
-      const matchDateFrom = !adminFilterDateFrom || report.date >= adminFilterDateFrom;
-      const matchDateTo = !adminFilterDateTo || report.date <= adminFilterDateTo;
-      return matchManager && matchDateFrom && matchDateTo;
+      return matchManager && reportDateMatchesAdminBounds(report.date, bounds);
     });
   }, [allReports, adminFilterManager, adminFilterDateFrom, adminFilterDateTo]);
 
   const kpiFilteredReports = useMemo(() => {
+    const bounds = adminDateFilterBounds(kpiFilterDateFrom, kpiFilterDateTo);
     return allReports.filter((report) => {
       const matchManager = kpiFilterManager === 'Все' || report.manager === kpiFilterManager;
-      const matchDateFrom = !kpiFilterDateFrom || report.date >= kpiFilterDateFrom;
-      const matchDateTo = !kpiFilterDateTo || report.date <= kpiFilterDateTo;
-      return matchManager && matchDateFrom && matchDateTo;
+      return matchManager && reportDateMatchesAdminBounds(report.date, bounds);
     });
   }, [allReports, kpiFilterManager, kpiFilterDateFrom, kpiFilterDateTo]);
 
@@ -1992,6 +2014,11 @@ const AdminDashboard = ({
   const normalizeBin = (value: string) => value.replace(/\D/g, '');
   const buildCounterpartyKey = (name: string, bin: string) => `${normalizeBin(bin)}|${normalizeText(name)}`;
 
+  const analyticsPeriod = useMemo(() => adminDateFilterBounds(filterDateFrom, filterDateTo), [filterDateFrom, filterDateTo]);
+  const analyticsPeriodLabel = `${formatDisplayDate(analyticsPeriod.from)} — ${formatDisplayDate(analyticsPeriod.to)}${
+    analyticsPeriod.isDefaultMonth ? ' · текущий месяц по умолчанию' : ''
+  }`;
+
   const hasConductedEvidence = (planned: UiAssigned, manager: string) => {
     const plannedName = normalizeText(planned.entityName);
     const plannedBin = normalizeBin(planned.bin);
@@ -2135,7 +2162,8 @@ const AdminDashboard = ({
         </p>
       </div>
       <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
-        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Общая сводка</p>
+        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Общая сводка</p>
+        <p className="text-[10px] text-gray-500 mb-3">{analyticsPeriodLabel}</p>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="rounded-xl border border-indigo-100 bg-indigo-50/70 p-3">
             <p className="text-[10px] text-indigo-700 font-black uppercase">План</p>
@@ -2276,30 +2304,6 @@ function countConductedRepeatMeetings(report: FullReport): number {
   return report.conductedMeetings.filter((m) => isRepeatMeetingType(m.type)).length;
 }
 
-/** Границы для блока «Общая сводка»: пустые даты KPI = текущий календарный месяц (локально), иначе как у фильтра таблицы. */
-function kpiSummaryPeriodBounds(filterDateFrom: string, filterDateTo: string): {
-  from: string;
-  to: string;
-  isDefaultMonth: boolean;
-} {
-  const from = filterDateFrom.trim();
-  const to = filterDateTo.trim();
-  if (from || to) return { from, to, isDefaultMonth: false };
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = d.getMonth();
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const mo = pad(m + 1);
-  const last = String(new Date(y, m + 1, 0).getDate()).padStart(2, '0');
-  return { from: `${y}-${mo}-01`, to: `${y}-${mo}-${last}`, isDefaultMonth: true };
-}
-
-function reportDateInKpiSummaryRange(reportDate: string, bounds: { from: string; to: string }): boolean {
-  if (bounds.from && reportDate < bounds.from) return false;
-  if (bounds.to && reportDate > bounds.to) return false;
-  return true;
-}
-
 const KpiDashboard = ({
   allReports,
   reports,
@@ -2323,6 +2327,11 @@ const KpiDashboard = ({
   managerOptions: string[];
   onDeleteReport: (reportId: string) => void;
 }) => {
+  const kpiTablePeriod = useMemo(() => adminDateFilterBounds(filterDateFrom, filterDateTo), [filterDateFrom, filterDateTo]);
+  const kpiTablePeriodLabel = `${formatDisplayDate(kpiTablePeriod.from)} — ${formatDisplayDate(kpiTablePeriod.to)}${
+    kpiTablePeriod.isDefaultMonth ? ' · текущий месяц по умолчанию' : ''
+  }`;
+
   const kpiRows = useMemo(() => {
     const byKey = new Map<string, FullReport>();
     for (const r of reports) {
@@ -2355,12 +2364,12 @@ const KpiDashboard = ({
   }, [kpiRows, allReports]);
 
   const monthlyManagerSummary = useMemo(() => {
-    const bounds = kpiSummaryPeriodBounds(filterDateFrom, filterDateTo);
+    const bounds = adminDateFilterBounds(filterDateFrom, filterDateTo);
     const periodLabel = `${formatDisplayDate(bounds.from)} — ${formatDisplayDate(bounds.to)}`;
     const monthPrefix = bounds.from.slice(0, 7);
     const source = allReports.filter((r) => {
       const matchManager = filterManager === 'Все' || r.manager === filterManager;
-      return matchManager && reportDateInKpiSummaryRange(r.date, bounds);
+      return matchManager && reportDateMatchesAdminBounds(r.date, bounds);
     });
     const byKey = new Map<string, FullReport>();
     for (const r of source) {
@@ -2469,6 +2478,7 @@ const KpiDashboard = ({
       <section className="bg-white border border-gray-200 rounded-3xl shadow-sm overflow-x-auto text-left">
         <div className="px-6 pt-5 pb-2 space-y-1">
           <h3 className="text-xs font-black text-gray-700 uppercase tracking-widest">Отдельный отчёт по KPI менеджеров</h3>
+          <p className="text-[10px] text-gray-500">{kpiTablePeriodLabel}</p>
           <p className="text-[10px] text-gray-500 leading-relaxed">
             Столбцы встреч считаются автоматически из назначенных и проведённых встреч отчёта (тип «Новая» / «Повторная» по полю типа встречи).
           </p>
