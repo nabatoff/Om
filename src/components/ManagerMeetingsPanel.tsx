@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Calendar, CalendarDays, ChevronLeft, ChevronRight, Clock, RotateCcw, Trash2 } from 'lucide-react';
 import { type DeletedMeeting, type FullReport, type UiAssigned, type UiConducted, updateConductedMeetingCpById } from '../lib/crmApi';
+import { adminDateFilterBounds } from '../lib/periodBounds';
+import { PeriodFilterFields } from './PeriodFilterFields';
 
 export type UiAssignedWithReport = UiAssigned & { reportDate: string };
 type UiMeetingWithReport = UiAssignedWithReport & {
@@ -49,12 +51,6 @@ function addDaysYmd(ymd: string, add: number): string {
   const x = new Date(y, m - 1, d);
   x.setDate(x.getDate() + add);
   return localYmd(x);
-}
-
-function buildLastDaysRange(days: number): { from: string; to: string } {
-  const to = localYmd(new Date());
-  const from = addDaysYmd(to, -(days - 1));
-  return { from, to };
 }
 
 function normalizeMeetingType(value: string): string {
@@ -349,8 +345,8 @@ export function ManagerMeetingsPanel({
     return { y: d.getFullYear(), m: d.getMonth() };
   });
   const [selectedYmd, setSelectedYmd] = useState(todayYmd);
-  const [assignedFilterFrom, setAssignedFilterFrom] = useState('');
-  const [assignedFilterTo, setAssignedFilterTo] = useState('');
+  const [assignedFilterFrom, setAssignedFilterFrom] = useState(() => adminDateFilterBounds('', '').from);
+  const [assignedFilterTo, setAssignedFilterTo] = useState(() => adminDateFilterBounds('', '').to);
   const [assignedStatusFilter, setAssignedStatusFilter] = useState<'all' | 'done' | 'pending'>('all');
   const [assignedTypeFilter, setAssignedTypeFilter] = useState<'all' | 'Новая' | 'Повторная'>('all');
   const [assignedCounterpartyFilter, setAssignedCounterpartyFilter] = useState('');
@@ -506,7 +502,8 @@ export function ManagerMeetingsPanel({
             <CalendarDays size={16} className="text-blue-500" />
             Все встречи (все менеджеры)
           </h3>
-          <div className="bg-gray-50/70 border border-gray-100 rounded-2xl p-3 sm:p-4 mb-4 flex flex-wrap gap-3 items-end">
+          <div className="bg-gray-50/70 border border-gray-100 rounded-2xl p-3 sm:p-4 mb-4 flex flex-col gap-4">
+            <div className="flex flex-wrap gap-3 items-end">
             <div className="space-y-1.5 w-full sm:w-auto sm:min-w-[200px]">
               <label className="text-[10px] font-black text-gray-400 uppercase">Менеджер</label>
               <select
@@ -520,24 +517,6 @@ export function ManagerMeetingsPanel({
                   </option>
                 ))}
               </select>
-            </div>
-            <div className="space-y-1.5 w-full sm:w-auto">
-              <label className="text-[10px] font-black text-gray-400 uppercase">Дата с</label>
-              <input
-                type="date"
-                className="w-full sm:w-auto px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm"
-                value={assignedFilterFrom}
-                onChange={(e) => setAssignedFilterFrom(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5 w-full sm:w-auto">
-              <label className="text-[10px] font-black text-gray-400 uppercase">Дата по</label>
-              <input
-                type="date"
-                className="w-full sm:w-auto px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm"
-                value={assignedFilterTo}
-                onChange={(e) => setAssignedFilterTo(e.target.value)}
-              />
             </div>
             <div className="space-y-1.5 w-full sm:w-auto sm:min-w-[200px]">
               <label className="text-[10px] font-black text-gray-400 uppercase">Контрагент / БИН</label>
@@ -569,54 +548,17 @@ export function ManagerMeetingsPanel({
                 onChange={(e) => setAssignedStatusFilter(e.target.value as 'all' | 'done' | 'pending')}
               >
                 <option value="all">Все</option>
-                <option value="done">Выполнено</option>
+                <option value="done">Выполнено</option              >
                 <option value="pending">Ожидает</option>
               </select>
-            </div>
-            <div className="w-full sm:w-auto sm:min-w-[250px]">
-              <p className="text-[10px] font-black text-gray-400 uppercase mb-1.5">Быстрый период</p>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const today = localYmd(new Date());
-                    setAssignedFilterFrom(today);
-                    setAssignedFilterTo(today);
-                  }}
-                  className="px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider border border-gray-200 text-gray-600 hover:bg-white"
-                >
-                  Сегодня
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const range = buildLastDaysRange(7);
-                    setAssignedFilterFrom(range.from);
-                    setAssignedFilterTo(range.to);
-                  }}
-                  className="px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider border border-gray-200 text-gray-600 hover:bg-white"
-                >
-                  7 дней
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const range = buildLastDaysRange(30);
-                    setAssignedFilterFrom(range.from);
-                    setAssignedFilterTo(range.to);
-                  }}
-                  className="px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider border border-gray-200 text-gray-600 hover:bg-white"
-                >
-                  30 дней
-                </button>
-              </div>
             </div>
             <button
               type="button"
               onClick={() => {
                 setAdminMeetingsManager('Все');
-                setAssignedFilterFrom('');
-                setAssignedFilterTo('');
+                const b = adminDateFilterBounds('', '');
+                setAssignedFilterFrom(b.from);
+                setAssignedFilterTo(b.to);
                 setAssignedStatusFilter('all');
                 setAssignedTypeFilter('all');
                 setAssignedCounterpartyFilter('');
@@ -625,6 +567,15 @@ export function ManagerMeetingsPanel({
             >
               Сбросить фильтр
             </button>
+            </div>
+            <div className="w-full bg-white/60 border border-gray-100 rounded-2xl p-3 sm:p-4">
+              <PeriodFilterFields
+                from={assignedFilterFrom}
+                to={assignedFilterTo}
+                setFrom={setAssignedFilterFrom}
+                setTo={setAssignedFilterTo}
+              />
+            </div>
           </div>
           <table className="w-full text-sm border-collapse min-w-[1020px]">
             <thead>
@@ -947,25 +898,16 @@ export function ManagerMeetingsPanel({
             <CalendarDays size={16} className="text-blue-500" />
             Все встречи
           </h3>
-          <div className="bg-gray-50/70 border border-gray-100 rounded-2xl p-3 sm:p-4 mb-4 flex flex-wrap gap-3 items-end">
-            <div className="space-y-1.5 w-full sm:w-auto">
-              <label className="text-[10px] font-black text-gray-400 uppercase">Дата с</label>
-              <input
-                type="date"
-                className="w-full sm:w-auto px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm"
-                value={assignedFilterFrom}
-                onChange={(e) => setAssignedFilterFrom(e.target.value)}
+          <div className="bg-gray-50/70 border border-gray-100 rounded-2xl p-3 sm:p-4 mb-4 flex flex-col gap-4">
+            <div className="w-full bg-white/60 border border-gray-100 rounded-2xl p-3 sm:p-4">
+              <PeriodFilterFields
+                from={assignedFilterFrom}
+                to={assignedFilterTo}
+                setFrom={setAssignedFilterFrom}
+                setTo={setAssignedFilterTo}
               />
             </div>
-            <div className="space-y-1.5 w-full sm:w-auto">
-              <label className="text-[10px] font-black text-gray-400 uppercase">Дата по</label>
-              <input
-                type="date"
-                className="w-full sm:w-auto px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm"
-                value={assignedFilterTo}
-                onChange={(e) => setAssignedFilterTo(e.target.value)}
-              />
-            </div>
+            <div className="flex flex-wrap gap-3 items-end">
             <div className="space-y-1.5 w-full sm:w-auto sm:min-w-[200px]">
               <label className="text-[10px] font-black text-gray-400 uppercase">Контрагент / БИН</label>
               <input
@@ -996,53 +938,16 @@ export function ManagerMeetingsPanel({
                 onChange={(e) => setAssignedStatusFilter(e.target.value as 'all' | 'done' | 'pending')}
               >
                 <option value="all">Все</option>
-                <option value="done">Выполнено</option>
+                <option value="done">Выполнено</option              >
                 <option value="pending">Ожидает</option>
               </select>
-            </div>
-            <div className="w-full sm:w-auto sm:min-w-[250px]">
-              <p className="text-[10px] font-black text-gray-400 uppercase mb-1.5">Быстрый период</p>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const today = localYmd(new Date());
-                    setAssignedFilterFrom(today);
-                    setAssignedFilterTo(today);
-                  }}
-                  className="px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider border border-gray-200 text-gray-600 hover:bg-white"
-                >
-                  Сегодня
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const range = buildLastDaysRange(7);
-                    setAssignedFilterFrom(range.from);
-                    setAssignedFilterTo(range.to);
-                  }}
-                  className="px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider border border-gray-200 text-gray-600 hover:bg-white"
-                >
-                  7 дней
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const range = buildLastDaysRange(30);
-                    setAssignedFilterFrom(range.from);
-                    setAssignedFilterTo(range.to);
-                  }}
-                  className="px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider border border-gray-200 text-gray-600 hover:bg-white"
-                >
-                  30 дней
-                </button>
-              </div>
             </div>
             <button
               type="button"
               onClick={() => {
-                setAssignedFilterFrom('');
-                setAssignedFilterTo('');
+                const b = adminDateFilterBounds('', '');
+                setAssignedFilterFrom(b.from);
+                setAssignedFilterTo(b.to);
                 setAssignedStatusFilter('all');
                 setAssignedTypeFilter('all');
                 setAssignedCounterpartyFilter('');
@@ -1051,6 +956,7 @@ export function ManagerMeetingsPanel({
             >
               Сбросить фильтр
             </button>
+            </div>
           </div>
           <table className="w-full text-sm border-collapse min-w-[900px]">
           <thead>
