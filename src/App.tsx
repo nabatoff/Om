@@ -1309,6 +1309,7 @@ const ManagerDashboard = ({
         icon={<Clock className="text-indigo-400" />}
         data={assignedMeetings}
         setData={setAssignedMeetings}
+        reportDate={reportDate}
         type="assigned"
         allReports={allReports}
         currentAssignedMeetings={assignedMeetings}
@@ -1323,6 +1324,7 @@ const ManagerDashboard = ({
         icon={<CalendarCheck className="text-blue-400" />}
         data={conductedMeetings}
         setData={setConductedMeetings}
+        reportDate={reportDate}
         type="conducted"
         allReports={allReports}
         currentAssignedMeetings={assignedMeetings}
@@ -1577,6 +1579,7 @@ const MeetingTable = ({
   icon,
   data,
   setData,
+  reportDate,
   type,
   allReports,
   currentAssignedMeetings,
@@ -1591,6 +1594,7 @@ const MeetingTable = ({
   icon: ReactNode;
   data: (UiAssigned | UiConducted)[];
   setData: SetState<UiAssigned[]> | SetState<UiConducted[]>;
+  reportDate: string;
   type: 'assigned' | 'conducted';
   allReports: FullReport[];
   currentAssignedMeetings: UiAssigned[];
@@ -1709,14 +1713,28 @@ const MeetingTable = ({
     setSavedRows(new Set(data.map(rowSig)));
   }, [seedKey]);
 
-  const addRow = () => {
-    const d = new Date().toISOString().split('T')[0];
+  useEffect(() => {
+    if (!reportDate) return;
+    const needsSync = data.some((row) => row.date !== reportDate);
+    if (!needsSync) return;
+    const synced = data.map((row) => ({ ...row, date: reportDate }));
     if (type === 'assigned') {
-      (setData as SetState<UiAssigned[]>)([...(data as UiAssigned[]), { entityName: '', bin: '', date: d, type: 'Новая' }]);
+      (setData as SetState<UiAssigned[]>)(synced as UiAssigned[]);
+    } else {
+      (setData as SetState<UiConducted[]>)(synced as UiConducted[]);
+    }
+  }, [data, reportDate, setData, type]);
+
+  const addRow = () => {
+    if (type === 'assigned') {
+      (setData as SetState<UiAssigned[]>)([
+        ...(data as UiAssigned[]),
+        { entityName: '', bin: '', date: reportDate, type: 'Новая' },
+      ]);
     } else {
       (setData as SetState<UiConducted[]>)([
         ...(data as UiConducted[]),
-        { entityName: '', bin: '', date: d, type: 'Новая', result: '', cpSent: false, cpQuantity: 0 },
+        { entityName: '', bin: '', date: reportDate, type: 'Новая', result: '', cpSent: false, cpQuantity: 0 },
       ]);
     }
   };
@@ -1834,12 +1852,9 @@ const MeetingTable = ({
                     />
                   </td>
                   <td className="py-4 px-4">
-                    <input
-                      type="date"
-                      className="w-full bg-gray-50/50 p-3 rounded-2xl text-sm font-bold h-[46px] outline-none"
-                      value={row.date}
-                      onChange={(e) => updateRow(idx, 'date', e.target.value)}
-                    />
+                    <div className="w-full bg-gray-50/50 p-3 rounded-2xl text-sm font-bold h-[46px] outline-none flex items-center justify-center text-gray-800">
+                      {formatDisplayDate(reportDate)}
+                    </div>
                   </td>
                   <td className="py-4 px-4">
                     <div className="relative">
