@@ -1826,7 +1826,6 @@ const MeetingTable = ({
             <thead>
               <tr className="text-[9px] font-black text-gray-400 uppercase border-b border-gray-50 tracking-widest">
                 <th className="pb-4">Контрагент / БИН</th>
-                <th className="pb-4 w-40 px-4 text-center">Дата</th>
                 <th className="pb-4 w-36 px-4 text-center">Тип</th>
                 {type === 'conducted' && (
                   <th className="pb-4 w-44 px-2 text-center text-[9px] font-black text-gray-400 uppercase tracking-widest">
@@ -1850,11 +1849,6 @@ const MeetingTable = ({
                       clients={clients}
                       onOpenAddClient={onOpenAddClient}
                     />
-                  </td>
-                  <td className="py-4 px-4">
-                    <div className="w-full bg-gray-50/50 p-3 rounded-2xl text-sm font-bold h-[46px] outline-none flex items-center justify-center text-gray-800">
-                      {formatDisplayDate(reportDate)}
-                    </div>
                   </td>
                   <td className="py-4 px-4">
                     <div className="relative">
