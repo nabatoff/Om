@@ -1922,7 +1922,7 @@ const MeetingTable = ({
                     <td className="py-4 px-2 align-top w-44">
                       <select
                         className="w-full bg-gray-50/50 p-2 rounded-2xl text-xs font-bold h-[46px] outline-none cursor-pointer"
-                        value={(row as UiConducted).cpSent && (row as UiConducted).cpQuantity >= 1 ? 'yes' : 'no'}
+                        value={(row as UiConducted).cpSent ? 'yes' : 'no'}
                         onChange={(e) => {
                           if (e.target.value === 'no') {
                             patchConductedRow(idx, { cpSent: false, cpQuantity: 0 });
@@ -1936,7 +1936,7 @@ const MeetingTable = ({
                         }}
                       >
                         <option value="no">Нет</option>
-                        <option value="yes">Да, ЦП отправлено</option>
+                        <option value="yes">Да, ЦП выставлено</option>
                       </select>
                       {(row as UiConducted).cpSent && (row as UiConducted).cpQuantity >= 1 ? (
                         <button

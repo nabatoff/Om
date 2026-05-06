@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
 import {
+  ALL_TIME_FROM,
+  ALL_TIME_TO,
   adminDateFilterBounds,
   buildMonthSelectOptions,
   calendarMonthFromYm,
@@ -51,7 +53,9 @@ export function PeriodFilterFields({ from, to, setFrom, setTo }: Props) {
       return;
     }
     setForceRangeUi(false);
-    if (v === 'today') {
+    if (v === 'all') {
+      apply(ALL_TIME_FROM, ALL_TIME_TO);
+    } else if (v === 'today') {
       const b = todayPeriodBounds();
       apply(b.from, b.to);
     } else if (v === 'week') {
@@ -100,6 +104,16 @@ export function PeriodFilterFields({ from, to, setFrom, setTo }: Props) {
         >
           30 дней
         </button>
+        <button
+          type="button"
+          className={quickBtn}
+          onClick={() => {
+            setForceRangeUi(false);
+            apply(ALL_TIME_FROM, ALL_TIME_TO);
+          }}
+        >
+          Все время
+        </button>
       </div>
       <div className="flex flex-wrap gap-3 sm:gap-4 items-end">
         <div className="w-full sm:flex-1 sm:min-w-[200px] space-y-1.5">
@@ -112,6 +126,7 @@ export function PeriodFilterFields({ from, to, setFrom, setTo }: Props) {
             <option value="today">Сегодня</option>
             <option value="week">Текущая неделя</option>
             <option value="month">Месяц</option>
+            <option value="all">Все время</option>
             <option value="range">Свой диапазон</option>
           </select>
         </div>

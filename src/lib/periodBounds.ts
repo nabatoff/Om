@@ -25,6 +25,9 @@ export function reportDateMatchesAdminBounds(reportDate: string, bounds: { from:
   return true;
 }
 
+export const ALL_TIME_FROM = '1000-01-01';
+export const ALL_TIME_TO = '9999-12-31';
+
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
 export function formatYmdLocal(d: Date): string {
@@ -62,13 +65,14 @@ export function calendarMonthFromYm(ym: string): { from: string; to: string } | 
   return { from: `${m[1]}-${m[2]}-01`, to: `${m[1]}-${m[2]}-${String(last).padStart(2, '0')}` };
 }
 
-export type PeriodFilterKind = 'today' | 'week' | 'month' | 'range';
+export type PeriodFilterKind = 'today' | 'week' | 'month' | 'range' | 'all';
 
 export function inferPeriodFilterKind(from: string, to: string): { kind: PeriodFilterKind; monthYm: string } {
   const f = from.trim();
   const t = to.trim();
   const def = adminDateFilterBounds('', '');
   const defaultYm = def.from.slice(0, 7);
+  if (f === ALL_TIME_FROM && t === ALL_TIME_TO) return { kind: 'all', monthYm: defaultYm };
   if (!f && !t) return { kind: 'month', monthYm: defaultYm };
 
   const td = todayPeriodBounds();
