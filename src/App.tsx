@@ -55,6 +55,7 @@ import { useAuth } from './context/AuthContext';
 import { LoginView } from './components/LoginView';
 import { StaffManager } from './components/StaffManager';
 import { ManagerMeetingsPanel } from './components/ManagerMeetingsPanel';
+import { postTelegramDailyDigestIfConfigured } from './lib/telegramDailyDigest';
 
 const DAILY_CALL_GOAL = 22;
 
@@ -170,27 +171,37 @@ const App = () => {
 
   const supabaseOk = isSupabaseConfigured();
 
-  const refresh = useCallback(async () => {
+  const loadReports = useCallback(async (): Promise<FullReport[]> => {
     if (!supabaseOk) {
       setBooting(false);
-      return;
+      return [];
     }
     if (!sessionUserId) {
       setBooting(false);
-      return;
+      return [];
     }
     setLoadError(null);
     try {
-      const [c, r, basket] = await Promise.all([fetchClientsApi(), fetchReportsApi(), isAdmin ? fetchDeletedMeetingsApi() : Promise.resolve([])]);
+      const [c, r, basket] = await Promise.all([
+        fetchClientsApi(),
+        fetchReportsApi(),
+        isAdmin ? fetchDeletedMeetingsApi() : Promise.resolve([]),
+      ]);
       setClients(c);
       setAllReports(r);
       setDeletedMeetings(basket);
+      return r;
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Ошибка загрузки');
+      return [];
     } finally {
       setBooting(false);
     }
-  }, [supabaseOk, sessionUserId]);
+  }, [supabaseOk, sessionUserId, isAdmin]);
+
+  const refresh = useCallback(async () => {
+    await loadReports();
+  }, [loadReports]);
 
   useEffect(() => {
     void refresh();
@@ -295,7 +306,16 @@ const App = () => {
         conductedMeetings,
         confirmedOrders,
       });
-      if (refreshAfterSave) await refresh();
+      const webhook = (import.meta.env.VITE_TELEGRAM_REPORT_WEBHOOK_URL ?? '').trim();
+      let latestReports: FullReport[] = allReports;
+      if (refreshAfterSave || webhook) latestReports = await loadReports();
+      if (webhook) {
+        try {
+          await postTelegramDailyDigestIfConfigured(latestReports, managerReportDate);
+        } catch (err) {
+          console.error('[telegram digest]', err);
+        }
+      }
       if (isAdmin) setCurrentView('admin');
       return true;
     } catch (e) {
