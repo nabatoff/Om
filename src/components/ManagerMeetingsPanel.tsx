@@ -379,8 +379,10 @@ export function ManagerMeetingsPanel({
   const defaultPeriod = () => adminDateFilterBounds('', '');
   const [assignedFilterFrom, setAssignedFilterFrom] = useState(() => defaultPeriod().from);
   const [assignedFilterTo, setAssignedFilterTo] = useState(() => defaultPeriod().to);
-  const [conductedFilterFrom, setConductedFilterFrom] = useState(ALL_TIME_FROM);
-  const [conductedFilterTo, setConductedFilterTo] = useState(ALL_TIME_TO);
+  const [conductedFilterFrom, setConductedFilterFrom] = useState(() => defaultPeriod().from);
+  const [conductedFilterTo, setConductedFilterTo] = useState(() => defaultPeriod().to);
+  /** admin «Все встречи»: один активный фильтр периода — по назначению или по проведению. */
+  const [adminPeriodMode, setAdminPeriodMode] = useState<'assigned' | 'conducted'>('assigned');
   const [assignedStatusFilter, setAssignedStatusFilter] = useState<'all' | 'done' | 'pending'>('all');
   const [assignedTypeFilter, setAssignedTypeFilter] = useState<'all' | 'Новая' | 'Повторная'>('all');
   const [assignedCounterpartyFilter, setAssignedCounterpartyFilter] = useState('');
@@ -461,8 +463,6 @@ export function ManagerMeetingsPanel({
 
   const filteredAssignedRows = useMemo(() => {
     const counterpartyNeedle = assignedCounterpartyFilter.trim().toLowerCase();
-    const useAssignedPeriod = variant !== 'admin' || !isAllTimePeriodBounds(assignedFilterFrom, assignedFilterTo);
-    const useConductedPeriod = variant === 'admin' && !isAllTimePeriodBounds(conductedFilterFrom, conductedFilterTo);
     return rows.filter((a) => {
       if (variant === 'admin' && adminMeetingsManager !== 'Все' && a.manager !== adminMeetingsManager) return false;
       if (counterpartyNeedle) {
@@ -470,20 +470,25 @@ export function ManagerMeetingsPanel({
         const bin = a.bin.trim().toLowerCase();
         if (!name.includes(counterpartyNeedle) && !bin.includes(counterpartyNeedle)) return false;
       }
-      if (useAssignedPeriod) {
-        const assignYmd = variant === 'admin' ? assignmentDateYmd(a, allReports) : toYmd(a.date);
-        if (!assignYmd) return false;
-        if (assignedFilterFrom && assignYmd < assignedFilterFrom) return false;
-        if (assignedFilterTo && assignYmd > assignedFilterTo) return false;
-      }
-      if (useConductedPeriod) {
-        const condYmd = conductedDateYmd(a, findEvidence);
-        if (!condYmd) return false;
-        if (conductedFilterFrom && condYmd < conductedFilterFrom) return false;
-        if (conductedFilterTo && condYmd > conductedFilterTo) return false;
-      } else if (variant !== 'admin') {
+      if (variant === 'admin') {
+        if (adminPeriodMode === 'assigned') {
+          if (!isAllTimePeriodBounds(assignedFilterFrom, assignedFilterTo)) {
+            const assignYmd = assignmentDateYmd(a, allReports);
+            if (!assignYmd) return false;
+            if (assignedFilterFrom && assignYmd < assignedFilterFrom) return false;
+            if (assignedFilterTo && assignYmd > assignedFilterTo) return false;
+          }
+        } else if (!isAllTimePeriodBounds(conductedFilterFrom, conductedFilterTo)) {
+          const condYmd = conductedDateYmd(a, findEvidence);
+          if (!condYmd) return false;
+          if (conductedFilterFrom && condYmd < conductedFilterFrom) return false;
+          if (conductedFilterTo && condYmd > conductedFilterTo) return false;
+        }
+      } else {
         const ymd = toYmd(a.date);
         if (!ymd) return false;
+        if (assignedFilterFrom && ymd < assignedFilterFrom) return false;
+        if (assignedFilterTo && ymd > assignedFilterTo) return false;
       }
       const isDone = a.source === 'conducted' ? true : Boolean(findEvidence(a, a.manager));
       if (assignedStatusFilter === 'done' && !isDone) return false;
@@ -503,6 +508,7 @@ export function ManagerMeetingsPanel({
     assignedFilterTo,
     conductedFilterFrom,
     conductedFilterTo,
+    adminPeriodMode,
     allReports,
     assignedStatusFilter,
     assignedTypeFilter,
@@ -607,10 +613,11 @@ export function ManagerMeetingsPanel({
               onClick={() => {
                 setAdminMeetingsManager('Все');
                 const b = adminDateFilterBounds('', '');
+                setAdminPeriodMode('assigned');
                 setAssignedFilterFrom(b.from);
                 setAssignedFilterTo(b.to);
-                setConductedFilterFrom(ALL_TIME_FROM);
-                setConductedFilterTo(ALL_TIME_TO);
+                setConductedFilterFrom(b.from);
+                setConductedFilterTo(b.to);
                 setAssignedStatusFilter('all');
                 setAssignedTypeFilter('all');
                 setAssignedCounterpartyFilter('');
@@ -620,23 +627,27 @@ export function ManagerMeetingsPanel({
               Сбросить фильтр
             </button>
             </div>
-            <div className="w-full grid gap-4 lg:grid-cols-2">
-              <div className="bg-white/60 border border-gray-100 rounded-2xl p-3 sm:p-4">
-                <PeriodFilterFields
-                  sectionTitle="Период по дате назначения"
-                  from={assignedFilterFrom}
-                  to={assignedFilterTo}
-                  setFrom={setAssignedFilterFrom}
-                  setTo={setAssignedFilterTo}
-                />
+            <div className="w-full flex flex-col gap-3">
+              <div className="space-y-1.5 w-full sm:max-w-md">
+                <label className="text-[10px] font-black text-gray-400 uppercase">Фильтр по дате</label>
+                <select
+                  className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm font-semibold"
+                  value={adminPeriodMode}
+                  onChange={(e) => setAdminPeriodMode(e.target.value as 'assigned' | 'conducted')}
+                >
+                  <option value="assigned">По дате назначения</option>
+                  <option value="conducted">По дате проведения</option>
+                </select>
               </div>
               <div className="bg-white/60 border border-gray-100 rounded-2xl p-3 sm:p-4">
                 <PeriodFilterFields
-                  sectionTitle="Период по дате проведения"
-                  from={conductedFilterFrom}
-                  to={conductedFilterTo}
-                  setFrom={setConductedFilterFrom}
-                  setTo={setConductedFilterTo}
+                  sectionTitle={
+                    adminPeriodMode === 'assigned' ? 'Период по дате назначения' : 'Период по дате проведения'
+                  }
+                  from={adminPeriodMode === 'assigned' ? assignedFilterFrom : conductedFilterFrom}
+                  to={adminPeriodMode === 'assigned' ? assignedFilterTo : conductedFilterTo}
+                  setFrom={adminPeriodMode === 'assigned' ? setAssignedFilterFrom : setConductedFilterFrom}
+                  setTo={adminPeriodMode === 'assigned' ? setAssignedFilterTo : setConductedFilterTo}
                 />
               </div>
             </div>
