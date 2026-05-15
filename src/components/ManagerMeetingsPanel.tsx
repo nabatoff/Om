@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Calendar, CalendarDays, ChevronLeft, ChevronRight, Clock, RotateCcw, Trash2 } from 'lucide-react';
 import { type DeletedMeeting, type FullReport, type UiAssigned, type UiConducted, updateConductedMeetingCpById } from '../lib/crmApi';
-import { adminDateFilterBounds } from '../lib/periodBounds';
+import { ALL_TIME_FROM, ALL_TIME_TO, adminDateFilterBounds } from '../lib/periodBounds';
 import { PeriodFilterFields } from './PeriodFilterFields';
 
 export type UiAssignedWithReport = UiAssigned & { reportDate: string };
@@ -119,6 +119,37 @@ function assignedPlanColumnLabel(a: UiMeetingWithReport, allReports: FullReport[
 }
 
 /** Плановая дата в первой колонке; фактическая дата проведения — из проведённой встречи или «—». */
+function isAllTimePeriodBounds(from: string, to: string): boolean {
+  return from === ALL_TIME_FROM && to === ALL_TIME_TO;
+}
+
+/** YYYY-MM-DD даты назначения (для assigned — date строки; для conducted-only — из плана). */
+function assignmentDateYmd(a: UiMeetingWithReport, allReports: FullReport[]): string | null {
+  if (a.source === 'assigned') return toYmd(a.date);
+  const report = allReports.find((r) => r.date === a.reportDate && r.manager === a.manager);
+  if (!report) return null;
+  const candidates = report.assignedMeetings.filter(
+    (m) =>
+      m.bin.trim() === a.bin.trim() &&
+      m.entityName.trim().toLowerCase() === a.entityName.trim().toLowerCase() &&
+      normalizeMeetingType(m.type) === normalizeMeetingType(a.type),
+  );
+  if (candidates.length === 0) return null;
+  const sorted = [...candidates].sort((x, y) => meetingDateSortKey(x.date).localeCompare(meetingDateSortKey(y.date)));
+  return toYmd(sorted[0]!.date);
+}
+
+/** YYYY-MM-DD фактической даты проведения или null, если встреча ещё не проведена. */
+function conductedDateYmd(
+  a: UiMeetingWithReport,
+  findEvidence: (planned: UiAssigned, manager: string) => { evidence: UiConducted; reportDate: string } | null,
+): string | null {
+  if (a.source === 'conducted') return toYmd(a.date);
+  const pack = findEvidence(a, a.manager);
+  if (!pack) return null;
+  return toYmd(pack.evidence.date);
+}
+
 function meetingConductedLabel(
   a: UiMeetingWithReport,
   findEvidence: (planned: UiAssigned, manager: string) => { evidence: UiConducted; reportDate: string } | null,
@@ -345,8 +376,11 @@ export function ManagerMeetingsPanel({
     return { y: d.getFullYear(), m: d.getMonth() };
   });
   const [selectedYmd, setSelectedYmd] = useState(todayYmd);
-  const [assignedFilterFrom, setAssignedFilterFrom] = useState(() => adminDateFilterBounds('', '').from);
-  const [assignedFilterTo, setAssignedFilterTo] = useState(() => adminDateFilterBounds('', '').to);
+  const defaultPeriod = () => adminDateFilterBounds('', '');
+  const [assignedFilterFrom, setAssignedFilterFrom] = useState(() => defaultPeriod().from);
+  const [assignedFilterTo, setAssignedFilterTo] = useState(() => defaultPeriod().to);
+  const [conductedFilterFrom, setConductedFilterFrom] = useState(ALL_TIME_FROM);
+  const [conductedFilterTo, setConductedFilterTo] = useState(ALL_TIME_TO);
   const [assignedStatusFilter, setAssignedStatusFilter] = useState<'all' | 'done' | 'pending'>('all');
   const [assignedTypeFilter, setAssignedTypeFilter] = useState<'all' | 'Новая' | 'Повторная'>('all');
   const [assignedCounterpartyFilter, setAssignedCounterpartyFilter] = useState('');
@@ -427,17 +461,30 @@ export function ManagerMeetingsPanel({
 
   const filteredAssignedRows = useMemo(() => {
     const counterpartyNeedle = assignedCounterpartyFilter.trim().toLowerCase();
+    const useAssignedPeriod = variant !== 'admin' || !isAllTimePeriodBounds(assignedFilterFrom, assignedFilterTo);
+    const useConductedPeriod = variant === 'admin' && !isAllTimePeriodBounds(conductedFilterFrom, conductedFilterTo);
     return rows.filter((a) => {
-      const ymd = toYmd(a.date);
-      if (!ymd) return false;
       if (variant === 'admin' && adminMeetingsManager !== 'Все' && a.manager !== adminMeetingsManager) return false;
       if (counterpartyNeedle) {
         const name = a.entityName.trim().toLowerCase();
         const bin = a.bin.trim().toLowerCase();
         if (!name.includes(counterpartyNeedle) && !bin.includes(counterpartyNeedle)) return false;
       }
-      if (assignedFilterFrom && ymd < assignedFilterFrom) return false;
-      if (assignedFilterTo && ymd > assignedFilterTo) return false;
+      if (useAssignedPeriod) {
+        const assignYmd = variant === 'admin' ? assignmentDateYmd(a, allReports) : toYmd(a.date);
+        if (!assignYmd) return false;
+        if (assignedFilterFrom && assignYmd < assignedFilterFrom) return false;
+        if (assignedFilterTo && assignYmd > assignedFilterTo) return false;
+      }
+      if (useConductedPeriod) {
+        const condYmd = conductedDateYmd(a, findEvidence);
+        if (!condYmd) return false;
+        if (conductedFilterFrom && condYmd < conductedFilterFrom) return false;
+        if (conductedFilterTo && condYmd > conductedFilterTo) return false;
+      } else if (variant !== 'admin') {
+        const ymd = toYmd(a.date);
+        if (!ymd) return false;
+      }
       const isDone = a.source === 'conducted' ? true : Boolean(findEvidence(a, a.manager));
       if (assignedStatusFilter === 'done' && !isDone) return false;
       if (assignedStatusFilter === 'pending' && isDone) return false;
@@ -454,6 +501,9 @@ export function ManagerMeetingsPanel({
     adminMeetingsManager,
     assignedFilterFrom,
     assignedFilterTo,
+    conductedFilterFrom,
+    conductedFilterTo,
+    allReports,
     assignedStatusFilter,
     assignedTypeFilter,
     assignedCounterpartyFilter,
@@ -548,7 +598,7 @@ export function ManagerMeetingsPanel({
                 onChange={(e) => setAssignedStatusFilter(e.target.value as 'all' | 'done' | 'pending')}
               >
                 <option value="all">Все</option>
-                <option value="done">Выполнено</option              >
+                <option value="done">Выполнено</option>
                 <option value="pending">Ожидает</option>
               </select>
             </div>
@@ -559,6 +609,8 @@ export function ManagerMeetingsPanel({
                 const b = adminDateFilterBounds('', '');
                 setAssignedFilterFrom(b.from);
                 setAssignedFilterTo(b.to);
+                setConductedFilterFrom(ALL_TIME_FROM);
+                setConductedFilterTo(ALL_TIME_TO);
                 setAssignedStatusFilter('all');
                 setAssignedTypeFilter('all');
                 setAssignedCounterpartyFilter('');
@@ -568,13 +620,25 @@ export function ManagerMeetingsPanel({
               Сбросить фильтр
             </button>
             </div>
-            <div className="w-full bg-white/60 border border-gray-100 rounded-2xl p-3 sm:p-4">
-              <PeriodFilterFields
-                from={assignedFilterFrom}
-                to={assignedFilterTo}
-                setFrom={setAssignedFilterFrom}
-                setTo={setAssignedFilterTo}
-              />
+            <div className="w-full grid gap-4 lg:grid-cols-2">
+              <div className="bg-white/60 border border-gray-100 rounded-2xl p-3 sm:p-4">
+                <PeriodFilterFields
+                  sectionTitle="Период по дате назначения"
+                  from={assignedFilterFrom}
+                  to={assignedFilterTo}
+                  setFrom={setAssignedFilterFrom}
+                  setTo={setAssignedFilterTo}
+                />
+              </div>
+              <div className="bg-white/60 border border-gray-100 rounded-2xl p-3 sm:p-4">
+                <PeriodFilterFields
+                  sectionTitle="Период по дате проведения"
+                  from={conductedFilterFrom}
+                  to={conductedFilterTo}
+                  setFrom={setConductedFilterFrom}
+                  setTo={setConductedFilterTo}
+                />
+              </div>
             </div>
           </div>
           <table className="w-full text-sm border-collapse min-w-[1020px]">

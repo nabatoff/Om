@@ -20,9 +20,11 @@ type Props = {
   to: string;
   setFrom: Dispatch<SetStateAction<string>>;
   setTo: Dispatch<SetStateAction<string>>;
+  /** Заголовок блока (например «Период по дате назначения»). */
+  sectionTitle?: string;
 };
 
-export function PeriodFilterFields({ from, to, setFrom, setTo }: Props) {
+export function PeriodFilterFields({ from, to, setFrom, setTo, sectionTitle }: Props) {
   const inferred = useMemo(() => inferPeriodFilterKind(from, to), [from, to]);
   /** Пока даты совпадают с «неделей» и т.п., но в списке выбран «Свой диапазон» — показываем поля дат. */
   const [forceRangeUi, setForceRangeUi] = useState(false);
@@ -69,6 +71,9 @@ export function PeriodFilterFields({ from, to, setFrom, setTo }: Props) {
 
   return (
     <div className="w-full space-y-3 text-left">
+      {sectionTitle ? (
+        <p className="text-[10px] font-black text-gray-500 uppercase tracking-wide">{sectionTitle}</p>
+      ) : null}
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-[10px] font-black text-gray-400 uppercase shrink-0">Быстрый период</span>
         <button

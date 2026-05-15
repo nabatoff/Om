@@ -89,10 +89,9 @@ export async function handleCronReport(req: Request): Promise<Response> {
       (acc, r) => ({
         assigned: acc.assigned + Number(r.assigned_meetings ?? 0),
         conductedFact: acc.conductedFact + Number(r.conducted_fact ?? 0),
-        conductedNew: acc.conductedNew + Number(r.conducted_new ?? 0),
         ordersSum: acc.ordersSum + Number(r.confirmed_orders_sum ?? 0),
       }),
-      { assigned: 0, conductedFact: 0, conductedNew: 0, ordersSum: 0 },
+      { assigned: 0, conductedFact: 0, ordersSum: 0 },
     );
 
     const lines: string[] = [];
@@ -102,7 +101,6 @@ export async function handleCronReport(req: Request): Promise<Response> {
     lines.push("<b>Общая сводка</b>");
     lines.push(`• Назначено встреч: <b>${total.assigned}</b>`);
     lines.push(`• Факт проведено: <b>${total.conductedFact}</b>`);
-    lines.push(`• Проведено новых: <b>${total.conductedNew}</b>`);
     lines.push(`• Сумма подтверждённых заказов: <b>${money(total.ordersSum)} ₸</b>`);
     lines.push("");
     lines.push("<b>По менеджерам</b>");
@@ -118,7 +116,6 @@ export async function handleCronReport(req: Request): Promise<Response> {
         lines.push(`<b>${name}</b>`);
         lines.push(`  Назначено встреч: <b>${r.assigned_meetings ?? 0}</b>`);
         lines.push(`  Факт проведено: <b>${r.conducted_fact ?? 0}</b>`);
-        lines.push(`  Проведено новых: <b>${r.conducted_new ?? 0}</b>`);
         lines.push(`  Сумма подтверждённых заказов: <b>${money(Number(r.confirmed_orders_sum ?? 0))} ₸</b>`);
         const br = parseBreakdown(r.confirmed_orders_breakdown);
         if (br.length === 0) {
