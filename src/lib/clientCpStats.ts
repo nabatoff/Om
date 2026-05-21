@@ -1,4 +1,4 @@
-import type { FullReport } from './crmApi';
+import type { ClientStandaloneCp, FullReport } from './crmApi';
 
 export type ClientCpMeeting = {
   meetingId: string;
@@ -9,11 +9,19 @@ export type ClientCpMeeting = {
   manager: string;
 };
 
+export type ClientStandaloneCpView = ClientStandaloneCp & {
+  managerName?: string;
+};
+
 export type ClientListRow = {
   name: string;
   bin: string;
+  meetingCp: number;
+  extraCp: number;
   totalCp: number;
   cpMeetings: ClientCpMeeting[];
+  /** Записи «ЦП без встречи» по менеджерам (для этого БИН). */
+  standaloneByManager: ClientStandaloneCpView[];
 };
 
 export function reportBelongsToManager(
@@ -55,15 +63,18 @@ export function collectClientBinsFromReports(reports: FullReport[]): Map<string,
   return map;
 }
 
-export function clientCpStatsForBin(reports: FullReport[], bin: string): { totalCp: number; cpMeetings: ClientCpMeeting[] } {
+export function clientCpStatsForBin(
+  reports: FullReport[],
+  bin: string,
+): { meetingCp: number; cpMeetings: ClientCpMeeting[] } {
   const key = bin.trim();
   const cpMeetings: ClientCpMeeting[] = [];
-  let totalCp = 0;
+  let meetingCp = 0;
   for (const r of reports) {
     for (const m of r.conductedMeetings) {
       if (String(m.bin).trim() !== key) continue;
       const qty = m.cpSent && (m.cpQuantity ?? 0) >= 1 ? Math.max(0, m.cpQuantity) : 0;
-      totalCp += qty;
+      meetingCp += qty;
       const meetingId = m.id?.trim();
       if (meetingId) {
         cpMeetings.push({
@@ -78,13 +89,41 @@ export function clientCpStatsForBin(reports: FullReport[], bin: string): { total
     }
   }
   cpMeetings.sort((a, b) => b.reportDate.localeCompare(a.reportDate) || b.meetingDate.localeCompare(a.meetingDate));
-  return { totalCp, cpMeetings };
+  return { meetingCp, cpMeetings };
+}
+
+function standaloneForBin(
+  standaloneRows: ClientStandaloneCp[],
+  bin: string,
+  managerIdFilter?: string | null,
+  managerNameById?: Map<string, string>,
+): { extraCp: number; standaloneByManager: ClientStandaloneCpView[] } {
+  const key = bin.trim();
+  const list: ClientStandaloneCpView[] = [];
+  let extraCp = 0;
+  for (const row of standaloneRows) {
+    if (row.bin.trim() !== key) continue;
+    if (managerIdFilter && row.managerId !== managerIdFilter) continue;
+    extraCp += row.cpQuantity;
+    list.push({
+      ...row,
+      managerName: managerNameById?.get(row.managerId) ?? undefined,
+    });
+  }
+  list.sort((a, b) => (a.managerName ?? '').localeCompare(b.managerName ?? '', 'ru'));
+  return { extraCp, standaloneByManager: list };
 }
 
 export function buildClientListRows(
   reports: FullReport[],
   catalog: { name: string; bin: string }[],
-  options?: { managerId?: string | null; managerName?: string; allCatalog?: boolean },
+  standaloneRows: ClientStandaloneCp[],
+  options?: {
+    managerId?: string | null;
+    managerName?: string;
+    allCatalog?: boolean;
+    managerNameById?: Map<string, string>;
+  },
 ): ClientListRow[] {
   const scoped =
     options?.managerId != null || options?.managerName
@@ -93,34 +132,48 @@ export function buildClientListRows(
 
   const binMap = collectClientBinsFromReports(scoped);
   const rows: ClientListRow[] = [];
+  const managerFilter = options?.allCatalog ? undefined : options?.managerId;
+
+  const pushRow = (bin: string, name: string, reportScope: FullReport[]) => {
+    const { meetingCp, cpMeetings } = clientCpStatsForBin(reportScope, bin);
+    const { extraCp, standaloneByManager } = standaloneForBin(
+      standaloneRows,
+      bin,
+      managerFilter,
+      options?.managerNameById,
+    );
+    rows.push({
+      name,
+      bin,
+      meetingCp,
+      extraCp,
+      totalCp: meetingCp + extraCp,
+      cpMeetings,
+      standaloneByManager,
+    });
+  };
 
   if (options?.allCatalog) {
     for (const c of catalog) {
       const bin = c.bin.trim();
       if (!bin) continue;
-      const { totalCp, cpMeetings } = clientCpStatsForBin(reports, bin);
-      rows.push({
-        name: c.name.trim() || binMap.get(bin) || '—',
-        bin,
-        totalCp,
-        cpMeetings,
-      });
+      pushRow(bin, c.name.trim() || binMap.get(bin) || '—', reports);
     }
     for (const [bin, name] of binMap) {
       if (rows.some((r) => r.bin === bin)) continue;
-      const { totalCp, cpMeetings } = clientCpStatsForBin(reports, bin);
-      rows.push({ name: name || '—', bin, totalCp, cpMeetings });
+      pushRow(bin, name || '—', reports);
     }
   } else {
     for (const [bin, name] of binMap) {
       const cat = catalog.find((c) => c.bin.trim() === bin);
-      const { totalCp, cpMeetings } = clientCpStatsForBin(scoped, bin);
-      rows.push({
-        name: (cat?.name ?? name).trim() || '—',
-        bin,
-        totalCp,
-        cpMeetings,
-      });
+      pushRow(bin, (cat?.name ?? name).trim() || '—', scoped);
+    }
+    for (const row of standaloneRows) {
+      if (managerFilter && row.managerId !== managerFilter) continue;
+      const bin = row.bin.trim();
+      if (!bin || rows.some((r) => r.bin === bin)) continue;
+      const cat = catalog.find((c) => c.bin.trim() === bin);
+      pushRow(bin, cat?.name.trim() || '—', scoped);
     }
   }
 

@@ -10,6 +10,8 @@ type Props = {
   onEditClient?: (c: { name: string; bin: string }) => void;
   onDeleteClient?: (c: { name: string; bin: string }) => void;
   onRefreshReports?: () => Promise<void>;
+  currentManagerId?: string | null;
+  isAdmin?: boolean;
   title?: string;
   subtitle?: string;
   emptyHint?: string;
@@ -31,6 +33,8 @@ export function ClientDirectoryPanel({
   onEditClient,
   onDeleteClient,
   onRefreshReports,
+  currentManagerId,
+  isAdmin,
   title = 'Все контрагенты',
   subtitle = 'База crm_clients',
   emptyHint,
@@ -131,8 +135,14 @@ export function ClientDirectoryPanel({
                     </td>
                     <td className="p-4 text-center" onClick={(e) => e.stopPropagation()}>
                       <ClientCpEditor
+                        bin={c.bin}
+                        meetingCp={c.meetingCp}
+                        extraCp={c.extraCp}
                         totalCp={c.totalCp}
                         meetings={c.cpMeetings}
+                        standaloneByManager={c.standaloneByManager}
+                        currentManagerId={currentManagerId}
+                        isAdmin={isAdmin}
                         onRefreshReports={onRefreshReports}
                         compact
                       />
@@ -177,7 +187,7 @@ export function ClientDirectoryPanel({
           </table>
         </div>
         <p className="px-4 py-2.5 text-[10px] text-gray-400 border-t border-gray-100">
-          Клик по строке — встречи и сделки по БИН. ЦП — сумма по проведённым встречам; «Изменить» — по каждой встрече.
+          Клик по строке — история. ЦП = по встречам + без встречи (отдельно). «Изменить» — оба вида.
         </p>
       </div>
     </div>

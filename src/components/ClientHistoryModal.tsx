@@ -2,7 +2,7 @@ import { X, CalendarCheck, ShoppingBag, User } from 'lucide-react';
 import type { UiClient } from '../lib/crmApi';
 import type { ClientConductedRow, ClientOrderRow } from '../lib/crmClientHistory';
 import { ClientCpEditor } from './ClientCpEditor';
-import type { ClientCpMeeting } from '../lib/clientCpStats';
+import type { ClientCpMeeting, ClientStandaloneCpView } from '../lib/clientCpStats';
 
 function formatDisplayDate(raw: string): string {
   const t = (raw || '').trim();
@@ -17,8 +17,13 @@ type Props = {
   client: UiClient;
   conducted: ClientConductedRow[];
   orders: ClientOrderRow[];
+  meetingCp?: number;
+  extraCp?: number;
   totalCp?: number;
   cpMeetings?: ClientCpMeeting[];
+  standaloneByManager?: ClientStandaloneCpView[];
+  currentManagerId?: string | null;
+  isAdmin?: boolean;
   onRefreshReports?: () => Promise<void>;
   onClose: () => void;
 };
@@ -27,8 +32,13 @@ export function ClientHistoryModal({
   client,
   conducted,
   orders,
+  meetingCp = 0,
+  extraCp = 0,
   totalCp = 0,
   cpMeetings = [],
+  standaloneByManager = [],
+  currentManagerId,
+  isAdmin,
   onRefreshReports,
   onClose,
 }: Props) {
@@ -51,11 +61,17 @@ export function ClientHistoryModal({
             </div>
             <p className="text-lg font-bold text-gray-900 mt-1">{client.name}</p>
             <p className="text-xs font-mono text-gray-500">БИН {client.bin}</p>
-            <div className="mt-2 flex items-center gap-2 text-[11px]">
+            <div className="mt-2 flex items-center gap-2 text-[11px] flex-wrap">
               <span className="font-black text-gray-400 uppercase tracking-widest">ЦП всего</span>
               <ClientCpEditor
+                bin={client.bin}
+                meetingCp={meetingCp}
+                extraCp={extraCp}
                 totalCp={totalCp}
                 meetings={cpMeetings}
+                standaloneByManager={standaloneByManager}
+                currentManagerId={currentManagerId}
+                isAdmin={isAdmin}
                 onRefreshReports={onRefreshReports}
               />
             </div>

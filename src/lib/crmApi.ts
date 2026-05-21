@@ -312,6 +312,42 @@ export async function hardDeleteConductedMeetingById(meetingId: string): Promise
   if (error) throw error;
 }
 
+export type ClientStandaloneCp = {
+  id: string;
+  managerId: string;
+  bin: string;
+  cpQuantity: number;
+};
+
+export async function fetchStandaloneCpApi(): Promise<ClientStandaloneCp[]> {
+  const { data, error } = await getSupabase()
+    .from('crm_client_standalone_cp')
+    .select('id, manager_id, bin, cp_quantity');
+  if (error) throw error;
+  return (data || []).map((r) => ({
+    id: String(r.id),
+    managerId: String(r.manager_id),
+    bin: String(r.bin).trim(),
+    cpQuantity: Math.max(0, Number(r.cp_quantity ?? 0) || 0),
+  }));
+}
+
+/** ЦП по клиенту без встречи (свой менеджер; админ может указать p_manager_id). */
+export async function upsertClientStandaloneCp(
+  bin: string,
+  cpQuantity: number,
+  managerId?: string,
+): Promise<void> {
+  const b = bin.trim();
+  const q = Math.max(0, Math.floor(Number(cpQuantity) || 0));
+  const { error } = await getSupabase().rpc('upsert_client_standalone_cp', {
+    p_bin: b,
+    p_quantity: q,
+    p_manager_id: managerId ?? null,
+  });
+  if (error) throw error;
+}
+
 /** Обновить ЦП у проведённой встречи (по id строки в crm_conducted_meetings). */
 export async function updateConductedMeetingCpById(meetingId: string, cpSent: boolean, cpQuantity: number): Promise<void> {
   const q = Math.max(0, Math.floor(Number(cpQuantity) || 0));

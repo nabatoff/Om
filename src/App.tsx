@@ -36,6 +36,8 @@ import {
   fetchClientsApi,
   fetchDeletedMeetingsApi,
   fetchReportsApi,
+  fetchStandaloneCpApi,
+  type ClientStandaloneCp,
   createClientRow,
   updateClientRow,
   deleteClientByBin,
@@ -114,6 +116,7 @@ const App = () => {
   const sessionUserId = session?.user?.id;
   const [currentView, setCurrentView] = useState<'manager' | 'admin' | 'orders' | 'clients'>(() => getSavedCurrentView());
   const [clients, setClients] = useState<UiClient[]>([]);
+  const [standaloneCp, setStandaloneCp] = useState<ClientStandaloneCp[]>([]);
   const [allReports, setAllReports] = useState<FullReport[]>([]);
   const [deletedMeetings, setDeletedMeetings] = useState<DeletedMeeting[]>([]);
   const [formStats, setFormStats] = useState<FormStats>({
@@ -207,14 +210,16 @@ const App = () => {
     }
     setLoadError(null);
     try {
-      const [c, r, basket] = await Promise.all([
+      const [c, r, basket, standalone] = await Promise.all([
         fetchClientsApi(),
         fetchReportsApi(),
         isAdmin ? fetchDeletedMeetingsApi() : Promise.resolve([]),
+        fetchStandaloneCpApi().catch(() => [] as ClientStandaloneCp[]),
       ]);
       setClients(c);
       setAllReports(r);
       setDeletedMeetings(basket);
+      setStandaloneCp(standalone);
       return r;
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Ошибка загрузки');
@@ -691,14 +696,29 @@ const App = () => {
     return filterReportsForManager(allReports, sessionUserId, managerName);
   }, [allReports, isAdmin, sessionUserId, managerName]);
 
+  const managerNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const r of allReports) {
+      if (r.managerId && r.manager) map.set(r.managerId, r.manager);
+    }
+    for (const s of standaloneCp) {
+      if (!map.has(s.managerId)) {
+        const rep = allReports.find((r) => r.managerId === s.managerId);
+        if (rep?.manager) map.set(s.managerId, rep.manager);
+      }
+    }
+    return map;
+  }, [allReports, standaloneCp]);
+
   const clientListRows = useMemo(
     () =>
-      buildClientListRows(allReports, clients, {
+      buildClientListRows(allReports, clients, standaloneCp, {
         managerId: isAdmin ? undefined : sessionUserId,
         managerName: isAdmin ? undefined : managerName,
         allCatalog: isAdmin,
+        managerNameById,
       }),
-    [allReports, clients, isAdmin, sessionUserId, managerName],
+    [allReports, clients, standaloneCp, isAdmin, sessionUserId, managerName, managerNameById],
   );
 
   const clientHistoryAggregated = useMemo(
@@ -968,6 +988,8 @@ const App = () => {
           <ClientDirectoryPanel
             rows={clientListRows}
             onRefreshReports={refresh}
+            currentManagerId={sessionUserId}
+            isAdmin={isAdmin}
             title={isAdmin ? 'Все контрагенты' : 'Мои клиенты'}
             subtitle={isAdmin ? 'База crm_clients · ЦП по всем отчётам' : 'Из ваших отчётов · сумма ЦП по проведённым встречам'}
             onSelectClient={(c) => setClientHistoryFor(c)}
@@ -1235,17 +1257,25 @@ const App = () => {
         <OrderItemsModal modal={orderDetailModal} onClose={() => setOrderDetailModal({ ...orderDetailModal, isOpen: false })} />
       )}
 
-      {clientHistoryFor && (
-        <ClientHistoryModal
-          client={clientHistoryFor}
-          conducted={clientHistoryAggregated.conducted}
-          orders={clientHistoryAggregated.orders}
-          totalCp={clientListRows.find((r) => r.bin === clientHistoryFor.bin)?.totalCp ?? 0}
-          cpMeetings={clientListRows.find((r) => r.bin === clientHistoryFor.bin)?.cpMeetings ?? []}
-          onRefreshReports={refresh}
-          onClose={() => setClientHistoryFor(null)}
-        />
-      )}
+      {clientHistoryFor && (() => {
+        const row = clientListRows.find((r) => r.bin === clientHistoryFor.bin);
+        return (
+          <ClientHistoryModal
+            client={clientHistoryFor}
+            conducted={clientHistoryAggregated.conducted}
+            orders={clientHistoryAggregated.orders}
+            meetingCp={row?.meetingCp ?? 0}
+            extraCp={row?.extraCp ?? 0}
+            totalCp={row?.totalCp ?? 0}
+            cpMeetings={row?.cpMeetings ?? []}
+            standaloneByManager={row?.standaloneByManager ?? []}
+            currentManagerId={sessionUserId}
+            isAdmin={isAdmin}
+            onRefreshReports={refresh}
+            onClose={() => setClientHistoryFor(null)}
+          />
+        );
+      })()}
     </div>
   );
 };
