@@ -1,6 +1,8 @@
 import { X, CalendarCheck, ShoppingBag, User } from 'lucide-react';
 import type { UiClient } from '../lib/crmApi';
 import type { ClientConductedRow, ClientOrderRow } from '../lib/crmClientHistory';
+import { ClientCpEditor } from './ClientCpEditor';
+import type { ClientCpMeeting } from '../lib/clientCpStats';
 
 function formatDisplayDate(raw: string): string {
   const t = (raw || '').trim();
@@ -15,10 +17,21 @@ type Props = {
   client: UiClient;
   conducted: ClientConductedRow[];
   orders: ClientOrderRow[];
+  totalCp?: number;
+  cpMeetings?: ClientCpMeeting[];
+  onRefreshReports?: () => Promise<void>;
   onClose: () => void;
 };
 
-export function ClientHistoryModal({ client, conducted, orders, onClose }: Props) {
+export function ClientHistoryModal({
+  client,
+  conducted,
+  orders,
+  totalCp = 0,
+  cpMeetings = [],
+  onRefreshReports,
+  onClose,
+}: Props) {
   const hasHistory = conducted.length > 0 || orders.length > 0;
 
   return (
@@ -38,6 +51,14 @@ export function ClientHistoryModal({ client, conducted, orders, onClose }: Props
             </div>
             <p className="text-lg font-bold text-gray-900 mt-1">{client.name}</p>
             <p className="text-xs font-mono text-gray-500">БИН {client.bin}</p>
+            <div className="mt-2 flex items-center gap-2 text-[11px]">
+              <span className="font-black text-gray-400 uppercase tracking-widest">ЦП всего</span>
+              <ClientCpEditor
+                totalCp={totalCp}
+                meetings={cpMeetings}
+                onRefreshReports={onRefreshReports}
+              />
+            </div>
           </div>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1">
             <X size={24} />

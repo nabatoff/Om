@@ -51,6 +51,7 @@ import {
   sendTelegramDailyReportNow,
 } from './lib/crmApi';
 import { buildClientCrmHistory } from './lib/crmClientHistory';
+import { buildClientListRows, filterReportsForManager } from './lib/clientCpStats';
 import { ClientDirectoryPanel } from './components/ClientDirectoryPanel';
 import { ClientHistoryModal } from './components/ClientHistoryModal';
 import { isSupabaseConfigured } from './lib/supabase';
@@ -233,12 +234,6 @@ const App = () => {
 
   useEffect(() => {
     if (!isAdmin && currentView === 'admin') {
-      setCurrentView('manager');
-    }
-  }, [isAdmin, currentView]);
-
-  useEffect(() => {
-    if (!isAdmin && currentView === 'clients') {
       setCurrentView('manager');
     }
   }, [isAdmin, currentView]);
@@ -691,10 +686,27 @@ const App = () => {
     });
   }, [allOrdersByDateAndManager, ordersFilterCounterparty]);
 
+  const reportsForClientScope = useMemo(() => {
+    if (isAdmin) return allReports;
+    return filterReportsForManager(allReports, sessionUserId, managerName);
+  }, [allReports, isAdmin, sessionUserId, managerName]);
+
+  const clientListRows = useMemo(
+    () =>
+      buildClientListRows(allReports, clients, {
+        managerId: isAdmin ? undefined : sessionUserId,
+        managerName: isAdmin ? undefined : managerName,
+        allCatalog: isAdmin,
+      }),
+    [allReports, clients, isAdmin, sessionUserId, managerName],
+  );
+
   const clientHistoryAggregated = useMemo(
     () =>
-      clientHistoryFor ? buildClientCrmHistory(clientHistoryFor.bin, allReports) : { conducted: [], orders: [] },
-    [clientHistoryFor, allReports],
+      clientHistoryFor
+        ? buildClientCrmHistory(clientHistoryFor.bin, reportsForClientScope)
+        : { conducted: [], orders: [] },
+    [clientHistoryFor, reportsForClientScope],
   );
 
   if (supabaseOk && !authReady) {
@@ -771,15 +783,13 @@ const App = () => {
                   <List size={14} /> АДМИНКА
                 </button>
               )}
-              {isAdmin && (
-                <button
-                  type="button"
-                  onClick={() => setCurrentView('clients')}
-                  className={`flex-1 md:flex-none min-w-[120px] sm:min-w-0 flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all ${currentView === 'clients' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                >
-                  <Users size={14} /> КЛИЕНТЫ
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => setCurrentView('clients')}
+                className={`flex-1 md:flex-none min-w-[120px] sm:min-w-0 flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all ${currentView === 'clients' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              >
+                <Users size={14} /> КЛИЕНТЫ
+              </button>
               <button
                 type="button"
                 onClick={() => setCurrentView('orders')}
@@ -954,23 +964,34 @@ const App = () => {
           </div>
         )}
 
-        {isAdmin && currentView === 'clients' && (
+        {currentView === 'clients' && (
           <ClientDirectoryPanel
-            clients={clients}
+            rows={clientListRows}
+            onRefreshReports={refresh}
+            title={isAdmin ? 'Все контрагенты' : 'Мои клиенты'}
+            subtitle={isAdmin ? 'База crm_clients · ЦП по всем отчётам' : 'Из ваших отчётов · сумма ЦП по проведённым встречам'}
             onSelectClient={(c) => setClientHistoryFor(c)}
-            onAddClient={() => {
-              setEditingClientBin(null);
-              setNewClientData({ name: '', bin: '' });
-              setOnClientCreatedCallback(null);
-              setIsClientModalOpen(true);
-            }}
-            onEditClient={(c) => {
-              setEditingClientBin(c.bin);
-              setNewClientData({ name: c.name, bin: c.bin });
-              setOnClientCreatedCallback(null);
-              setIsClientModalOpen(true);
-            }}
-            onDeleteClient={removeClient}
+            onAddClient={
+              isAdmin
+                ? () => {
+                    setEditingClientBin(null);
+                    setNewClientData({ name: '', bin: '' });
+                    setOnClientCreatedCallback(null);
+                    setIsClientModalOpen(true);
+                  }
+                : undefined
+            }
+            onEditClient={
+              isAdmin
+                ? (c) => {
+                    setEditingClientBin(c.bin);
+                    setNewClientData({ name: c.name, bin: c.bin });
+                    setOnClientCreatedCallback(null);
+                    setIsClientModalOpen(true);
+                  }
+                : undefined
+            }
+            onDeleteClient={isAdmin ? removeClient : undefined}
           />
         )}
 
@@ -1219,6 +1240,9 @@ const App = () => {
           client={clientHistoryFor}
           conducted={clientHistoryAggregated.conducted}
           orders={clientHistoryAggregated.orders}
+          totalCp={clientListRows.find((r) => r.bin === clientHistoryFor.bin)?.totalCp ?? 0}
+          cpMeetings={clientListRows.find((r) => r.bin === clientHistoryFor.bin)?.cpMeetings ?? []}
+          onRefreshReports={refresh}
           onClose={() => setClientHistoryFor(null)}
         />
       )}

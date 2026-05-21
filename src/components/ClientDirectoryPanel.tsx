@@ -1,13 +1,18 @@
 import { useMemo, useState } from 'react';
 import { Fingerprint, Pencil, Search, Trash2, UserPlus, Users } from 'lucide-react';
-import type { UiClient } from '../lib/crmApi';
+import type { ClientListRow } from '../lib/clientCpStats';
+import { ClientCpEditor } from './ClientCpEditor';
 
 type Props = {
-  clients: UiClient[];
-  onSelectClient: (c: UiClient) => void;
-  onAddClient: () => void;
-  onEditClient: (c: UiClient) => void;
-  onDeleteClient: (c: UiClient) => void;
+  rows: ClientListRow[];
+  onSelectClient: (c: { name: string; bin: string }) => void;
+  onAddClient?: () => void;
+  onEditClient?: (c: { name: string; bin: string }) => void;
+  onDeleteClient?: (c: { name: string; bin: string }) => void;
+  onRefreshReports?: () => Promise<void>;
+  title?: string;
+  subtitle?: string;
+  emptyHint?: string;
 };
 
 function normalizeText(value: string): string {
@@ -19,20 +24,34 @@ function normalizeText(value: string): string {
     .trim();
 }
 
-export function ClientDirectoryPanel({ clients, onSelectClient, onAddClient, onEditClient, onDeleteClient }: Props) {
+export function ClientDirectoryPanel({
+  rows,
+  onSelectClient,
+  onAddClient,
+  onEditClient,
+  onDeleteClient,
+  onRefreshReports,
+  title = 'Все контрагенты',
+  subtitle = 'База crm_clients',
+  emptyHint,
+}: Props) {
   const [q, setQ] = useState('');
+  const canMutate = Boolean(onAddClient && onEditClient && onDeleteClient);
 
   const filtered = useMemo(() => {
     const textQuery = normalizeText(q);
     const digitsQuery = q.replace(/\D/g, '');
-    if (!textQuery && !digitsQuery) return clients;
+    if (!textQuery && !digitsQuery) return rows;
 
-    return clients.filter(
+    return rows.filter(
       (c) =>
         (textQuery ? normalizeText(c.name).includes(textQuery) : false) ||
         (digitsQuery ? c.bin.replace(/\D/g, '').includes(digitsQuery) : false),
     );
-  }, [clients, q]);
+  }, [rows, q]);
+
+  const defaultEmpty =
+    emptyHint ?? (rows.length === 0 ? (canMutate ? 'Контрагентов пока нет. Нажми «Новый».' : 'Клиентов пока нет в ваших отчётах.') : 'Ничего не найдено.');
 
   return (
     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -42,8 +61,8 @@ export function ClientDirectoryPanel({ clients, onSelectClient, onAddClient, onE
             <Users size={20} />
           </div>
           <div>
-            <h2 className="text-lg font-bold">Все контрагенты</h2>
-            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">База crm_clients</p>
+            <h2 className="text-lg font-bold">{title}</h2>
+            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{subtitle}</p>
           </div>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
@@ -57,14 +76,16 @@ export function ClientDirectoryPanel({ clients, onSelectClient, onAddClient, onE
               className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500/30"
             />
           </div>
-          <button
-            type="button"
-            onClick={onAddClient}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-black uppercase tracking-widest shadow-sm hover:bg-blue-500"
-          >
-            <UserPlus size={16} />
-            Новый
-          </button>
+          {canMutate && onAddClient ? (
+            <button
+              type="button"
+              onClick={onAddClient}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-black uppercase tracking-widest shadow-sm hover:bg-blue-500"
+            >
+              <UserPlus size={16} />
+              Новый
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -75,14 +96,15 @@ export function ClientDirectoryPanel({ clients, onSelectClient, onAddClient, onE
               <tr className="bg-gray-50 text-[10px] font-black text-gray-500 uppercase tracking-tighter border-b border-gray-100">
                 <th className="p-4 bg-gray-50">Наименование</th>
                 <th className="p-4 bg-gray-50">БИН</th>
+                <th className="p-4 bg-gray-50 text-center">ЦП (всего)</th>
                 <th className="p-4 w-44 text-right bg-gray-50">Действия</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={3} className="p-10 text-center text-gray-500 text-sm">
-                    {clients.length === 0 ? 'Контрагентов пока нет. Нажми «Новый».' : 'Ничего не найдено.'}
+                  <td colSpan={4} className="p-10 text-center text-gray-500 text-sm">
+                    {defaultEmpty}
                   </td>
                 </tr>
               ) : (
@@ -107,33 +129,45 @@ export function ClientDirectoryPanel({ clients, onSelectClient, onAddClient, onE
                         {c.bin}
                       </span>
                     </td>
+                    <td className="p-4 text-center" onClick={(e) => e.stopPropagation()}>
+                      <ClientCpEditor
+                        totalCp={c.totalCp}
+                        meetings={c.cpMeetings}
+                        onRefreshReports={onRefreshReports}
+                        compact
+                      />
+                    </td>
                     <td className="p-4 text-right">
                       <div className="inline-flex items-center gap-1">
                         <span className="text-[10px] font-black text-blue-600 uppercase">История</span>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onEditClient(c);
-                          }}
-                          className="inline-flex items-center justify-center p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 border border-transparent hover:border-blue-100"
-                          aria-label={`Изменить ${c.name}`}
-                          title="Изменить"
-                        >
-                          <Pencil size={14} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onDeleteClient(c);
-                          }}
-                          className="inline-flex items-center justify-center p-1.5 rounded-lg text-red-500 hover:bg-red-50 border border-transparent hover:border-red-100"
-                          aria-label={`Удалить клиента ${c.name}`}
-                          title="Удалить клиента"
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                        {canMutate && onEditClient ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onEditClient(c);
+                            }}
+                            className="inline-flex items-center justify-center p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 border border-transparent hover:border-blue-100"
+                            aria-label={`Изменить ${c.name}`}
+                            title="Изменить"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                        ) : null}
+                        {canMutate && onDeleteClient ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeleteClient(c);
+                            }}
+                            className="inline-flex items-center justify-center p-1.5 rounded-lg text-red-500 hover:bg-red-50 border border-transparent hover:border-red-100"
+                            aria-label={`Удалить клиента ${c.name}`}
+                            title="Удалить клиента"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        ) : null}
                       </div>
                     </td>
                   </tr>
@@ -143,7 +177,7 @@ export function ClientDirectoryPanel({ clients, onSelectClient, onAddClient, onE
           </table>
         </div>
         <p className="px-4 py-2.5 text-[10px] text-gray-400 border-t border-gray-100">
-          Клик по строке — встречи и сделки по БИН из всех отчётов.
+          Клик по строке — встречи и сделки по БИН. ЦП — сумма по проведённым встречам; «Изменить» — по каждой встрече.
         </p>
       </div>
     </div>
