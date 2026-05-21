@@ -349,3 +349,26 @@ export async function saveKpiToDb(payload: {
   if (error) throw error;
   return String(data);
 }
+
+export type TelegramDailyReportResult = {
+  ok?: boolean;
+  reportDate?: string;
+  reportDateLabel?: string;
+  managers?: number;
+  error?: string;
+};
+
+/** Ручная отправка ежедневной сводки в Telegram (только admin JWT). */
+export async function sendTelegramDailyReportNow(): Promise<TelegramDailyReportResult> {
+  const { data, error } = await getSupabase().functions.invoke<TelegramDailyReportResult>('telegram-daily-report', {
+    body: { trigger: 'admin-manual' },
+  });
+  if (data?.error) throw new Error(data.error);
+  if (data && data.ok === false) throw new Error(data.error ?? 'Не удалось отправить отчёт');
+  if (error) {
+    const msg = (data as TelegramDailyReportResult | null)?.error || error.message;
+    throw new Error(msg);
+  }
+  if (!data?.ok) throw new Error('Не удалось отправить отчёт');
+  return data;
+}

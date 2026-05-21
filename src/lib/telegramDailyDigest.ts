@@ -81,17 +81,22 @@ function countConductedNewMeetings(report: FullReport, allReports: FullReport[])
   return count;
 }
 
-function aggregateConfirmedOrdersByClient(report: FullReport): { displayName: string; total: number }[] {
-  const map = new Map<string, { displayName: string; total: number }>();
+function aggregateConfirmedOrdersByClient(
+  report: FullReport,
+): { displayName: string; total: number; orderCount: number }[] {
+  const map = new Map<string, { displayName: string; total: number; orderCount: number }>();
   for (const o of report.confirmedOrders) {
     const bin = normalizeKpiBin(o.bin);
     const rawName = (o.entityName || '').trim();
     const displayName = rawName || `БИН ${(o.bin || '').trim() || '—'}`;
     const key = `${bin}|${normalizeKpiText(displayName)}`;
     const add = Number(o.totalAmount) || 0;
+    const addCnt = Number(o.orderCount) || 0;
     const prev = map.get(key);
-    if (prev) prev.total += add;
-    else map.set(key, { displayName, total: add });
+    if (prev) {
+      prev.total += add;
+      prev.orderCount += addCnt;
+    } else map.set(key, { displayName, total: add, orderCount: addCnt });
   }
   return Array.from(map.values()).sort((a, b) => b.total - a.total);
 }
@@ -114,17 +119,18 @@ export function buildTelegramDailyDigestText(allReports: FullReport[], reportDat
     const conductedFact = r.conductedMeetings.length;
     const conductedNew = countConductedNewMeetings(r, allReports);
     const ordersSum = r.confirmedOrders.reduce((s, o) => s + (Number(o.totalAmount) || 0), 0);
+    const ordersCount = r.confirmedOrders.reduce((s, o) => s + (Number(o.orderCount) || 0), 0);
     const clients = aggregateConfirmedOrdersByClient(r);
 
     blocks.push(mgr);
     blocks.push(`• Назначено встреч: ${assigned}`);
     blocks.push(`• Факт проведено: ${conductedFact}`);
     blocks.push(`• Проведено новых: ${conductedNew}`);
-    blocks.push(`• Сумма подтверждённых заказов: ${moneyKzt(ordersSum)}`);
+    blocks.push(`• Подтверждённых заказов: ${ordersCount} на ${moneyKzt(ordersSum)}`);
     if (clients.length > 0) {
       blocks.push('Подтверждённые заказы по контрагентам:');
       for (const c of clients) {
-        blocks.push(`  — ${c.displayName}: ${moneyKzt(c.total)}`);
+        blocks.push(`  — ${c.displayName}: ${moneyKzt(c.total)} · ${c.orderCount} зак.`);
       }
     } else {
       blocks.push('Подтверждённые заказы по контрагентам: нет');

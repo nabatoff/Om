@@ -20,6 +20,8 @@ import {
   LogOut,
   LayoutGrid,
   UserCog,
+  Send,
+  Loader2,
 } from 'lucide-react';
 import { adminDateFilterBounds, reportDateMatchesAdminBounds } from './lib/periodBounds';
 import { PeriodFilterFields } from './components/PeriodFilterFields';
@@ -46,6 +48,7 @@ import {
   hardDeleteConductedMeetingById,
   saveReportToDb,
   saveKpiToDb,
+  sendTelegramDailyReportNow,
 } from './lib/crmApi';
 import { buildClientCrmHistory } from './lib/crmClientHistory';
 import { ClientDirectoryPanel } from './components/ClientDirectoryPanel';
@@ -168,8 +171,23 @@ const App = () => {
   const [kpiFilterDateFrom, setKpiFilterDateFrom] = useState(() => adminDateFilterBounds('', '').from);
   const [kpiFilterDateTo, setKpiFilterDateTo] = useState(() => adminDateFilterBounds('', '').to);
   const [kpiSaving, setKpiSaving] = useState(false);
+  const [telegramReportSending, setTelegramReportSending] = useState(false);
 
   const supabaseOk = isSupabaseConfigured();
+
+  const handleSendTelegramDailyReport = useCallback(async () => {
+    if (telegramReportSending) return;
+    setTelegramReportSending(true);
+    try {
+      const res = await sendTelegramDailyReportNow();
+      const label = res.reportDateLabel ?? res.reportDate ?? 'сегодня';
+      alert(`Отчёт за ${label} отправлен в Telegram.`);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Не удалось отправить отчёт в Telegram');
+    } finally {
+      setTelegramReportSending(false);
+    }
+  }, [telegramReportSending]);
 
   const loadReports = useCallback(async (): Promise<FullReport[]> => {
     if (!supabaseOk) {
@@ -804,6 +822,7 @@ const App = () => {
 
         {isAdmin && currentView === 'admin' && (
           <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="flex flex-wrap gap-2 bg-white border border-gray-200 rounded-2xl p-2 w-full md:w-auto">
               <button
                 type="button"
@@ -845,6 +864,17 @@ const App = () => {
                 <UserCog size={14} />
                 Сотрудники
               </button>
+            </div>
+            <button
+              type="button"
+              disabled={telegramReportSending}
+              onClick={() => void handleSendTelegramDailyReport()}
+              className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-[11px] sm:text-xs font-black uppercase tracking-wide border border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-100 disabled:opacity-60 disabled:pointer-events-none transition-colors"
+              title="Сводка за сегодня по данным в базе на текущий момент"
+            >
+              {telegramReportSending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+              {telegramReportSending ? 'Отправка…' : 'Отчёт в Telegram'}
+            </button>
             </div>
             {adminSubView === 'dashboard' && (
               <AdminDashboard

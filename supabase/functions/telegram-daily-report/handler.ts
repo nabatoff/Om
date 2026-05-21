@@ -37,7 +37,8 @@ type RpcRow = {
   conducted_fact: number;
   conducted_new: number;
   confirmed_orders_sum: number;
-  confirmed_orders_breakdown: Array<{ name?: string; bin?: string; total?: number }> | null;
+  confirmed_orders_count: number;
+  confirmed_orders_breakdown: Array<{ name?: string; bin?: string; total?: number; order_count?: number }> | null;
 };
 
 function parseBreakdown(raw: unknown): RpcRow["confirmed_orders_breakdown"] {
@@ -50,13 +51,47 @@ function money(n: number): string {
   return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(Number.isFinite(n) ? n : 0);
 }
 
+const corsHeaders: Record<string, string> = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-key",
+};
+
+function isYmd(s: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(s);
+}
+
+/** Cron (`x-cron-key`) или JWT администратора. */
+async function isRequestAuthorized(req: Request): Promise<boolean> {
+  const cronKey = Deno.env.get("TELEGRAM_CRON_SECRET") ?? "";
+  if (cronKey && (req.headers.get("x-cron-key") ?? "") === cronKey) return true;
+
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader) return false;
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+  const anon = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+  if (!supabaseUrl || !anon) return false;
+
+  const userClient = createClient(supabaseUrl, anon, {
+    global: { headers: { Authorization: authHeader } },
+  });
+  const { data: { user } } = await userClient.auth.getUser();
+  if (!user) return false;
+
+  const { data: prof } = await userClient.from("profiles").select("role").eq("id", user.id).maybeSingle();
+  return prof?.role === "admin";
+}
+
 export async function handleCronReport(req: Request): Promise<Response> {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
   try {
-    const cronKey = Deno.env.get("TELEGRAM_CRON_SECRET") ?? "";
-    if (!cronKey || (req.headers.get("x-cron-key") ?? "") !== cronKey) {
+    if (!(await isRequestAuthorized(req))) {
       return new Response(JSON.stringify({ ok: false, error: "forbidden" }), {
         status: 403,
-        headers: { "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -77,7 +112,17 @@ export async function handleCronReport(req: Request): Promise<Response> {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    const reportDate = dateYmdInTz(new Date(), tz);
+    let reportDate = dateYmdInTz(new Date(), tz);
+    try {
+      const ct = (req.headers.get("content-type") ?? "").toLowerCase();
+      if (ct.includes("application/json")) {
+        const j = (await req.json()) as { report_date?: string; p_date?: string };
+        const raw = (j.report_date ?? j.p_date ?? "").trim();
+        if (raw && isYmd(raw)) reportDate = raw;
+      }
+    } catch {
+      /* пустое тело — отчёт за сегодня */
+    }
     const reportDateLabel = formatDateDisplay(reportDate);
 
     const { data, error } = await supabase.rpc("telegram_daily_analytics_rows", { p_date: reportDate });
@@ -90,8 +135,9 @@ export async function handleCronReport(req: Request): Promise<Response> {
         assigned: acc.assigned + Number(r.assigned_meetings ?? 0),
         conductedFact: acc.conductedFact + Number(r.conducted_fact ?? 0),
         ordersSum: acc.ordersSum + Number(r.confirmed_orders_sum ?? 0),
+        ordersCount: acc.ordersCount + Number(r.confirmed_orders_count ?? 0),
       }),
-      { assigned: 0, conductedFact: 0, ordersSum: 0 },
+      { assigned: 0, conductedFact: 0, ordersSum: 0, ordersCount: 0 },
     );
 
     const lines: string[] = [];
@@ -101,7 +147,7 @@ export async function handleCronReport(req: Request): Promise<Response> {
     lines.push("<b>Общая сводка</b>");
     lines.push(`• Назначено встреч: <b>${total.assigned}</b>`);
     lines.push(`• Факт проведено: <b>${total.conductedFact}</b>`);
-    lines.push(`• Сумма подтверждённых заказов: <b>${money(total.ordersSum)} ₸</b>`);
+    lines.push(`• Подтверждённых заказов: <b>${total.ordersCount}</b> на <b>${money(total.ordersSum)} ₸</b>`);
     lines.push("");
     lines.push("<b>По менеджерам</b>");
 
@@ -116,7 +162,10 @@ export async function handleCronReport(req: Request): Promise<Response> {
         lines.push(`<b>${name}</b>`);
         lines.push(`  Назначено встреч: <b>${r.assigned_meetings ?? 0}</b>`);
         lines.push(`  Факт проведено: <b>${r.conducted_fact ?? 0}</b>`);
-        lines.push(`  Сумма подтверждённых заказов: <b>${money(Number(r.confirmed_orders_sum ?? 0))} ₸</b>`);
+        const mgrOrdersCount = Number(r.confirmed_orders_count ?? 0);
+        lines.push(
+          `  Подтверждённых заказов: <b>${mgrOrdersCount}</b> на <b>${money(Number(r.confirmed_orders_sum ?? 0))} ₸</b>`,
+        );
         const br = parseBreakdown(r.confirmed_orders_breakdown);
         if (br.length === 0) {
           lines.push("  Заказы: нет");
@@ -125,7 +174,8 @@ export async function handleCronReport(req: Request): Promise<Response> {
           for (const o of br) {
             const rawName = (o?.name ?? "").trim();
             const label = rawName ? escHtml(rawName) : `БИН ${escHtml(String((o?.bin ?? "").trim()))}`;
-            lines.push(`   — ${label}: <b>${money(Number(o?.total ?? 0))} ₸</b>`);
+            const cnt = Number(o?.order_count ?? 0);
+            lines.push(`   — ${label}: <b>${money(Number(o?.total ?? 0))} ₸</b> · <b>${cnt}</b> зак.`);
           }
         }
       }
@@ -152,12 +202,12 @@ export async function handleCronReport(req: Request): Promise<Response> {
         chatId,
         managers: rows.length,
       }),
-      { headers: { "Content-Type": "application/json" } },
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (e) {
     return new Response(JSON.stringify({ ok: false, error: errText(e) }), {
       status: 500,
-      headers: { "Content-Type": "application/json" },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 }
