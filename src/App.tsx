@@ -23,7 +23,7 @@ import {
   Send,
   Loader2,
 } from 'lucide-react';
-import { adminDateFilterBounds, reportDateMatchesAdminBounds } from './lib/periodBounds';
+import { adminDateFilterBounds, formatYmdLocal, reportDateMatchesAdminBounds } from './lib/periodBounds';
 import { PeriodFilterFields } from './components/PeriodFilterFields';
 import {
   type FormStats,
@@ -171,23 +171,29 @@ const App = () => {
   const [kpiFilterDateFrom, setKpiFilterDateFrom] = useState(() => adminDateFilterBounds('', '').from);
   const [kpiFilterDateTo, setKpiFilterDateTo] = useState(() => adminDateFilterBounds('', '').to);
   const [kpiSaving, setKpiSaving] = useState(false);
+  const [telegramReportDate, setTelegramReportDate] = useState(() => formatYmdLocal(new Date()));
   const [telegramReportSending, setTelegramReportSending] = useState(false);
 
   const supabaseOk = isSupabaseConfigured();
 
   const handleSendTelegramDailyReport = useCallback(async () => {
     if (telegramReportSending) return;
+    const ymd = telegramReportDate.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) {
+      alert('Укажите дату отчёта');
+      return;
+    }
     setTelegramReportSending(true);
     try {
-      const res = await sendTelegramDailyReportNow();
-      const label = res.reportDateLabel ?? res.reportDate ?? 'сегодня';
+      const res = await sendTelegramDailyReportNow(ymd);
+      const label = res.reportDateLabel ?? res.reportDate ?? ymd;
       alert(`Отчёт за ${label} отправлен в Telegram.`);
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Не удалось отправить отчёт в Telegram');
     } finally {
       setTelegramReportSending(false);
     }
-  }, [telegramReportSending]);
+  }, [telegramReportSending, telegramReportDate]);
 
   const loadReports = useCallback(async (): Promise<FullReport[]> => {
     if (!supabaseOk) {
@@ -865,16 +871,44 @@ const App = () => {
                 Сотрудники
               </button>
             </div>
-            <button
-              type="button"
-              disabled={telegramReportSending}
-              onClick={() => void handleSendTelegramDailyReport()}
-              className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-[11px] sm:text-xs font-black uppercase tracking-wide border border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-100 disabled:opacity-60 disabled:pointer-events-none transition-colors"
-              title="Сводка за сегодня по данным в базе на текущий момент"
-            >
-              {telegramReportSending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-              {telegramReportSending ? 'Отправка…' : 'Отчёт в Telegram'}
-            </button>
+            <div className="flex flex-col sm:flex-row sm:items-end gap-2 w-full sm:w-auto">
+              <div className="flex flex-wrap items-end gap-2">
+                <div className="space-y-1 flex-1 min-w-[140px] sm:flex-none">
+                  <label
+                    htmlFor="telegram-report-date"
+                    className="text-[10px] font-black text-gray-400 uppercase tracking-widest"
+                  >
+                    Дата отчёта
+                  </label>
+                  <input
+                    id="telegram-report-date"
+                    type="date"
+                    value={telegramReportDate}
+                    onChange={(e) => setTelegramReportDate(e.target.value)}
+                    disabled={telegramReportSending}
+                    className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-bold disabled:opacity-60"
+                  />
+                </div>
+                <button
+                  type="button"
+                  disabled={telegramReportSending}
+                  onClick={() => setTelegramReportDate(formatYmdLocal(new Date()))}
+                  className="px-3 py-2.5 rounded-xl border border-gray-200 text-[10px] font-black uppercase tracking-wider text-gray-600 hover:bg-gray-50 disabled:opacity-60"
+                >
+                  Сегодня
+                </button>
+              </div>
+              <button
+                type="button"
+                disabled={telegramReportSending}
+                onClick={() => void handleSendTelegramDailyReport()}
+                className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-[11px] sm:text-xs font-black uppercase tracking-wide border border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-100 disabled:opacity-60 disabled:pointer-events-none transition-colors"
+                title="Сводка за выбранную дату по данным в базе на текущий момент"
+              >
+                {telegramReportSending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                {telegramReportSending ? 'Отправка…' : 'Отчёт в Telegram'}
+              </button>
+            </div>
             </div>
             {adminSubView === 'dashboard' && (
               <AdminDashboard

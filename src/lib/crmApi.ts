@@ -359,9 +359,13 @@ export type TelegramDailyReportResult = {
 };
 
 /** Ручная отправка ежедневной сводки в Telegram (только admin JWT). */
-export async function sendTelegramDailyReportNow(): Promise<TelegramDailyReportResult> {
+export async function sendTelegramDailyReportNow(reportDate?: string): Promise<TelegramDailyReportResult> {
+  const body: { trigger: string; report_date?: string } = { trigger: 'admin-manual' };
+  const ymd = reportDate?.trim();
+  if (ymd && /^\d{4}-\d{2}-\d{2}$/.test(ymd)) body.report_date = ymd;
+
   const { data, error } = await getSupabase().functions.invoke<TelegramDailyReportResult>('telegram-daily-report', {
-    body: { trigger: 'admin-manual' },
+    body,
   });
   if (data?.error) throw new Error(data.error);
   if (data && data.ok === false) throw new Error(data.error ?? 'Не удалось отправить отчёт');
