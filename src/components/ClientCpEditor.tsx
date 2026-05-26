@@ -14,12 +14,15 @@ type Props = {
   meetingCp: number;
   extraCp: number;
   totalCp: number;
+  cpPaid?: boolean;
+  hasClientCard?: boolean;
   meetings: ClientCpMeeting[];
   standaloneByManager: ClientStandaloneCpView[];
   /** Свой manager_id — для сохранения «ЦП без встречи». */
   currentManagerId?: string | null;
   isAdmin?: boolean;
   onRefreshReports?: () => Promise<void>;
+  onTogglePaid?: () => Promise<void>;
   compact?: boolean;
 };
 
@@ -28,11 +31,14 @@ export function ClientCpEditor({
   meetingCp,
   extraCp,
   totalCp,
+  cpPaid = false,
+  hasClientCard = true,
   meetings,
   standaloneByManager,
   currentManagerId,
   isAdmin,
   onRefreshReports,
+  onTogglePaid,
   compact,
 }: Props) {
   const [open, setOpen] = useState(false);
@@ -84,6 +90,18 @@ export function ClientCpEditor({
     }
   };
 
+  const togglePaid = async () => {
+    if (!onTogglePaid) return;
+    setBusy(true);
+    try {
+      await onTogglePaid();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Не удалось сохранить статус оплаты');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (!editable) {
     return (
       <span className="text-sm font-bold text-gray-800 whitespace-nowrap" title={`встречи: ${meetingCp}, без встречи: ${extraCp}`}>
@@ -94,13 +112,30 @@ export function ClientCpEditor({
 
   return (
     <>
-      <div className={`flex ${compact ? 'flex-col items-end gap-0.5' : 'flex-row items-center gap-2'}`}>
-        <span
-          className="text-sm font-bold text-gray-800 whitespace-nowrap"
-          title={`всего ${totalCp} (встречи ${meetingCp} + без встречи ${extraCp})`}
-        >
-          {label}
-        </span>
+      <div className={`flex ${compact ? 'flex-col items-end gap-1' : 'flex-row items-center gap-2 flex-wrap'}`}>
+        <div className={`flex ${compact ? 'flex-col items-end gap-1' : 'flex-row items-center gap-2 flex-wrap'}`}>
+          <span
+            className="text-sm font-bold text-gray-800 whitespace-nowrap"
+            title={`всего ${totalCp} (встречи ${meetingCp} + без встречи ${extraCp})`}
+          >
+            {label}
+          </span>
+          {isAdmin ? (
+            <button
+              type="button"
+              disabled={busy || !hasClientCard || !onTogglePaid}
+              onClick={togglePaid}
+              className={`min-w-[74px] rounded-xl px-3 py-1.5 text-[10px] font-black uppercase tracking-wide border transition-colors disabled:opacity-50 ${
+                cpPaid
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                  : 'border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100'
+              }`}
+              title={hasClientCard ? 'Переключить статус оплаты ЦП' : 'Карточка клиента не найдена в справочнике'}
+            >
+              {busy && onTogglePaid ? '...' : cpPaid ? 'Оплачено' : 'Не оплачено'}
+            </button>
+          ) : null}
+        </div>
         <button
           type="button"
           disabled={busy}

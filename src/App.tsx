@@ -1274,6 +1274,8 @@ const App = () => {
             client={clientHistoryFor}
             conducted={clientHistoryAggregated.conducted}
             orders={clientHistoryAggregated.orders}
+            cpPaid={row?.cpPaid ?? false}
+            hasClientCard={row?.hasClientCard ?? false}
             meetingCp={row?.meetingCp ?? 0}
             extraCp={row?.extraCp ?? 0}
             totalCp={row?.totalCp ?? 0}
@@ -1282,6 +1284,7 @@ const App = () => {
             currentManagerId={sessionUserId}
             isAdmin={isAdmin}
             onRefreshReports={refresh}
+            onTogglePaid={isAdmin && row?.hasClientCard ? () => toggleClientPaid(row) : undefined}
             onClose={() => setClientHistoryFor(null)}
           />
         );

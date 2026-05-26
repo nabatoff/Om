@@ -17,6 +17,8 @@ type Props = {
   client: UiClient;
   conducted: ClientConductedRow[];
   orders: ClientOrderRow[];
+  cpPaid?: boolean;
+  hasClientCard?: boolean;
   meetingCp?: number;
   extraCp?: number;
   totalCp?: number;
@@ -25,6 +27,7 @@ type Props = {
   currentManagerId?: string | null;
   isAdmin?: boolean;
   onRefreshReports?: () => Promise<void>;
+  onTogglePaid?: () => Promise<void>;
   onClose: () => void;
 };
 
@@ -32,6 +35,8 @@ export function ClientHistoryModal({
   client,
   conducted,
   orders,
+  cpPaid = false,
+  hasClientCard = true,
   meetingCp = 0,
   extraCp = 0,
   totalCp = 0,
@@ -40,6 +45,7 @@ export function ClientHistoryModal({
   currentManagerId,
   isAdmin,
   onRefreshReports,
+  onTogglePaid,
   onClose,
 }: Props) {
   const hasHistory = conducted.length > 0 || orders.length > 0;
@@ -68,11 +74,14 @@ export function ClientHistoryModal({
                 meetingCp={meetingCp}
                 extraCp={extraCp}
                 totalCp={totalCp}
+                cpPaid={cpPaid}
+                hasClientCard={hasClientCard}
                 meetings={cpMeetings}
                 standaloneByManager={standaloneByManager}
                 currentManagerId={currentManagerId}
                 isAdmin={isAdmin}
                 onRefreshReports={onRefreshReports}
+                onTogglePaid={onTogglePaid}
               />
             </div>
           </div>

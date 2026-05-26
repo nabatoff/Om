@@ -42,7 +42,6 @@ export function ClientDirectoryPanel({
   emptyHint,
 }: Props) {
   const [q, setQ] = useState('');
-  const [togglingBin, setTogglingBin] = useState<string | null>(null);
   const canMutate = Boolean(onAddClient && onEditClient && onDeleteClient);
 
   const filtered = useMemo(() => {
@@ -104,14 +103,13 @@ export function ClientDirectoryPanel({
                 <th className="p-4 bg-gray-50">Наименование</th>
                 <th className="p-4 bg-gray-50">БИН</th>
                 <th className="p-4 bg-gray-50 text-center">ЦП (всего)</th>
-                {isAdmin ? <th className="p-4 bg-gray-50 text-center">Оплачено</th> : null}
                 <th className="p-4 w-44 text-right bg-gray-50">Действия</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={isAdmin ? 5 : 4} className="p-10 text-center text-gray-500 text-sm">
+                  <td colSpan={4} className="p-10 text-center text-gray-500 text-sm">
                     {defaultEmpty}
                   </td>
                 </tr>
@@ -143,39 +141,21 @@ export function ClientDirectoryPanel({
                         meetingCp={c.meetingCp}
                         extraCp={c.extraCp}
                         totalCp={c.totalCp}
+                        cpPaid={c.cpPaid}
+                        hasClientCard={c.hasClientCard}
                         meetings={c.cpMeetings}
                         standaloneByManager={c.standaloneByManager}
                         currentManagerId={currentManagerId}
                         isAdmin={isAdmin}
                         onRefreshReports={onRefreshReports}
+                        onTogglePaid={
+                          isAdmin && onToggleClientPaid
+                            ? () => onToggleClientPaid({ name: c.name, bin: c.bin, cpPaid: c.cpPaid })
+                            : undefined
+                        }
                         compact
                       />
                     </td>
-                    {isAdmin ? (
-                      <td className="p-4 text-center" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          type="button"
-                          disabled={togglingBin === c.bin || !c.hasClientCard || !onToggleClientPaid}
-                          onClick={async () => {
-                            if (!onToggleClientPaid || !c.hasClientCard) return;
-                            setTogglingBin(c.bin);
-                            try {
-                              await onToggleClientPaid({ name: c.name, bin: c.bin, cpPaid: c.cpPaid });
-                            } finally {
-                              setTogglingBin(null);
-                            }
-                          }}
-                          className={`min-w-[74px] rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-wide border transition-colors disabled:opacity-50 ${
-                            c.cpPaid
-                              ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                              : 'border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100'
-                          }`}
-                          title={c.hasClientCard ? 'Переключить статус оплаты ЦП' : 'Карточка клиента не найдена в справочнике'}
-                        >
-                          {togglingBin === c.bin ? '...' : c.cpPaid ? 'Да' : 'Нет'}
-                        </button>
-                      </td>
-                    ) : null}
                     <td className="p-4 text-right">
                       <div className="inline-flex items-center gap-1">
                         <span className="text-[10px] font-black text-blue-600 uppercase">История</span>
@@ -216,7 +196,7 @@ export function ClientDirectoryPanel({
           </table>
         </div>
         <p className="px-4 py-2.5 text-[10px] text-gray-400 border-t border-gray-100">
-          Клик по строке — история. ЦП = по встречам + без встречи (отдельно). «Изменить» — оба вида.
+          Клик по строке — история. ЦП = по встречам + без встречи. У админа статус оплаты находится рядом с ЦП.
         </p>
       </div>
     </div>
