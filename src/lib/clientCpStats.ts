@@ -4,6 +4,7 @@ export type ClientCpMeeting = {
   meetingId: string;
   cpSent: boolean;
   cpQuantity: number;
+  cpPaid: boolean;
   reportDate: string;
   meetingDate: string;
   manager: string;
@@ -16,8 +17,6 @@ export type ClientStandaloneCpView = ClientStandaloneCp & {
 export type ClientListRow = {
   name: string;
   bin: string;
-  cpPaid: boolean;
-  hasClientCard: boolean;
   meetingCp: number;
   extraCp: number;
   totalCp: number;
@@ -83,6 +82,7 @@ export function clientCpStatsForBin(
           meetingId,
           cpSent: Boolean(m.cpSent),
           cpQuantity: m.cpQuantity ?? 0,
+          cpPaid: Boolean(m.cpPaid),
           reportDate: r.date,
           meetingDate: m.date,
           manager: r.manager,
@@ -136,7 +136,7 @@ export function buildClientListRows(
   const rows: ClientListRow[] = [];
   const managerFilter = options?.allCatalog ? undefined : options?.managerId;
 
-  const pushRow = (bin: string, name: string, reportScope: FullReport[], client?: { name: string; bin: string; cpPaid?: boolean }) => {
+  const pushRow = (bin: string, name: string, reportScope: FullReport[]) => {
     const { meetingCp, cpMeetings } = clientCpStatsForBin(reportScope, bin);
     const { extraCp, standaloneByManager } = standaloneForBin(
       standaloneRows,
@@ -147,8 +147,6 @@ export function buildClientListRows(
     rows.push({
       name,
       bin,
-      cpPaid: Boolean(client?.cpPaid),
-      hasClientCard: Boolean(client),
       meetingCp,
       extraCp,
       totalCp: meetingCp + extraCp,
@@ -161,7 +159,7 @@ export function buildClientListRows(
     for (const c of catalog) {
       const bin = c.bin.trim();
       if (!bin) continue;
-      pushRow(bin, c.name.trim() || binMap.get(bin) || '—', reports, c);
+      pushRow(bin, c.name.trim() || binMap.get(bin) || '—', reports);
     }
     for (const [bin, name] of binMap) {
       if (rows.some((r) => r.bin === bin)) continue;
@@ -170,14 +168,14 @@ export function buildClientListRows(
   } else {
     for (const [bin, name] of binMap) {
       const cat = catalog.find((c) => c.bin.trim() === bin);
-      pushRow(bin, (cat?.name ?? name).trim() || '—', scoped, cat);
+      pushRow(bin, (cat?.name ?? name).trim() || '—', scoped);
     }
     for (const row of standaloneRows) {
       if (managerFilter && row.managerId !== managerFilter) continue;
       const bin = row.bin.trim();
       if (!bin || rows.some((r) => r.bin === bin)) continue;
       const cat = catalog.find((c) => c.bin.trim() === bin);
-      pushRow(bin, cat?.name.trim() || '—', scoped, cat);
+      pushRow(bin, cat?.name.trim() || '—', scoped);
     }
   }
 

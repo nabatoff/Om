@@ -37,7 +37,6 @@ import {
   fetchDeletedMeetingsApi,
   fetchReportsApi,
   fetchStandaloneCpApi,
-  setClientCpPaid,
   type ClientStandaloneCp,
   createClientRow,
   updateClientRow,
@@ -212,7 +211,7 @@ const App = () => {
     setLoadError(null);
     try {
       const [c, r, basket, standalone] = await Promise.all([
-        fetchClientsApi(isAdmin),
+        fetchClientsApi(),
         fetchReportsApi(),
         isAdmin ? fetchDeletedMeetingsApi() : Promise.resolve([]),
         fetchStandaloneCpApi().catch(() => [] as ClientStandaloneCp[]),
@@ -233,14 +232,6 @@ const App = () => {
   const refresh = useCallback(async () => {
     await loadReports();
   }, [loadReports]);
-
-  const toggleClientPaid = useCallback(
-    async (client: { name: string; bin: string; cpPaid: boolean }) => {
-      await setClientCpPaid(client.bin, !client.cpPaid);
-      await refresh();
-    },
-    [refresh],
-  );
 
   useEffect(() => {
     void refresh();
@@ -997,7 +988,6 @@ const App = () => {
           <ClientDirectoryPanel
             rows={clientListRows}
             onRefreshReports={refresh}
-            onToggleClientPaid={isAdmin ? toggleClientPaid : undefined}
             currentManagerId={sessionUserId}
             isAdmin={isAdmin}
             title={isAdmin ? 'Все контрагенты' : 'Мои клиенты'}
@@ -1274,8 +1264,6 @@ const App = () => {
             client={clientHistoryFor}
             conducted={clientHistoryAggregated.conducted}
             orders={clientHistoryAggregated.orders}
-            cpPaid={row?.cpPaid ?? false}
-            hasClientCard={row?.hasClientCard ?? false}
             meetingCp={row?.meetingCp ?? 0}
             extraCp={row?.extraCp ?? 0}
             totalCp={row?.totalCp ?? 0}
@@ -1284,7 +1272,6 @@ const App = () => {
             currentManagerId={sessionUserId}
             isAdmin={isAdmin}
             onRefreshReports={refresh}
-            onTogglePaid={isAdmin && row?.hasClientCard ? () => toggleClientPaid(row) : undefined}
             onClose={() => setClientHistoryFor(null)}
           />
         );
@@ -1885,7 +1872,7 @@ const MeetingTable = ({
     } else {
       (setData as SetState<UiConducted[]>)([
         ...(data as UiConducted[]),
-        { entityName: '', bin: '', date: reportDate, type: 'Новая', result: '', cpSent: false, cpQuantity: 0 },
+        { entityName: '', bin: '', date: reportDate, type: 'Новая', result: '', cpSent: false, cpQuantity: 0, cpPaid: false },
       ]);
     }
   };

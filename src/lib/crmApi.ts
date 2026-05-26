@@ -19,6 +19,8 @@ export type UiConducted = {
   cpSent: boolean;
   /** Количество отправленного ЦП (если cpSent). */
   cpQuantity: number;
+  /** Статус оплаты именно этой записи ЦП. */
+  cpPaid: boolean;
 };
 export type UiOrder = {
   entityName: string;
@@ -82,6 +84,7 @@ type ReportRow = {
     sort_order: number;
     cp_sent?: boolean | null;
     cp_quantity?: number | null;
+    cp_paid?: boolean | null;
   }[];
   crm_confirmed_orders: {
     id: string;
@@ -128,6 +131,7 @@ function mapReport(r: ReportRow): FullReport {
         result: m.result || '',
         cpSent: Boolean(m.cp_sent),
         cpQuantity: Math.max(0, Number(m.cp_quantity ?? 0) || 0),
+        cpPaid: Boolean(m.cp_paid),
       })),
     confirmedOrders: (r.crm_confirmed_orders || [])
       .sort((a, b) => a.sort_order - b.sort_order)
@@ -150,7 +154,7 @@ const reportSelect = `
   id, report_date, manager, manager_id,
   processed_total, new_in_work, calls_total, validated_total,
   crm_assigned_meetings ( id, entity_name, bin, meeting_date, meeting_type, sort_order ),
-  crm_conducted_meetings ( id, entity_name, bin, meeting_date, meeting_type, result, sort_order, cp_sent, cp_quantity ),
+  crm_conducted_meetings ( id, entity_name, bin, meeting_date, meeting_type, result, sort_order, cp_sent, cp_quantity, cp_paid ),
   crm_confirmed_orders ( id, entity_name, bin, via_entity_name, via_bin, order_count, amounts, total_amount, sort_order )
 `;
 
@@ -341,18 +345,20 @@ export type ClientStandaloneCp = {
   managerId: string;
   bin: string;
   cpQuantity: number;
+  cpPaid: boolean;
 };
 
 export async function fetchStandaloneCpApi(): Promise<ClientStandaloneCp[]> {
   const { data, error } = await getSupabase()
     .from('crm_client_standalone_cp')
-    .select('id, manager_id, bin, cp_quantity');
+    .select('id, manager_id, bin, cp_quantity, cp_paid');
   if (error) throw error;
   return (data || []).map((r) => ({
     id: String(r.id),
     managerId: String(r.manager_id),
     bin: String(r.bin).trim(),
     cpQuantity: Math.max(0, Number(r.cp_quantity ?? 0) || 0),
+    cpPaid: Boolean(r.cp_paid),
   }));
 }
 
@@ -378,8 +384,26 @@ export async function updateConductedMeetingCpById(meetingId: string, cpSent: bo
   const sent = Boolean(cpSent) && q >= 1;
   const { error } = await getSupabase()
     .from('crm_conducted_meetings')
-    .update({ cp_sent: sent, cp_quantity: sent ? q : 0 })
+    .update(sent ? { cp_sent: true, cp_quantity: q } : { cp_sent: false, cp_quantity: 0, cp_paid: false })
     .eq('id', meetingId);
+  if (error) throw error;
+}
+
+/** Админ: отметить конкретную запись ЦП по встрече как оплаченную / нет. */
+export async function setConductedMeetingCpPaidById(meetingId: string, paid: boolean): Promise<void> {
+  const { error } = await getSupabase().rpc('set_conducted_meeting_cp_paid', {
+    p_meeting_id: meetingId,
+    p_paid: Boolean(paid),
+  });
+  if (error) throw error;
+}
+
+/** Админ: отметить конкретную запись «ЦП без встречи» как оплаченную / нет. */
+export async function setStandaloneCpPaidById(id: string, paid: boolean): Promise<void> {
+  const { error } = await getSupabase().rpc('set_client_standalone_cp_paid', {
+    p_id: id,
+    p_paid: Boolean(paid),
+  });
   if (error) throw error;
 }
 

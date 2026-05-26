@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react';
-import { updateConductedMeetingCpById, upsertClientStandaloneCp } from '../lib/crmApi';
+import {
+  setConductedMeetingCpPaidById,
+  setStandaloneCpPaidById,
+  updateConductedMeetingCpById,
+  upsertClientStandaloneCp,
+} from '../lib/crmApi';
 import type { ClientCpMeeting, ClientStandaloneCpView } from '../lib/clientCpStats';
 
 function formatDisplayDate(raw: string): string {
@@ -14,15 +19,12 @@ type Props = {
   meetingCp: number;
   extraCp: number;
   totalCp: number;
-  cpPaid?: boolean;
-  hasClientCard?: boolean;
   meetings: ClientCpMeeting[];
   standaloneByManager: ClientStandaloneCpView[];
   /** Свой manager_id — для сохранения «ЦП без встречи». */
   currentManagerId?: string | null;
   isAdmin?: boolean;
   onRefreshReports?: () => Promise<void>;
-  onTogglePaid?: () => Promise<void>;
   compact?: boolean;
 };
 
@@ -31,14 +33,11 @@ export function ClientCpEditor({
   meetingCp,
   extraCp,
   totalCp,
-  cpPaid = false,
-  hasClientCard = true,
   meetings,
   standaloneByManager,
   currentManagerId,
   isAdmin,
   onRefreshReports,
-  onTogglePaid,
   compact,
 }: Props) {
   const [open, setOpen] = useState(false);
@@ -90,11 +89,25 @@ export function ClientCpEditor({
     }
   };
 
-  const togglePaid = async () => {
-    if (!onTogglePaid) return;
+  const applyMeetingPaid = async (meetingId: string, paid: boolean) => {
+    if (!onRefreshReports) return;
     setBusy(true);
     try {
-      await onTogglePaid();
+      await setConductedMeetingCpPaidById(meetingId, paid);
+      await onRefreshReports();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Не удалось сохранить статус оплаты');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const applyStandalonePaid = async (id: string, paid: boolean) => {
+    if (!onRefreshReports) return;
+    setBusy(true);
+    try {
+      await setStandaloneCpPaidById(id, paid);
+      await onRefreshReports();
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Не удалось сохранить статус оплаты');
     } finally {
@@ -113,29 +126,12 @@ export function ClientCpEditor({
   return (
     <>
       <div className={`flex ${compact ? 'flex-col items-end gap-1' : 'flex-row items-center gap-2 flex-wrap'}`}>
-        <div className={`flex ${compact ? 'flex-col items-end gap-1' : 'flex-row items-center gap-2 flex-wrap'}`}>
-          <span
-            className="text-sm font-bold text-gray-800 whitespace-nowrap"
-            title={`всего ${totalCp} (встречи ${meetingCp} + без встречи ${extraCp})`}
-          >
-            {label}
-          </span>
-          {isAdmin ? (
-            <button
-              type="button"
-              disabled={busy || !hasClientCard || !onTogglePaid}
-              onClick={togglePaid}
-              className={`min-w-[74px] rounded-xl px-3 py-1.5 text-[10px] font-black uppercase tracking-wide border transition-colors disabled:opacity-50 ${
-                cpPaid
-                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                  : 'border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100'
-              }`}
-              title={hasClientCard ? 'Переключить статус оплаты ЦП' : 'Карточка клиента не найдена в справочнике'}
-            >
-              {busy && onTogglePaid ? '...' : cpPaid ? 'Оплачено' : 'Не оплачено'}
-            </button>
-          ) : null}
-        </div>
+        <span
+          className="text-sm font-bold text-gray-800 whitespace-nowrap"
+          title={`всего ${totalCp} (встречи ${meetingCp} + без встречи ${extraCp})`}
+        >
+          {label}
+        </span>
         <button
           type="button"
           disabled={busy}
@@ -172,36 +168,52 @@ export function ClientCpEditor({
                 ) : (
                   <div className="space-y-2">
                     {standaloneByManager.map((s) => (
-                      <div key={s.managerId} className="flex items-center gap-2 border border-gray-100 rounded-xl p-2">
-                        <span className="text-xs font-bold text-gray-700 flex-1 truncate">
+                      <div key={s.id} className="border border-gray-100 rounded-xl p-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="text-xs font-bold text-gray-700 truncate">
                           {s.managerName || s.managerId.slice(0, 8)}
-                        </span>
-                        <input
-                          type="number"
-                          min={0}
-                          step={1}
-                          disabled={busy}
-                          className="w-20 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-xs font-bold"
-                          value={adminExtraEdits[s.managerId] ?? String(s.cpQuantity)}
-                          onChange={(e) =>
-                            setAdminExtraEdits((prev) => ({ ...prev, [s.managerId]: e.target.value }))
-                          }
-                        />
-                        <button
-                          type="button"
-                          disabled={busy}
-                          className="text-[10px] font-black uppercase text-blue-600 shrink-0"
-                          onClick={async () => {
-                            const n = parseInt((adminExtraEdits[s.managerId] ?? '0').trim(), 10);
-                            if (!Number.isFinite(n) || n < 0) {
-                              alert('Введите целое число ≥ 0.');
-                              return;
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 shrink-0">
+                          <input
+                            type="number"
+                            min={0}
+                            step={1}
+                            disabled={busy}
+                            className="w-20 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-xs font-bold"
+                            value={adminExtraEdits[s.managerId] ?? String(s.cpQuantity)}
+                            onChange={(e) =>
+                              setAdminExtraEdits((prev) => ({ ...prev, [s.managerId]: e.target.value }))
                             }
-                            await applyStandalone(n, s.managerId);
-                          }}
-                        >
-                          OK
-                        </button>
+                          />
+                          <button
+                            type="button"
+                            disabled={busy}
+                            className="text-[10px] font-black uppercase text-blue-600 shrink-0"
+                            onClick={async () => {
+                              const n = parseInt((adminExtraEdits[s.managerId] ?? '0').trim(), 10);
+                              if (!Number.isFinite(n) || n < 0) {
+                                alert('Введите целое число ≥ 0.');
+                                return;
+                              }
+                              await applyStandalone(n, s.managerId);
+                            }}
+                          >
+                            OK
+                          </button>
+                          {s.cpQuantity >= 1 ? (
+                            <button
+                              type="button"
+                              disabled={busy}
+                              className={`min-w-[98px] rounded-xl px-3 py-1.5 text-[10px] font-black uppercase tracking-wide border transition-colors ${
+                                s.cpPaid
+                                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                                  : 'border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100'
+                              }`}
+                              onClick={() => void applyStandalonePaid(s.id, !s.cpPaid)}
+                            >
+                              {s.cpPaid ? 'Оплачено' : 'Не оплачено'}
+                            </button>
+                          ) : null}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -261,7 +273,7 @@ export function ClientCpEditor({
                             <span className="text-gray-400"> · встреча {formatDisplayDate(m.meetingDate)}</span>
                           ) : null}
                         </div>
-                        <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex flex-wrap items-center gap-2 shrink-0">
                           <select
                             disabled={busy}
                             className="bg-white border border-gray-200 rounded-lg px-2 py-1.5 text-[11px] font-bold"
@@ -287,6 +299,20 @@ export function ClientCpEditor({
                               }
                             >
                               {m.cpQuantity} шт.
+                            </button>
+                          ) : null}
+                          {isAdmin && sent ? (
+                            <button
+                              type="button"
+                              disabled={busy}
+                              className={`min-w-[98px] rounded-xl px-3 py-1.5 text-[10px] font-black uppercase tracking-wide border transition-colors ${
+                                m.cpPaid
+                                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                                  : 'border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100'
+                              }`}
+                              onClick={() => void applyMeetingPaid(m.meetingId, !m.cpPaid)}
+                            >
+                              {m.cpPaid ? 'Оплачено' : 'Не оплачено'}
                             </button>
                           ) : null}
                         </div>

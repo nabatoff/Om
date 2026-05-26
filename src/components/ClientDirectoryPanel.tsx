@@ -10,7 +10,6 @@ type Props = {
   onEditClient?: (c: { name: string; bin: string }) => void;
   onDeleteClient?: (c: { name: string; bin: string }) => void;
   onRefreshReports?: () => Promise<void>;
-  onToggleClientPaid?: (c: { name: string; bin: string; cpPaid: boolean }) => Promise<void>;
   currentManagerId?: string | null;
   isAdmin?: boolean;
   title?: string;
@@ -34,7 +33,6 @@ export function ClientDirectoryPanel({
   onEditClient,
   onDeleteClient,
   onRefreshReports,
-  onToggleClientPaid,
   currentManagerId,
   isAdmin,
   title = 'Все контрагенты',
@@ -141,18 +139,11 @@ export function ClientDirectoryPanel({
                         meetingCp={c.meetingCp}
                         extraCp={c.extraCp}
                         totalCp={c.totalCp}
-                        cpPaid={c.cpPaid}
-                        hasClientCard={c.hasClientCard}
                         meetings={c.cpMeetings}
                         standaloneByManager={c.standaloneByManager}
                         currentManagerId={currentManagerId}
                         isAdmin={isAdmin}
                         onRefreshReports={onRefreshReports}
-                        onTogglePaid={
-                          isAdmin && onToggleClientPaid
-                            ? () => onToggleClientPaid({ name: c.name, bin: c.bin, cpPaid: c.cpPaid })
-                            : undefined
-                        }
                         compact
                       />
                     </td>
