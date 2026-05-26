@@ -1,6 +1,6 @@
 import { getSupabase } from './supabase';
 
-export type UiClient = { name: string; bin: string };
+export type UiClient = { name: string; bin: string; cpPaid?: boolean };
 export type FormStats = {
   processedTotal: number;
   newInWork: number;
@@ -154,10 +154,24 @@ const reportSelect = `
   crm_confirmed_orders ( id, entity_name, bin, via_entity_name, via_bin, order_count, amounts, total_amount, sort_order )
 `;
 
-export async function fetchClientsApi(): Promise<UiClient[]> {
+export async function fetchClientsApi(includePaid = false): Promise<UiClient[]> {
+  if (includePaid) {
+    const { data, error } = await getSupabase().from('crm_clients').select('name, bin, cp_paid').order('name');
+    if (error) throw error;
+    return (data || []).map((c) => ({
+      name: c.name,
+      bin: String(c.bin).trim(),
+      cpPaid: Boolean(c.cp_paid),
+    }));
+  }
+
   const { data, error } = await getSupabase().from('crm_clients').select('name, bin').order('name');
   if (error) throw error;
-  return (data || []).map((c) => ({ name: c.name, bin: String(c.bin).trim() }));
+  return (data || []).map((c) => ({
+    name: c.name,
+    bin: String(c.bin).trim(),
+    cpPaid: false,
+  }));
 }
 
 export async function fetchReportsApi(): Promise<FullReport[]> {
@@ -218,7 +232,7 @@ export async function createClientRow(c: UiClient): Promise<UiClient> {
   const { data, error } = await getSupabase()
     .from('crm_clients')
     .insert({ name: c.name, bin: c.bin })
-    .select('name, bin')
+    .select('name, bin, cp_paid')
     .single();
   if (error) {
     if (error.code === '23505') {
@@ -229,7 +243,7 @@ export async function createClientRow(c: UiClient): Promise<UiClient> {
     }
     throw error;
   }
-  return { name: data.name, bin: String(data.bin).trim() };
+  return { name: data.name, bin: String(data.bin).trim(), cpPaid: Boolean(data.cp_paid) };
 }
 
 export async function deleteClientByBin(bin: string): Promise<void> {
@@ -253,13 +267,13 @@ export async function updateClientRow(originalBin: string, next: UiClient): Prom
       .from('crm_clients')
       .update({ name })
       .eq('bin', oldB)
-      .select('name, bin')
+      .select('name, bin, cp_paid')
       .single();
     if (error) {
       if (error.code === '23505') throw new Error('Контрагент с таким БИН уже существует');
       throw error;
     }
-    return { name: data.name, bin: String(data.bin).trim() };
+    return { name: data.name, bin: String(data.bin).trim(), cpPaid: Boolean(data.cp_paid) };
   }
   const { error: rpcError } = await getSupabase().rpc('update_crm_client', {
     p_old_bin: oldB,
@@ -272,9 +286,19 @@ export async function updateClientRow(originalBin: string, next: UiClient): Prom
     }
     throw rpcError;
   }
-  const { data, error } = await getSupabase().from('crm_clients').select('name, bin').eq('bin', newB).single();
+  const { data, error } = await getSupabase().from('crm_clients').select('name, bin, cp_paid').eq('bin', newB).single();
   if (error) throw error;
-  return { name: data.name, bin: String(data.bin).trim() };
+  return { name: data.name, bin: String(data.bin).trim(), cpPaid: Boolean(data.cp_paid) };
+}
+
+/** Админ: отметить клиента как «ЦП оплачено / не оплачено». */
+export async function setClientCpPaid(bin: string, paid: boolean): Promise<void> {
+  const b = bin.trim();
+  const { error } = await getSupabase().rpc('set_crm_client_cp_paid', {
+    p_bin: b,
+    p_paid: Boolean(paid),
+  });
+  if (error) throw error;
 }
 
 export async function deleteReportById(reportId: string): Promise<void> {

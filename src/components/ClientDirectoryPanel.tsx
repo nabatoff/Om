@@ -10,6 +10,7 @@ type Props = {
   onEditClient?: (c: { name: string; bin: string }) => void;
   onDeleteClient?: (c: { name: string; bin: string }) => void;
   onRefreshReports?: () => Promise<void>;
+  onToggleClientPaid?: (c: { name: string; bin: string; cpPaid: boolean }) => Promise<void>;
   currentManagerId?: string | null;
   isAdmin?: boolean;
   title?: string;
@@ -33,6 +34,7 @@ export function ClientDirectoryPanel({
   onEditClient,
   onDeleteClient,
   onRefreshReports,
+  onToggleClientPaid,
   currentManagerId,
   isAdmin,
   title = 'Все контрагенты',
@@ -40,6 +42,7 @@ export function ClientDirectoryPanel({
   emptyHint,
 }: Props) {
   const [q, setQ] = useState('');
+  const [togglingBin, setTogglingBin] = useState<string | null>(null);
   const canMutate = Boolean(onAddClient && onEditClient && onDeleteClient);
 
   const filtered = useMemo(() => {
@@ -101,13 +104,14 @@ export function ClientDirectoryPanel({
                 <th className="p-4 bg-gray-50">Наименование</th>
                 <th className="p-4 bg-gray-50">БИН</th>
                 <th className="p-4 bg-gray-50 text-center">ЦП (всего)</th>
+                {isAdmin ? <th className="p-4 bg-gray-50 text-center">Оплачено</th> : null}
                 <th className="p-4 w-44 text-right bg-gray-50">Действия</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="p-10 text-center text-gray-500 text-sm">
+                  <td colSpan={isAdmin ? 5 : 4} className="p-10 text-center text-gray-500 text-sm">
                     {defaultEmpty}
                   </td>
                 </tr>
@@ -147,6 +151,31 @@ export function ClientDirectoryPanel({
                         compact
                       />
                     </td>
+                    {isAdmin ? (
+                      <td className="p-4 text-center" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          disabled={togglingBin === c.bin || !c.hasClientCard || !onToggleClientPaid}
+                          onClick={async () => {
+                            if (!onToggleClientPaid || !c.hasClientCard) return;
+                            setTogglingBin(c.bin);
+                            try {
+                              await onToggleClientPaid({ name: c.name, bin: c.bin, cpPaid: c.cpPaid });
+                            } finally {
+                              setTogglingBin(null);
+                            }
+                          }}
+                          className={`min-w-[74px] rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-wide border transition-colors disabled:opacity-50 ${
+                            c.cpPaid
+                              ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                              : 'border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100'
+                          }`}
+                          title={c.hasClientCard ? 'Переключить статус оплаты ЦП' : 'Карточка клиента не найдена в справочнике'}
+                        >
+                          {togglingBin === c.bin ? '...' : c.cpPaid ? 'Да' : 'Нет'}
+                        </button>
+                      </td>
+                    ) : null}
                     <td className="p-4 text-right">
                       <div className="inline-flex items-center gap-1">
                         <span className="text-[10px] font-black text-blue-600 uppercase">История</span>

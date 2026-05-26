@@ -37,6 +37,7 @@ import {
   fetchDeletedMeetingsApi,
   fetchReportsApi,
   fetchStandaloneCpApi,
+  setClientCpPaid,
   type ClientStandaloneCp,
   createClientRow,
   updateClientRow,
@@ -211,7 +212,7 @@ const App = () => {
     setLoadError(null);
     try {
       const [c, r, basket, standalone] = await Promise.all([
-        fetchClientsApi(),
+        fetchClientsApi(isAdmin),
         fetchReportsApi(),
         isAdmin ? fetchDeletedMeetingsApi() : Promise.resolve([]),
         fetchStandaloneCpApi().catch(() => [] as ClientStandaloneCp[]),
@@ -232,6 +233,14 @@ const App = () => {
   const refresh = useCallback(async () => {
     await loadReports();
   }, [loadReports]);
+
+  const toggleClientPaid = useCallback(
+    async (client: { name: string; bin: string; cpPaid: boolean }) => {
+      await setClientCpPaid(client.bin, !client.cpPaid);
+      await refresh();
+    },
+    [refresh],
+  );
 
   useEffect(() => {
     void refresh();
@@ -988,6 +997,7 @@ const App = () => {
           <ClientDirectoryPanel
             rows={clientListRows}
             onRefreshReports={refresh}
+            onToggleClientPaid={isAdmin ? toggleClientPaid : undefined}
             currentManagerId={sessionUserId}
             isAdmin={isAdmin}
             title={isAdmin ? 'Все контрагенты' : 'Мои клиенты'}

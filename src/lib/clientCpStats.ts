@@ -16,6 +16,8 @@ export type ClientStandaloneCpView = ClientStandaloneCp & {
 export type ClientListRow = {
   name: string;
   bin: string;
+  cpPaid: boolean;
+  hasClientCard: boolean;
   meetingCp: number;
   extraCp: number;
   totalCp: number;
@@ -134,7 +136,7 @@ export function buildClientListRows(
   const rows: ClientListRow[] = [];
   const managerFilter = options?.allCatalog ? undefined : options?.managerId;
 
-  const pushRow = (bin: string, name: string, reportScope: FullReport[]) => {
+  const pushRow = (bin: string, name: string, reportScope: FullReport[], client?: { name: string; bin: string; cpPaid?: boolean }) => {
     const { meetingCp, cpMeetings } = clientCpStatsForBin(reportScope, bin);
     const { extraCp, standaloneByManager } = standaloneForBin(
       standaloneRows,
@@ -145,6 +147,8 @@ export function buildClientListRows(
     rows.push({
       name,
       bin,
+      cpPaid: Boolean(client?.cpPaid),
+      hasClientCard: Boolean(client),
       meetingCp,
       extraCp,
       totalCp: meetingCp + extraCp,
@@ -157,7 +161,7 @@ export function buildClientListRows(
     for (const c of catalog) {
       const bin = c.bin.trim();
       if (!bin) continue;
-      pushRow(bin, c.name.trim() || binMap.get(bin) || '—', reports);
+      pushRow(bin, c.name.trim() || binMap.get(bin) || '—', reports, c);
     }
     for (const [bin, name] of binMap) {
       if (rows.some((r) => r.bin === bin)) continue;
@@ -166,14 +170,14 @@ export function buildClientListRows(
   } else {
     for (const [bin, name] of binMap) {
       const cat = catalog.find((c) => c.bin.trim() === bin);
-      pushRow(bin, (cat?.name ?? name).trim() || '—', scoped);
+      pushRow(bin, (cat?.name ?? name).trim() || '—', scoped, cat);
     }
     for (const row of standaloneRows) {
       if (managerFilter && row.managerId !== managerFilter) continue;
       const bin = row.bin.trim();
       if (!bin || rows.some((r) => r.bin === bin)) continue;
       const cat = catalog.find((c) => c.bin.trim() === bin);
-      pushRow(bin, cat?.name.trim() || '—', scoped);
+      pushRow(bin, cat?.name.trim() || '—', scoped, cat);
     }
   }
 
