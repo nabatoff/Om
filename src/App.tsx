@@ -478,10 +478,12 @@ const App = () => {
   );
 
   const toggleClientPaid = useCallback(
-    async (bin: string, paid: boolean) => {
+    async (bin: string, paid: boolean, paidAt?: string | null) => {
       if (!isAdmin) return;
-      await setClientCpPaid(bin, paid);
-      setClients((prev) => prev.map((c) => (c.bin === bin ? { ...c, cpPaid: paid } : c)));
+      await setClientCpPaid(bin, paid, paidAt);
+      setClients((prev) =>
+        prev.map((c) => (c.bin === bin ? { ...c, cpPaid: paid, cpPaidAt: paid ? (paidAt ?? null) : null } : c)),
+      );
     },
     [isAdmin],
   );
@@ -781,11 +783,12 @@ const App = () => {
         if (m) set.add(m);
       }
     }
-    return ['Все', ...Array.from(set).sort((a, b) => a.localeCompare(b, 'ru'))];
+    return ['Все', 'Не назначен', ...Array.from(set).sort((a, b) => a.localeCompare(b, 'ru'))];
   }, [clientListRows]);
 
   const visibleClientRows = useMemo(() => {
     if (!isAdmin || adminClientsFilterManager === 'Все') return clientListRows;
+    if (adminClientsFilterManager === 'Не назначен') return clientListRows.filter((r) => !r.managerId);
     return clientListRows.filter((r) => r.managerNames.includes(adminClientsFilterManager));
   }, [clientListRows, isAdmin, adminClientsFilterManager]);
 
@@ -1360,6 +1363,7 @@ const App = () => {
             extraCp={row?.extraCp ?? 0}
             totalCp={row?.totalCp ?? 0}
             cpPaid={row?.cpPaid ?? false}
+            cpPaidAt={row?.cpPaidAt ?? null}
             cpMeetings={row?.cpMeetings ?? []}
             standaloneByManager={row?.standaloneByManager ?? []}
             currentManagerId={sessionUserId}

@@ -10,7 +10,7 @@ type Props = {
   onEditClient?: (c: { name: string; bin: string; managerId?: string | null }) => void;
   onDeleteClient?: (c: { name: string; bin: string }) => void;
   onRefreshReports?: () => Promise<void>;
-  onToggleClientPaid?: (bin: string, paid: boolean) => Promise<void>;
+  onToggleClientPaid?: (bin: string, paid: boolean, paidAt?: string | null) => Promise<void>;
   onAssignManager?: (bin: string, managerId: string | null) => Promise<void>;
   managerSelectOptions?: Array<{ id: string; fullName: string }>;
   currentManagerId?: string | null;
@@ -184,6 +184,7 @@ export function ClientDirectoryPanel({
                         meetings={c.cpMeetings}
                         standaloneByManager={c.standaloneByManager}
                         cpPaid={c.cpPaid}
+                        cpPaidAt={c.cpPaidAt}
                         currentManagerId={currentManagerId}
                         isAdmin={isAdmin}
                         onToggleClientPaid={onToggleClientPaid}

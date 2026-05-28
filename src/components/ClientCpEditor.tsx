@@ -21,10 +21,11 @@ type Props = {
   meetings: ClientCpMeeting[];
   standaloneByManager: ClientStandaloneCpView[];
   cpPaid?: boolean;
+  cpPaidAt?: string | null;
   /** Свой manager_id — для сохранения «ЦП без встречи». */
   currentManagerId?: string | null;
   isAdmin?: boolean;
-  onToggleClientPaid?: (bin: string, paid: boolean) => Promise<void>;
+  onToggleClientPaid?: (bin: string, paid: boolean, paidAt?: string | null) => Promise<void>;
   onRefreshReports?: () => Promise<void>;
   compact?: boolean;
 };
@@ -37,6 +38,7 @@ export function ClientCpEditor({
   meetings,
   standaloneByManager,
   cpPaid,
+  cpPaidAt,
   currentManagerId,
   isAdmin,
   onToggleClientPaid,
@@ -48,10 +50,12 @@ export function ClientCpEditor({
   const [extraInput, setExtraInput] = useState('1');
   const [entryEdits, setEntryEdits] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  const [paidAtModal, setPaidAtModal] = useState<{ input: string } | null>(null);
 
   const editable = Boolean(onRefreshReports);
   const label = totalCp >= 1 ? `${totalCp} шт.` : '—';
   const ownStandaloneEntries = currentManagerId ? standaloneByManager.filter((s) => s.managerId === currentManagerId) : [];
+  const managerHasLockedStandalone = !isAdmin && ownStandaloneEntries.some((s) => s.cpQuantity >= 1);
 
   useEffect(() => {
     if (!open) return;
@@ -102,17 +106,19 @@ export function ClientCpEditor({
     }
   };
 
-  const applyClientPaid = async (paid: boolean) => {
+  const applyClientPaid = async (paid: boolean, paidAt?: string | null) => {
     if (!onToggleClientPaid) return;
     setBusy(true);
     try {
-      await onToggleClientPaid(bin, paid);
+      await onToggleClientPaid(bin, paid, paidAt);
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Не удалось сохранить статус оплаты');
     } finally {
       setBusy(false);
     }
   };
+
+  const paidCaption = cpPaid ? formatDisplayDate(cpPaidAt || '') : 'Не оплачено';
 
   if (!editable) {
     return (
@@ -148,9 +154,15 @@ export function ClientCpEditor({
                 ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
                 : 'border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100'
             }`}
-            onClick={() => void applyClientPaid(!cpPaid)}
+            onClick={() => {
+              if (cpPaid) {
+                void applyClientPaid(false, null);
+              } else {
+                setPaidAtModal({ input: cpPaidAt || new Date().toISOString().slice(0, 10) });
+              }
+            }}
           >
-            {cpPaid ? 'Оплачено' : 'Не оплачено'}
+            {paidCaption}
           </button>
         ) : null}
       </div>
@@ -182,9 +194,15 @@ export function ClientCpEditor({
                       ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
                       : 'border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100'
                   }`}
-                  onClick={() => void applyClientPaid(!cpPaid)}
+                  onClick={() => {
+                    if (cpPaid) {
+                      void applyClientPaid(false, null);
+                    } else {
+                      setPaidAtModal({ input: cpPaidAt || new Date().toISOString().slice(0, 10) });
+                    }
+                  }}
                 >
-                  ЦП клиента: {cpPaid ? 'Оплачено' : 'Не оплачено'}
+                  ЦП клиента: {paidCaption}
                 </button>
               </div>
             ) : null}
@@ -286,14 +304,14 @@ export function ClientCpEditor({
                           type="number"
                           min={0}
                           step={1}
-                          disabled={busy}
+                          disabled={busy || s.cpQuantity >= 1}
                           className="w-24 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm font-bold"
                           value={entryEdits[s.id] ?? String(s.cpQuantity)}
                           onChange={(e) => setEntryEdits((prev) => ({ ...prev, [s.id]: e.target.value }))}
                         />
                         <button
                           type="button"
-                          disabled={busy}
+                          disabled={busy || s.cpQuantity >= 1}
                           className="px-3 py-2 rounded-xl text-[10px] font-black uppercase bg-blue-600 text-white"
                           onClick={async () => {
                             const n = parseInt((entryEdits[s.id] ?? '0').trim(), 10);
@@ -306,39 +324,44 @@ export function ClientCpEditor({
                         >
                           Сохранить
                         </button>
+                        {s.cpQuantity >= 1 ? <span className="text-[10px] text-gray-500 font-bold uppercase">Зафиксировано</span> : null}
                       </div>
                     ))
                   )}
-                  <div className="border border-dashed border-gray-200 rounded-xl p-3 flex flex-wrap items-center gap-2 justify-between">
-                    <span className="text-[11px] font-bold text-gray-600">Добавить запись</span>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        min={1}
-                        step={1}
-                        disabled={busy}
-                        className="w-20 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-xs font-bold"
-                        value={extraInput}
-                        onChange={(e) => setExtraInput(e.target.value)}
-                      />
-                      <button
-                        type="button"
-                        disabled={busy}
-                        className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase bg-blue-600 text-white"
-                        onClick={async () => {
-                          const n = parseInt(extraInput.trim(), 10);
-                          if (!Number.isFinite(n) || n < 1) {
-                            alert('Введите целое число от 1.');
-                            return;
-                          }
-                          await createStandalone(n, currentManagerId ?? undefined);
-                          setExtraInput('1');
-                        }}
-                      >
-                        Добавить
-                      </button>
+                  {!managerHasLockedStandalone ? (
+                    <div className="border border-dashed border-gray-200 rounded-xl p-3 flex flex-wrap items-center gap-2 justify-between">
+                      <span className="text-[11px] font-bold text-gray-600">Добавить запись</span>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min={1}
+                          step={1}
+                          disabled={busy}
+                          className="w-20 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-xs font-bold"
+                          value={extraInput}
+                          onChange={(e) => setExtraInput(e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          disabled={busy}
+                          className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase bg-blue-600 text-white"
+                          onClick={async () => {
+                            const n = parseInt(extraInput.trim(), 10);
+                            if (!Number.isFinite(n) || n < 1) {
+                              alert('Введите целое число от 1.');
+                              return;
+                            }
+                            await createStandalone(n, currentManagerId ?? undefined);
+                            setExtraInput('1');
+                          }}
+                        >
+                          Добавить
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <p className="text-[10px] text-gray-500 font-bold uppercase">После сохранения ЦП редактирование менеджеру недоступно</p>
+                  )}
                 </div>
               )}
               {!isAdmin && currentManagerId ? (
@@ -369,7 +392,7 @@ export function ClientCpEditor({
                         </div>
                         <div className="flex flex-wrap items-center gap-2 shrink-0">
                           <select
-                            disabled={busy}
+                            disabled={busy || (!isAdmin && sent)}
                             className="bg-white border border-gray-200 rounded-lg px-2 py-1.5 text-[11px] font-bold"
                             value={sent ? 'yes' : 'no'}
                             onChange={(e) => {
@@ -457,6 +480,51 @@ export function ClientCpEditor({
                   }
                   await applyMeetingCp(qtyModal.meetingId, true, n);
                   setQtyModal(null);
+                }}
+              >
+                Сохранить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {paidAtModal && (
+        <div
+          className="fixed inset-0 bg-black/60 z-[635] flex items-center justify-center p-4"
+          onClick={() => {
+            if (!busy) setPaidAtModal(null);
+          }}
+        >
+          <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-5 max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
+            <h4 className="text-xs font-black text-gray-800 uppercase tracking-widest mb-2">Дата оплаты ЦП</h4>
+            <input
+              type="date"
+              disabled={busy}
+              className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm font-bold mb-4"
+              value={paidAtModal.input}
+              onChange={(e) => setPaidAtModal((prev) => (prev ? { ...prev, input: e.target.value } : prev))}
+            />
+            <div className="flex gap-2 justify-end">
+              <button
+                type="button"
+                disabled={busy}
+                className="px-3 py-2 rounded-xl text-[10px] font-black uppercase border border-gray-200"
+                onClick={() => setPaidAtModal(null)}
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                className="px-3 py-2 rounded-xl text-[10px] font-black uppercase bg-blue-600 text-white"
+                onClick={async () => {
+                  const d = paidAtModal.input.trim();
+                  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+                    alert('Выбери корректную дату оплаты.');
+                    return;
+                  }
+                  await applyClientPaid(true, d);
+                  setPaidAtModal(null);
                 }}
               >
                 Сохранить
