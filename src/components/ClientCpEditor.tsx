@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import {
+  createClientStandaloneCp,
   setConductedMeetingCpPaidById,
   setStandaloneCpPaidById,
   updateConductedMeetingCpById,
-  upsertClientStandaloneCp,
+  updateClientStandaloneCpById,
 } from '../lib/crmApi';
 import type { ClientCpMeeting, ClientStandaloneCpView } from '../lib/clientCpStats';
 
@@ -42,26 +43,23 @@ export function ClientCpEditor({
 }: Props) {
   const [open, setOpen] = useState(false);
   const [qtyModal, setQtyModal] = useState<{ meetingId: string; input: string } | null>(null);
-  const [extraInput, setExtraInput] = useState(String(extraCp || 0));
-  const [adminExtraEdits, setAdminExtraEdits] = useState<Record<string, string>>({});
+  const [extraInput, setExtraInput] = useState('1');
+  const [entryEdits, setEntryEdits] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
 
   const editable = Boolean(onRefreshReports);
   const label = totalCp >= 1 ? `${totalCp} шт.` : '—';
-  const ownStandalone = currentManagerId
-    ? standaloneByManager.find((s) => s.managerId === currentManagerId)
-    : undefined;
-  const ownExtraQty = ownStandalone?.cpQuantity ?? 0;
+  const ownStandaloneEntries = currentManagerId ? standaloneByManager.filter((s) => s.managerId === currentManagerId) : [];
 
   useEffect(() => {
     if (!open) return;
-    setExtraInput(String(ownExtraQty));
+    setExtraInput('1');
     const next: Record<string, string> = {};
     for (const s of standaloneByManager) {
-      next[s.managerId] = String(s.cpQuantity);
+      next[s.id] = String(s.cpQuantity);
     }
-    setAdminExtraEdits(next);
-  }, [open, ownExtraQty, standaloneByManager]);
+    setEntryEdits(next);
+  }, [open, standaloneByManager]);
 
   const applyMeetingCp = async (meetingId: string, cpSent: boolean, cpQuantity: number) => {
     if (!onRefreshReports) return;
@@ -76,11 +74,24 @@ export function ClientCpEditor({
     }
   };
 
-  const applyStandalone = async (quantity: number, managerId?: string) => {
+  const createStandalone = async (quantity: number, managerId?: string) => {
     if (!onRefreshReports) return;
     setBusy(true);
     try {
-      await upsertClientStandaloneCp(bin, quantity, managerId);
+      await createClientStandaloneCp(bin, quantity, managerId);
+      await onRefreshReports();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Не удалось добавить ЦП без встречи');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const updateStandalone = async (id: string, quantity: number) => {
+    if (!onRefreshReports) return;
+    setBusy(true);
+    try {
+      await updateClientStandaloneCpById(id, quantity);
       await onRefreshReports();
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Не удалось сохранить ЦП без встречи');
@@ -179,9 +190,9 @@ export function ClientCpEditor({
                             step={1}
                             disabled={busy}
                             className="w-20 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-xs font-bold"
-                            value={adminExtraEdits[s.managerId] ?? String(s.cpQuantity)}
+                            value={entryEdits[s.id] ?? String(s.cpQuantity)}
                             onChange={(e) =>
-                              setAdminExtraEdits((prev) => ({ ...prev, [s.managerId]: e.target.value }))
+                              setEntryEdits((prev) => ({ ...prev, [s.id]: e.target.value }))
                             }
                           />
                           <button
@@ -189,12 +200,12 @@ export function ClientCpEditor({
                             disabled={busy}
                             className="text-[10px] font-black uppercase text-blue-600 shrink-0"
                             onClick={async () => {
-                              const n = parseInt((adminExtraEdits[s.managerId] ?? '0').trim(), 10);
+                              const n = parseInt((entryEdits[s.id] ?? '0').trim(), 10);
                               if (!Number.isFinite(n) || n < 0) {
                                 alert('Введите целое число ≥ 0.');
                                 return;
                               }
-                              await applyStandalone(n, s.managerId);
+                              await updateStandalone(s.id, n);
                             }}
                           >
                             OK
@@ -216,35 +227,102 @@ export function ClientCpEditor({
                         </div>
                       </div>
                     ))}
+                    <div className="border border-dashed border-gray-200 rounded-xl p-3 flex flex-wrap items-center gap-2 justify-between">
+                      <span className="text-[11px] font-bold text-gray-600">Добавить запись</span>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min={1}
+                          step={1}
+                          disabled={busy}
+                          className="w-20 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-xs font-bold"
+                          value={extraInput}
+                          onChange={(e) => setExtraInput(e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          disabled={busy}
+                          className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase bg-blue-600 text-white"
+                          onClick={async () => {
+                            const n = parseInt(extraInput.trim(), 10);
+                            if (!Number.isFinite(n) || n < 1) {
+                              alert('Введите целое число от 1.');
+                              return;
+                            }
+                            await createStandalone(n, currentManagerId ?? undefined);
+                            setExtraInput('1');
+                          }}
+                        >
+                          Добавить
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 )
               ) : (
-                <div className="flex flex-wrap items-center gap-2">
-                  <input
-                    type="number"
-                    min={0}
-                    step={1}
-                    disabled={busy}
-                    className="w-24 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm font-bold"
-                    value={extraInput}
-                    onChange={(e) => setExtraInput(e.target.value)}
-                  />
-                  <span className="text-[10px] text-gray-500 font-bold uppercase">шт.</span>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    className="px-3 py-2 rounded-xl text-[10px] font-black uppercase bg-blue-600 text-white"
-                    onClick={async () => {
-                      const n = parseInt(extraInput.trim(), 10);
-                      if (!Number.isFinite(n) || n < 0) {
-                        alert('Введите целое число ≥ 0.');
-                        return;
-                      }
-                      await applyStandalone(n);
-                    }}
-                  >
-                    Сохранить
-                  </button>
+                <div className="space-y-2 w-full">
+                  {ownStandaloneEntries.length === 0 ? (
+                    <p className="text-xs text-gray-500">Пока нет записей.</p>
+                  ) : (
+                    ownStandaloneEntries.map((s) => (
+                      <div key={s.id} className="flex flex-wrap items-center gap-2">
+                        <input
+                          type="number"
+                          min={0}
+                          step={1}
+                          disabled={busy}
+                          className="w-24 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm font-bold"
+                          value={entryEdits[s.id] ?? String(s.cpQuantity)}
+                          onChange={(e) => setEntryEdits((prev) => ({ ...prev, [s.id]: e.target.value }))}
+                        />
+                        <button
+                          type="button"
+                          disabled={busy}
+                          className="px-3 py-2 rounded-xl text-[10px] font-black uppercase bg-blue-600 text-white"
+                          onClick={async () => {
+                            const n = parseInt((entryEdits[s.id] ?? '0').trim(), 10);
+                            if (!Number.isFinite(n) || n < 0) {
+                              alert('Введите целое число ≥ 0.');
+                              return;
+                            }
+                            await updateStandalone(s.id, n);
+                          }}
+                        >
+                          Сохранить
+                        </button>
+                      </div>
+                    ))
+                  )}
+                  <div className="border border-dashed border-gray-200 rounded-xl p-3 flex flex-wrap items-center gap-2 justify-between">
+                    <span className="text-[11px] font-bold text-gray-600">Добавить запись</span>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={1}
+                        step={1}
+                        disabled={busy}
+                        className="w-20 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-xs font-bold"
+                        value={extraInput}
+                        onChange={(e) => setExtraInput(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        disabled={busy}
+                        className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase bg-blue-600 text-white"
+                        onClick={async () => {
+                          const n = parseInt(extraInput.trim(), 10);
+                          if (!Number.isFinite(n) || n < 1) {
+                            alert('Введите целое число от 1.');
+                            return;
+                          }
+                          await createStandalone(n, currentManagerId ?? undefined);
+                          setExtraInput('1');
+                        }}
+                      >
+                        Добавить
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
               {!isAdmin && currentManagerId ? (

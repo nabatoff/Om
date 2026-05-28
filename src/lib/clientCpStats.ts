@@ -17,7 +17,10 @@ export type ClientStandaloneCpView = ClientStandaloneCp & {
 export type ClientListRow = {
   name: string;
   bin: string;
+  managerId: string | null;
+  managerName: string | null;
   managerNames: string[];
+  managerIds: string[];
   meetingCp: number;
   extraCp: number;
   totalCp: number;
@@ -119,7 +122,7 @@ function standaloneForBin(
 
 export function buildClientListRows(
   reports: FullReport[],
-  catalog: { name: string; bin: string }[],
+  catalog: { name: string; bin: string; managerId?: string | null; managerName?: string | null }[],
   standaloneRows: ClientStandaloneCp[],
   options?: {
     managerId?: string | null;
@@ -138,6 +141,7 @@ export function buildClientListRows(
   const managerFilter = options?.managerId;
 
   const pushRow = (bin: string, name: string, reportScope: FullReport[]) => {
+    const cat = catalog.find((c) => c.bin.trim() === bin);
     const { meetingCp, cpMeetings } = clientCpStatsForBin(reportScope, bin);
     const { extraCp, standaloneByManager } = standaloneForBin(
       standaloneRows,
@@ -146,21 +150,30 @@ export function buildClientListRows(
       options?.managerNameById,
     );
     const managers = new Set<string>();
+    const managerIds = new Set<string>();
     for (const r of reportScope) {
       const hasBin =
         r.assignedMeetings.some((m) => m.bin.trim() === bin) ||
         r.conductedMeetings.some((m) => m.bin.trim() === bin) ||
         r.confirmedOrders.some((o) => o.bin.trim() === bin);
       if (hasBin && r.manager.trim()) managers.add(r.manager.trim());
+      if (hasBin && r.managerId) managerIds.add(r.managerId);
     }
     for (const s of standaloneByManager) {
       const n = (s.managerName ?? '').trim();
       if (n) managers.add(n);
+      if (s.managerId) managerIds.add(s.managerId);
     }
+    const assignedName = (cat?.managerName ?? '').trim();
+    if (assignedName) managers.add(assignedName);
+    if (cat?.managerId) managerIds.add(cat.managerId);
     rows.push({
       name,
       bin,
+      managerId: cat?.managerId ?? null,
+      managerName: cat?.managerName ?? null,
       managerNames: Array.from(managers),
+      managerIds: Array.from(managerIds),
       meetingCp,
       extraCp,
       totalCp: meetingCp + extraCp,
@@ -169,19 +182,32 @@ export function buildClientListRows(
     });
   };
 
-  // Базово показываем всех клиентов из справочника, даже если движения = 0.
-  for (const c of catalog) {
-    const bin = c.bin.trim();
-    if (!bin || rows.some((r) => r.bin === bin)) continue;
-    pushRow(bin, c.name.trim() || binMap.get(bin) || '—', scoped);
+  if (options?.allCatalog) {
+    // Админ: весь справочник, даже без движений.
+    for (const c of catalog) {
+      const bin = c.bin.trim();
+      if (!bin || rows.some((r) => r.bin === bin)) continue;
+      pushRow(bin, c.name.trim() || binMap.get(bin) || '—', scoped);
+    }
+  } else {
+    // Менеджер: только клиенты, связанные с его движениями/ЦП без встречи.
+    for (const [bin, name] of binMap) {
+      if (rows.some((r) => r.bin === bin)) continue;
+      const cat = catalog.find((c) => c.bin.trim() === bin);
+      pushRow(bin, (cat?.name ?? name).trim() || '—', scoped);
+    }
+    // Плюс клиенты, явно закреплённые за менеджером в справочнике (даже без движений).
+    if (managerFilter) {
+      for (const c of catalog) {
+        if (c.managerId !== managerFilter) continue;
+        const bin = c.bin.trim();
+        if (!bin || rows.some((r) => r.bin === bin)) continue;
+        pushRow(bin, c.name.trim() || '—', scoped);
+      }
+    }
   }
 
-  // Плюс добавляем "сироты", которые встречаются в движениях, но не заведены в справочнике.
-  for (const [bin, name] of binMap) {
-    if (rows.some((r) => r.bin === bin)) continue;
-    pushRow(bin, name || '—', scoped);
-  }
-
+  // Добавляем "сироты" из ЦП без встречи в рамках текущего скоупа.
   for (const row of standaloneRows) {
     if (managerFilter && row.managerId !== managerFilter) continue;
     const bin = row.bin.trim();

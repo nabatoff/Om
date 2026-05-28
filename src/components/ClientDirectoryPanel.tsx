@@ -7,9 +7,11 @@ type Props = {
   rows: ClientListRow[];
   onSelectClient: (c: { name: string; bin: string }) => void;
   onAddClient?: () => void;
-  onEditClient?: (c: { name: string; bin: string }) => void;
+  onEditClient?: (c: { name: string; bin: string; managerId?: string | null }) => void;
   onDeleteClient?: (c: { name: string; bin: string }) => void;
   onRefreshReports?: () => Promise<void>;
+  onAssignManager?: (bin: string, managerId: string | null) => Promise<void>;
+  managerSelectOptions?: Array<{ id: string; fullName: string }>;
   currentManagerId?: string | null;
   isAdmin?: boolean;
   managerFilter?: string;
@@ -36,6 +38,8 @@ export function ClientDirectoryPanel({
   onEditClient,
   onDeleteClient,
   onRefreshReports,
+  onAssignManager,
+  managerSelectOptions = [],
   currentManagerId,
   isAdmin,
   managerFilter = 'Все',
@@ -119,6 +123,7 @@ export function ClientDirectoryPanel({
               <tr className="bg-gray-50 text-[10px] font-black text-gray-500 uppercase tracking-tighter border-b border-gray-100">
                 <th className="p-4 bg-gray-50">Наименование</th>
                 <th className="p-4 bg-gray-50">БИН</th>
+                {isAdmin ? <th className="p-4 bg-gray-50">Менеджер</th> : null}
                 <th className="p-4 bg-gray-50 text-center">ЦП (всего)</th>
                 <th className="p-4 w-44 text-right bg-gray-50">Действия</th>
               </tr>
@@ -126,7 +131,7 @@ export function ClientDirectoryPanel({
             <tbody className="divide-y divide-gray-100">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="p-10 text-center text-gray-500 text-sm">
+                  <td colSpan={isAdmin ? 5 : 4} className="p-10 text-center text-gray-500 text-sm">
                     {defaultEmpty}
                   </td>
                 </tr>
@@ -152,6 +157,22 @@ export function ClientDirectoryPanel({
                         {c.bin}
                       </span>
                     </td>
+                    {isAdmin ? (
+                      <td className="p-4 text-xs text-gray-700" onClick={(e) => e.stopPropagation()}>
+                        <select
+                          value={c.managerId ?? ''}
+                          onChange={(e) => void onAssignManager?.(c.bin, e.target.value || null)}
+                          className="w-full min-w-[170px] bg-white border border-gray-200 rounded-lg px-2 py-1.5 text-xs font-bold"
+                        >
+                          <option value="">Не назначен</option>
+                          {managerSelectOptions.map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.fullName}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                    ) : null}
                     <td className="p-4 text-center" onClick={(e) => e.stopPropagation()}>
                       <ClientCpEditor
                         bin={c.bin}

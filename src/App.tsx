@@ -34,6 +34,7 @@ import {
   type UiOrder,
   type DeletedMeeting,
   fetchClientsApi,
+  fetchManagerProfilesApi,
   fetchDeletedMeetingsApi,
   fetchReportsApi,
   fetchStandaloneCpApi,
@@ -50,6 +51,7 @@ import {
   hardDeleteConductedMeetingById,
   saveReportToDb,
   saveKpiToDb,
+  setClientManager,
   sendTelegramDailyReportNow,
 } from './lib/crmApi';
 import { buildClientCrmHistory } from './lib/crmClientHistory';
@@ -116,6 +118,7 @@ const App = () => {
   const sessionUserId = session?.user?.id;
   const [currentView, setCurrentView] = useState<'manager' | 'admin' | 'orders' | 'clients'>(() => getSavedCurrentView());
   const [clients, setClients] = useState<UiClient[]>([]);
+  const [managerProfiles, setManagerProfiles] = useState<Array<{ id: string; fullName: string }>>([]);
   const [standaloneCp, setStandaloneCp] = useState<ClientStandaloneCp[]>([]);
   const [allReports, setAllReports] = useState<FullReport[]>([]);
   const [deletedMeetings, setDeletedMeetings] = useState<DeletedMeeting[]>([]);
@@ -152,7 +155,7 @@ const App = () => {
     amounts: number[];
   }>({ isOpen: false, entity: '', bin: '', amounts: [] });
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
-  const [newClientData, setNewClientData] = useState({ name: '', bin: '' });
+  const [newClientData, setNewClientData] = useState({ name: '', bin: '', managerId: '' });
   const [onClientCreatedCallback, setOnClientCreatedCallback] = useState<((c: UiClient) => void) | null>(null);
   /** Если задан — модалка в режиме редактирования существующего контрагента (ключ = исходный БИН). */
   const [editingClientBin, setEditingClientBin] = useState<string | null>(null);
@@ -217,7 +220,11 @@ const App = () => {
         isAdmin ? fetchDeletedMeetingsApi() : Promise.resolve([]),
         fetchStandaloneCpApi().catch(() => [] as ClientStandaloneCp[]),
       ]);
+      const managers = isAdmin
+        ? await fetchManagerProfilesApi().catch(() => [] as Array<{ id: string; fullName: string }>)
+        : [];
       setClients(c);
+      setManagerProfiles(managers);
       setAllReports(r);
       setDeletedMeetings(basket);
       setStandaloneCp(standalone);
@@ -390,6 +397,11 @@ const App = () => {
     }
     const name = newClientData.name.trim();
     const bin = newClientData.bin.replace(/\D/g, '');
+    const managerId = isAdmin ? (newClientData.managerId || null) : (sessionUserId ?? null);
+    if (isAdmin && !editingClientBin && !managerId) {
+      alert('Для нового контрагента выберите менеджера.');
+      return;
+    }
     const openedFromInlinePicker = Boolean(onClientCreatedCallback);
     try {
       if (editingClientBin) {
@@ -398,13 +410,24 @@ const App = () => {
           return;
         }
         const updatedClient = await updateClientRow(editingClientBin, { name, bin });
+        if (isAdmin) {
+          await setClientManager(bin, managerId);
+        }
         setClients((prev) =>
           prev
-            .map((c) => (c.bin === editingClientBin ? updatedClient : c))
+            .map((c) =>
+              c.bin === editingClientBin
+                ? {
+                    ...updatedClient,
+                    managerId,
+                    managerName: managerProfiles.find((m) => m.id === managerId)?.fullName ?? null,
+                  }
+                : c,
+            )
             .sort((a, b) => a.name.localeCompare(b.name, 'ru')),
         );
         setClientHistoryFor((prev) =>
-          prev?.bin === editingClientBin || prev?.bin === bin ? { name, bin } : prev,
+          prev?.bin === editingClientBin || prev?.bin === bin ? { ...prev, name, bin } : prev,
         );
         setOnClientCreatedCallback(null);
       } else {
@@ -413,7 +436,7 @@ const App = () => {
           alert('Контрагент с таким БИН уже существует');
           return;
         }
-        const newUser = await createClientRow({ name, bin });
+        const newUser = await createClientRow({ name, bin, managerId });
         setClients((prev) => {
           if (prev.some((c) => c.bin === newUser.bin)) return prev;
           return [...prev, newUser].sort((a, b) => a.name.localeCompare(b.name, 'ru'));
@@ -428,11 +451,30 @@ const App = () => {
       }
       setIsClientModalOpen(false);
       setEditingClientBin(null);
-      setNewClientData({ name: '', bin: '' });
+      setNewClientData({ name: '', bin: '', managerId: '' });
     } catch (e) {
       alert(e instanceof Error ? e.message : editingClientBin ? 'Ошибка сохранения' : 'Ошибка создания');
     }
   };
+
+  const assignClientManager = useCallback(
+    async (bin: string, managerId: string | null) => {
+      if (!isAdmin) return;
+      await setClientManager(bin, managerId);
+      setClients((prev) =>
+        prev.map((c) =>
+          c.bin === bin
+            ? {
+                ...c,
+                managerId,
+                managerName: managerProfiles.find((m) => m.id === managerId)?.fullName ?? null,
+              }
+            : c,
+        ),
+      );
+    },
+    [isAdmin, managerProfiles],
+  );
 
   const removeClient = async (client: UiClient) => {
     if (!isAdmin) return;
@@ -865,6 +907,7 @@ const App = () => {
               setNewClientData({
                 name: isBin ? '' : inputValue,
                 bin: isBin ? inputValue : '',
+                managerId: sessionUserId ?? '',
               });
               setOnClientCreatedCallback(() => callback);
               setIsClientModalOpen(true);
@@ -1006,6 +1049,8 @@ const App = () => {
             onRefreshReports={refresh}
             currentManagerId={sessionUserId}
             isAdmin={isAdmin}
+            managerSelectOptions={managerProfiles}
+            onAssignManager={isAdmin ? assignClientManager : undefined}
             managerFilter={adminClientsFilterManager}
             managerOptions={adminClientManagerOptions}
             onManagerFilterChange={setAdminClientsFilterManager}
@@ -1016,7 +1061,7 @@ const App = () => {
               isAdmin
                 ? () => {
                     setEditingClientBin(null);
-                    setNewClientData({ name: '', bin: '' });
+                    setNewClientData({ name: '', bin: '', managerId: '' });
                     setOnClientCreatedCallback(null);
                     setIsClientModalOpen(true);
                   }
@@ -1026,7 +1071,7 @@ const App = () => {
               isAdmin
                 ? (c) => {
                     setEditingClientBin(c.bin);
-                    setNewClientData({ name: c.name, bin: c.bin });
+                    setNewClientData({ name: c.name, bin: c.bin, managerId: c.managerId ?? '' });
                     setOnClientCreatedCallback(null);
                     setIsClientModalOpen(true);
                   }
@@ -1108,7 +1153,7 @@ const App = () => {
           onClick={() => {
             setIsClientModalOpen(false);
             setEditingClientBin(null);
-            setNewClientData({ name: '', bin: '' });
+            setNewClientData({ name: '', bin: '', managerId: '' });
           }}
         >
           <div
@@ -1126,7 +1171,7 @@ const App = () => {
                 onClick={() => {
                   setIsClientModalOpen(false);
                   setEditingClientBin(null);
-                  setNewClientData({ name: '', bin: '' });
+                  setNewClientData({ name: '', bin: '', managerId: '' });
                 }}
                 className="text-gray-400 hover:text-gray-600"
               >
@@ -1163,13 +1208,30 @@ const App = () => {
                   </p>
                 )}
               </div>
+              {isAdmin && (
+                <div className="space-y-2 text-left">
+                  <label className="text-[10px] font-black text-gray-400 uppercase ml-2 tracking-tighter">Менеджер клиента</label>
+                  <select
+                    className="w-full bg-gray-50 border-none p-4 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all outline-none"
+                    value={newClientData.managerId}
+                    onChange={(e) => setNewClientData({ ...newClientData, managerId: e.target.value })}
+                  >
+                    <option value="">Не назначен</option>
+                    {managerProfiles.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.fullName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
             <div className="p-8 bg-gray-50 flex gap-4">
               <button
                 onClick={() => {
                   setIsClientModalOpen(false);
                   setEditingClientBin(null);
-                  setNewClientData({ name: '', bin: '' });
+                  setNewClientData({ name: '', bin: '', managerId: '' });
                 }}
                 className="flex-1 px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-widest"
               >

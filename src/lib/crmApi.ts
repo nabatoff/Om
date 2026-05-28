@@ -1,6 +1,12 @@
 import { getSupabase } from './supabase';
 
-export type UiClient = { name: string; bin: string; cpPaid?: boolean };
+export type UiClient = {
+  name: string;
+  bin: string;
+  managerId?: string | null;
+  managerName?: string | null;
+};
+export type UiManagerProfile = { id: string; fullName: string };
 export type FormStats = {
   processedTotal: number;
   newInWork: number;
@@ -158,23 +164,31 @@ const reportSelect = `
   crm_confirmed_orders ( id, entity_name, bin, via_entity_name, via_bin, order_count, amounts, total_amount, sort_order )
 `;
 
-export async function fetchClientsApi(includePaid = false): Promise<UiClient[]> {
-  if (includePaid) {
-    const { data, error } = await getSupabase().from('crm_clients').select('name, bin, cp_paid').order('name');
-    if (error) throw error;
-    return (data || []).map((c) => ({
-      name: c.name,
-      bin: String(c.bin).trim(),
-      cpPaid: Boolean(c.cp_paid),
-    }));
-  }
-
-  const { data, error } = await getSupabase().from('crm_clients').select('name, bin').order('name');
+export async function fetchClientsApi(): Promise<UiClient[]> {
+  const { data, error } = await getSupabase()
+    .from('crm_clients')
+    .select('name, bin, manager_id, manager:profiles!crm_clients_manager_id_fkey(full_name)')
+    .order('name');
   if (error) throw error;
   return (data || []).map((c) => ({
     name: c.name,
     bin: String(c.bin).trim(),
-    cpPaid: false,
+    managerId: (c as { manager_id?: string | null }).manager_id ?? null,
+    managerName: (c as { manager?: { full_name?: string | null } | null }).manager?.full_name ?? null,
+  }));
+}
+
+export async function fetchManagerProfilesApi(): Promise<UiManagerProfile[]> {
+  const { data, error } = await getSupabase()
+    .from('profiles')
+    .select('id, full_name, role, is_active')
+    .eq('role', 'manager')
+    .neq('is_active', false)
+    .order('full_name', { ascending: true, nullsFirst: false });
+  if (error) throw error;
+  return (data || []).map((r) => ({
+    id: String(r.id),
+    fullName: String((r.full_name as string | null) || '').trim() || String(r.id).slice(0, 8),
   }));
 }
 
@@ -235,8 +249,8 @@ export async function fetchDeletedMeetingsApi(): Promise<DeletedMeeting[]> {
 export async function createClientRow(c: UiClient): Promise<UiClient> {
   const { data, error } = await getSupabase()
     .from('crm_clients')
-    .insert({ name: c.name, bin: c.bin })
-    .select('name, bin, cp_paid')
+    .insert({ name: c.name, bin: c.bin, manager_id: c.managerId ?? null })
+    .select('name, bin, manager_id, manager:profiles!crm_clients_manager_id_fkey(full_name)')
     .single();
   if (error) {
     if (error.code === '23505') {
@@ -247,7 +261,12 @@ export async function createClientRow(c: UiClient): Promise<UiClient> {
     }
     throw error;
   }
-  return { name: data.name, bin: String(data.bin).trim(), cpPaid: Boolean(data.cp_paid) };
+  return {
+    name: data.name,
+    bin: String(data.bin).trim(),
+    managerId: (data as { manager_id?: string | null }).manager_id ?? null,
+    managerName: (data as { manager?: { full_name?: string | null } | null }).manager?.full_name ?? null,
+  };
 }
 
 export async function deleteClientByBin(bin: string): Promise<void> {
@@ -271,13 +290,18 @@ export async function updateClientRow(originalBin: string, next: UiClient): Prom
       .from('crm_clients')
       .update({ name })
       .eq('bin', oldB)
-      .select('name, bin, cp_paid')
+      .select('name, bin, manager_id, manager:profiles!crm_clients_manager_id_fkey(full_name)')
       .single();
     if (error) {
       if (error.code === '23505') throw new Error('Контрагент с таким БИН уже существует');
       throw error;
     }
-    return { name: data.name, bin: String(data.bin).trim(), cpPaid: Boolean(data.cp_paid) };
+    return {
+      name: data.name,
+      bin: String(data.bin).trim(),
+      managerId: (data as { manager_id?: string | null }).manager_id ?? null,
+      managerName: (data as { manager?: { full_name?: string | null } | null }).manager?.full_name ?? null,
+    };
   }
   const { error: rpcError } = await getSupabase().rpc('update_crm_client', {
     p_old_bin: oldB,
@@ -290,17 +314,26 @@ export async function updateClientRow(originalBin: string, next: UiClient): Prom
     }
     throw rpcError;
   }
-  const { data, error } = await getSupabase().from('crm_clients').select('name, bin, cp_paid').eq('bin', newB).single();
+  const { data, error } = await getSupabase()
+    .from('crm_clients')
+    .select('name, bin, manager_id, manager:profiles!crm_clients_manager_id_fkey(full_name)')
+    .eq('bin', newB)
+    .single();
   if (error) throw error;
-  return { name: data.name, bin: String(data.bin).trim(), cpPaid: Boolean(data.cp_paid) };
+  return {
+    name: data.name,
+    bin: String(data.bin).trim(),
+    managerId: (data as { manager_id?: string | null }).manager_id ?? null,
+    managerName: (data as { manager?: { full_name?: string | null } | null }).manager?.full_name ?? null,
+  };
 }
 
-/** Админ: отметить клиента как «ЦП оплачено / не оплачено». */
-export async function setClientCpPaid(bin: string, paid: boolean): Promise<void> {
+/** Админ: назначить/сменить менеджера у контрагента. */
+export async function setClientManager(bin: string, managerId: string | null): Promise<void> {
   const b = bin.trim();
-  const { error } = await getSupabase().rpc('set_crm_client_cp_paid', {
+  const { error } = await getSupabase().rpc('set_crm_client_manager', {
     p_bin: b,
-    p_paid: Boolean(paid),
+    p_manager_id: managerId,
   });
   if (error) throw error;
 }
@@ -362,19 +395,36 @@ export async function fetchStandaloneCpApi(): Promise<ClientStandaloneCp[]> {
   }));
 }
 
-/** ЦП по клиенту без встречи (свой менеджер; админ может указать p_manager_id). */
-export async function upsertClientStandaloneCp(
+/** Добавить новую запись ЦП без встречи. */
+export async function createClientStandaloneCp(
   bin: string,
   cpQuantity: number,
   managerId?: string,
 ): Promise<void> {
   const b = bin.trim();
   const q = Math.max(0, Math.floor(Number(cpQuantity) || 0));
-  const { error } = await getSupabase().rpc('upsert_client_standalone_cp', {
-    p_bin: b,
-    p_quantity: q,
-    p_manager_id: managerId ?? null,
+  if (q < 1) throw new Error('Количество должно быть не меньше 1');
+  const { error } = await getSupabase().from('crm_client_standalone_cp').insert({
+    manager_id: managerId ?? null,
+    bin: b,
+    cp_quantity: q,
+    cp_paid: false,
   });
+  if (error) throw error;
+}
+
+/** Обновить существующую запись ЦП без встречи по id. При qty=0 запись удаляется. */
+export async function updateClientStandaloneCpById(id: string, cpQuantity: number): Promise<void> {
+  const q = Math.max(0, Math.floor(Number(cpQuantity) || 0));
+  if (q < 1) {
+    const { error } = await getSupabase().from('crm_client_standalone_cp').delete().eq('id', id);
+    if (error) throw error;
+    return;
+  }
+  const { error } = await getSupabase()
+    .from('crm_client_standalone_cp')
+    .update({ cp_quantity: q, updated_at: new Date().toISOString() })
+    .eq('id', id);
   if (error) throw error;
 }
 
