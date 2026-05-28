@@ -210,6 +210,18 @@ export function ClientCpEditor({
                           >
                             OK
                           </button>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            className="text-[10px] font-black uppercase text-red-600 shrink-0"
+                            onClick={async () => {
+                              const ok = confirm('Удалить эту запись ЦП без встречи?');
+                              if (!ok) return;
+                              await updateStandalone(s.id, 0);
+                            }}
+                          >
+                            Удалить
+                          </button>
                           {s.cpQuantity >= 1 ? (
                             <button
                               type="button"
