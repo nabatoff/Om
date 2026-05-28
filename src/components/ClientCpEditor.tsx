@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
   createClientStandaloneCp,
-  setConductedMeetingCpPaidById,
-  setStandaloneCpPaidById,
   updateConductedMeetingCpById,
   updateClientStandaloneCpById,
 } from '../lib/crmApi';
@@ -22,9 +20,11 @@ type Props = {
   totalCp: number;
   meetings: ClientCpMeeting[];
   standaloneByManager: ClientStandaloneCpView[];
+  cpPaid?: boolean;
   /** Свой manager_id — для сохранения «ЦП без встречи». */
   currentManagerId?: string | null;
   isAdmin?: boolean;
+  onToggleClientPaid?: (bin: string, paid: boolean) => Promise<void>;
   onRefreshReports?: () => Promise<void>;
   compact?: boolean;
 };
@@ -36,8 +36,10 @@ export function ClientCpEditor({
   totalCp,
   meetings,
   standaloneByManager,
+  cpPaid,
   currentManagerId,
   isAdmin,
+  onToggleClientPaid,
   onRefreshReports,
   compact,
 }: Props) {
@@ -100,25 +102,11 @@ export function ClientCpEditor({
     }
   };
 
-  const applyMeetingPaid = async (meetingId: string, paid: boolean) => {
-    if (!onRefreshReports) return;
+  const applyClientPaid = async (paid: boolean) => {
+    if (!onToggleClientPaid) return;
     setBusy(true);
     try {
-      await setConductedMeetingCpPaidById(meetingId, paid);
-      await onRefreshReports();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : 'Не удалось сохранить статус оплаты');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const applyStandalonePaid = async (id: string, paid: boolean) => {
-    if (!onRefreshReports) return;
-    setBusy(true);
-    try {
-      await setStandaloneCpPaidById(id, paid);
-      await onRefreshReports();
+      await onToggleClientPaid(bin, paid);
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Не удалось сохранить статус оплаты');
     } finally {
@@ -151,6 +139,20 @@ export function ClientCpEditor({
         >
           Изменить
         </button>
+        {isAdmin ? (
+          <button
+            type="button"
+            disabled={busy}
+            className={`min-w-[98px] rounded-xl px-3 py-1.5 text-[10px] font-black uppercase tracking-wide border transition-colors ${
+              cpPaid
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                : 'border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100'
+            }`}
+            onClick={() => void applyClientPaid(!cpPaid)}
+          >
+            {cpPaid ? 'Оплачено' : 'Не оплачено'}
+          </button>
+        ) : null}
       </div>
 
       {open && (
@@ -170,6 +172,22 @@ export function ClientCpEditor({
               {' '}
               (по встречам <strong>{meetingCp}</strong>, без встречи <strong>{extraCp}</strong>)
             </p>
+            {isAdmin ? (
+              <div className="mb-4">
+                <button
+                  type="button"
+                  disabled={busy}
+                  className={`min-w-[120px] rounded-xl px-3 py-1.5 text-[10px] font-black uppercase tracking-wide border transition-colors ${
+                    cpPaid
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                      : 'border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100'
+                  }`}
+                  onClick={() => void applyClientPaid(!cpPaid)}
+                >
+                  ЦП клиента: {cpPaid ? 'Оплачено' : 'Не оплачено'}
+                </button>
+              </div>
+            ) : null}
 
             <section className="mb-6">
               <h5 className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">ЦП без встречи</h5>
@@ -222,20 +240,6 @@ export function ClientCpEditor({
                           >
                             Удалить
                           </button>
-                          {s.cpQuantity >= 1 ? (
-                            <button
-                              type="button"
-                              disabled={busy}
-                              className={`min-w-[98px] rounded-xl px-3 py-1.5 text-[10px] font-black uppercase tracking-wide border transition-colors ${
-                                s.cpPaid
-                                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                                  : 'border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100'
-                              }`}
-                              onClick={() => void applyStandalonePaid(s.id, !s.cpPaid)}
-                            >
-                              {s.cpPaid ? 'Оплачено' : 'Не оплачено'}
-                            </button>
-                          ) : null}
                         </div>
                       </div>
                     ))}
@@ -389,20 +393,6 @@ export function ClientCpEditor({
                               }
                             >
                               {m.cpQuantity} шт.
-                            </button>
-                          ) : null}
-                          {isAdmin && sent ? (
-                            <button
-                              type="button"
-                              disabled={busy}
-                              className={`min-w-[98px] rounded-xl px-3 py-1.5 text-[10px] font-black uppercase tracking-wide border transition-colors ${
-                                m.cpPaid
-                                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                                  : 'border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100'
-                              }`}
-                              onClick={() => void applyMeetingPaid(m.meetingId, !m.cpPaid)}
-                            >
-                              {m.cpPaid ? 'Оплачено' : 'Не оплачено'}
                             </button>
                           ) : null}
                         </div>

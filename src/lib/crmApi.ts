@@ -5,6 +5,7 @@ export type UiClient = {
   bin: string;
   managerId?: string | null;
   managerName?: string | null;
+  cpPaid?: boolean;
 };
 export type UiManagerProfile = { id: string; fullName: string };
 export type FormStats = {
@@ -167,7 +168,7 @@ const reportSelect = `
 export async function fetchClientsApi(): Promise<UiClient[]> {
   const { data, error } = await getSupabase()
     .from('crm_clients')
-    .select('name, bin, manager_id, manager:profiles!crm_clients_manager_id_fkey(full_name)')
+    .select('name, bin, manager_id, cp_paid, manager:profiles!crm_clients_manager_id_fkey(full_name)')
     .order('name');
   if (error) throw error;
   return (data || []).map((c) => ({
@@ -175,6 +176,7 @@ export async function fetchClientsApi(): Promise<UiClient[]> {
     bin: String(c.bin).trim(),
     managerId: (c as { manager_id?: string | null }).manager_id ?? null,
     managerName: (c as { manager?: { full_name?: string | null } | null }).manager?.full_name ?? null,
+    cpPaid: Boolean((c as { cp_paid?: boolean | null }).cp_paid),
   }));
 }
 
@@ -250,7 +252,7 @@ export async function createClientRow(c: UiClient): Promise<UiClient> {
   const { data, error } = await getSupabase()
     .from('crm_clients')
     .insert({ name: c.name, bin: c.bin, manager_id: c.managerId ?? null })
-    .select('name, bin, manager_id, manager:profiles!crm_clients_manager_id_fkey(full_name)')
+    .select('name, bin, manager_id, cp_paid, manager:profiles!crm_clients_manager_id_fkey(full_name)')
     .single();
   if (error) {
     if (error.code === '23505') {
@@ -266,6 +268,7 @@ export async function createClientRow(c: UiClient): Promise<UiClient> {
     bin: String(data.bin).trim(),
     managerId: (data as { manager_id?: string | null }).manager_id ?? null,
     managerName: (data as { manager?: { full_name?: string | null } | null }).manager?.full_name ?? null,
+    cpPaid: Boolean((data as { cp_paid?: boolean | null }).cp_paid),
   };
 }
 
@@ -290,7 +293,7 @@ export async function updateClientRow(originalBin: string, next: UiClient): Prom
       .from('crm_clients')
       .update({ name })
       .eq('bin', oldB)
-      .select('name, bin, manager_id, manager:profiles!crm_clients_manager_id_fkey(full_name)')
+      .select('name, bin, manager_id, cp_paid, manager:profiles!crm_clients_manager_id_fkey(full_name)')
       .single();
     if (error) {
       if (error.code === '23505') throw new Error('Контрагент с таким БИН уже существует');
@@ -301,6 +304,7 @@ export async function updateClientRow(originalBin: string, next: UiClient): Prom
       bin: String(data.bin).trim(),
       managerId: (data as { manager_id?: string | null }).manager_id ?? null,
       managerName: (data as { manager?: { full_name?: string | null } | null }).manager?.full_name ?? null,
+      cpPaid: Boolean((data as { cp_paid?: boolean | null }).cp_paid),
     };
   }
   const { error: rpcError } = await getSupabase().rpc('update_crm_client', {
@@ -316,7 +320,7 @@ export async function updateClientRow(originalBin: string, next: UiClient): Prom
   }
   const { data, error } = await getSupabase()
     .from('crm_clients')
-    .select('name, bin, manager_id, manager:profiles!crm_clients_manager_id_fkey(full_name)')
+    .select('name, bin, manager_id, cp_paid, manager:profiles!crm_clients_manager_id_fkey(full_name)')
     .eq('bin', newB)
     .single();
   if (error) throw error;
@@ -325,6 +329,7 @@ export async function updateClientRow(originalBin: string, next: UiClient): Prom
     bin: String(data.bin).trim(),
     managerId: (data as { manager_id?: string | null }).manager_id ?? null,
     managerName: (data as { manager?: { full_name?: string | null } | null }).manager?.full_name ?? null,
+    cpPaid: Boolean((data as { cp_paid?: boolean | null }).cp_paid),
   };
 }
 
@@ -334,6 +339,16 @@ export async function setClientManager(bin: string, managerId: string | null): P
   const { error } = await getSupabase().rpc('set_crm_client_manager', {
     p_bin: b,
     p_manager_id: managerId,
+  });
+  if (error) throw error;
+}
+
+/** Админ: общий флаг оплаты ЦП на уровне клиента. */
+export async function setClientCpPaid(bin: string, paid: boolean): Promise<void> {
+  const b = bin.trim();
+  const { error } = await getSupabase().rpc('set_crm_client_cp_paid', {
+    p_bin: b,
+    p_paid: Boolean(paid),
   });
   if (error) throw error;
 }

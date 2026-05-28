@@ -51,6 +51,7 @@ import {
   hardDeleteConductedMeetingById,
   saveReportToDb,
   saveKpiToDb,
+  setClientCpPaid,
   setClientManager,
   sendTelegramDailyReportNow,
 } from './lib/crmApi';
@@ -474,6 +475,15 @@ const App = () => {
       );
     },
     [isAdmin, managerProfiles],
+  );
+
+  const toggleClientPaid = useCallback(
+    async (bin: string, paid: boolean) => {
+      if (!isAdmin) return;
+      await setClientCpPaid(bin, paid);
+      setClients((prev) => prev.map((c) => (c.bin === bin ? { ...c, cpPaid: paid } : c)));
+    },
+    [isAdmin],
   );
 
   const removeClient = async (client: UiClient) => {
@@ -1049,6 +1059,7 @@ const App = () => {
             onRefreshReports={refresh}
             currentManagerId={sessionUserId}
             isAdmin={isAdmin}
+            onToggleClientPaid={isAdmin ? toggleClientPaid : undefined}
             managerSelectOptions={managerProfiles}
             onAssignManager={isAdmin ? assignClientManager : undefined}
             managerFilter={adminClientsFilterManager}
@@ -1348,10 +1359,12 @@ const App = () => {
             meetingCp={row?.meetingCp ?? 0}
             extraCp={row?.extraCp ?? 0}
             totalCp={row?.totalCp ?? 0}
+            cpPaid={row?.cpPaid ?? false}
             cpMeetings={row?.cpMeetings ?? []}
             standaloneByManager={row?.standaloneByManager ?? []}
             currentManagerId={sessionUserId}
             isAdmin={isAdmin}
+            onToggleClientPaid={isAdmin ? toggleClientPaid : undefined}
             onRefreshReports={refresh}
             onClose={() => setClientHistoryFor(null)}
           />

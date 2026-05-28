@@ -20,10 +20,12 @@ type Props = {
   meetingCp?: number;
   extraCp?: number;
   totalCp?: number;
+  cpPaid?: boolean;
   cpMeetings?: ClientCpMeeting[];
   standaloneByManager?: ClientStandaloneCpView[];
   currentManagerId?: string | null;
   isAdmin?: boolean;
+  onToggleClientPaid?: (bin: string, paid: boolean) => Promise<void>;
   onRefreshReports?: () => Promise<void>;
   onClose: () => void;
 };
@@ -35,10 +37,12 @@ export function ClientHistoryModal({
   meetingCp = 0,
   extraCp = 0,
   totalCp = 0,
+  cpPaid = false,
   cpMeetings = [],
   standaloneByManager = [],
   currentManagerId,
   isAdmin,
+  onToggleClientPaid,
   onRefreshReports,
   onClose,
 }: Props) {
@@ -70,8 +74,10 @@ export function ClientHistoryModal({
                 totalCp={totalCp}
                 meetings={cpMeetings}
                 standaloneByManager={standaloneByManager}
+                cpPaid={cpPaid}
                 currentManagerId={currentManagerId}
                 isAdmin={isAdmin}
+                onToggleClientPaid={onToggleClientPaid}
                 onRefreshReports={onRefreshReports}
               />
             </div>
