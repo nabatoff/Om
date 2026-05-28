@@ -157,6 +157,7 @@ const App = () => {
   /** Если задан — модалка в режиме редактирования существующего контрагента (ключ = исходный БИН). */
   const [editingClientBin, setEditingClientBin] = useState<string | null>(null);
   const [clientHistoryFor, setClientHistoryFor] = useState<UiClient | null>(null);
+  const [adminClientsFilterManager, setAdminClientsFilterManager] = useState('Все');
   const [adminFilterManager, setAdminFilterManager] = useState('Все');
   const [adminFilterDateFrom, setAdminFilterDateFrom] = useState(() => adminDateFilterBounds('', '').from);
   const [adminFilterDateTo, setAdminFilterDateTo] = useState(() => adminDateFilterBounds('', '').to);
@@ -721,6 +722,21 @@ const App = () => {
     [allReports, clients, standaloneCp, isAdmin, sessionUserId, managerName, managerNameById],
   );
 
+  const adminClientManagerOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of clientListRows) {
+      for (const m of r.managerNames) {
+        if (m) set.add(m);
+      }
+    }
+    return ['Все', ...Array.from(set).sort((a, b) => a.localeCompare(b, 'ru'))];
+  }, [clientListRows]);
+
+  const visibleClientRows = useMemo(() => {
+    if (!isAdmin || adminClientsFilterManager === 'Все') return clientListRows;
+    return clientListRows.filter((r) => r.managerNames.includes(adminClientsFilterManager));
+  }, [clientListRows, isAdmin, adminClientsFilterManager]);
+
   const clientHistoryAggregated = useMemo(
     () =>
       clientHistoryFor
@@ -986,10 +1002,13 @@ const App = () => {
 
         {currentView === 'clients' && (
           <ClientDirectoryPanel
-            rows={clientListRows}
+            rows={visibleClientRows}
             onRefreshReports={refresh}
             currentManagerId={sessionUserId}
             isAdmin={isAdmin}
+            managerFilter={adminClientsFilterManager}
+            managerOptions={adminClientManagerOptions}
+            onManagerFilterChange={setAdminClientsFilterManager}
             title={isAdmin ? 'Все контрагенты' : 'Мои клиенты'}
             subtitle={isAdmin ? 'База crm_clients · ЦП по всем отчётам' : 'Из ваших отчётов · сумма ЦП по проведённым встречам'}
             onSelectClient={(c) => setClientHistoryFor(c)}
@@ -1258,7 +1277,7 @@ const App = () => {
       )}
 
       {clientHistoryFor && (() => {
-        const row = clientListRows.find((r) => r.bin === clientHistoryFor.bin);
+        const row = visibleClientRows.find((r) => r.bin === clientHistoryFor.bin) ?? clientListRows.find((r) => r.bin === clientHistoryFor.bin);
         return (
           <ClientHistoryModal
             client={clientHistoryFor}

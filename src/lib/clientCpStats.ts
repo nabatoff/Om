@@ -17,6 +17,7 @@ export type ClientStandaloneCpView = ClientStandaloneCp & {
 export type ClientListRow = {
   name: string;
   bin: string;
+  managerNames: string[];
   meetingCp: number;
   extraCp: number;
   totalCp: number;
@@ -144,9 +145,22 @@ export function buildClientListRows(
       managerFilter,
       options?.managerNameById,
     );
+    const managers = new Set<string>();
+    for (const r of reportScope) {
+      const hasBin =
+        r.assignedMeetings.some((m) => m.bin.trim() === bin) ||
+        r.conductedMeetings.some((m) => m.bin.trim() === bin) ||
+        r.confirmedOrders.some((o) => o.bin.trim() === bin);
+      if (hasBin && r.manager.trim()) managers.add(r.manager.trim());
+    }
+    for (const s of standaloneByManager) {
+      const n = (s.managerName ?? '').trim();
+      if (n) managers.add(n);
+    }
     rows.push({
       name,
       bin,
+      managerNames: Array.from(managers),
       meetingCp,
       extraCp,
       totalCp: meetingCp + extraCp,

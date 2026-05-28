@@ -12,6 +12,9 @@ type Props = {
   onRefreshReports?: () => Promise<void>;
   currentManagerId?: string | null;
   isAdmin?: boolean;
+  managerFilter?: string;
+  managerOptions?: string[];
+  onManagerFilterChange?: (value: string) => void;
   title?: string;
   subtitle?: string;
   emptyHint?: string;
@@ -35,6 +38,9 @@ export function ClientDirectoryPanel({
   onRefreshReports,
   currentManagerId,
   isAdmin,
+  managerFilter = 'Все',
+  managerOptions = ['Все'],
+  onManagerFilterChange,
   title = 'Все контрагенты',
   subtitle = 'База crm_clients',
   emptyHint,
@@ -70,6 +76,19 @@ export function ClientDirectoryPanel({
           </div>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          {isAdmin ? (
+            <select
+              value={managerFilter}
+              onChange={(e) => onManagerFilterChange?.(e.target.value)}
+              className="px-3 py-2.5 rounded-xl border border-gray-200 text-sm font-medium bg-white min-w-[180px]"
+            >
+              {managerOptions.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+          ) : null}
           <div className="relative flex-1 min-w-0 sm:min-w-[220px]">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" />
             <input
