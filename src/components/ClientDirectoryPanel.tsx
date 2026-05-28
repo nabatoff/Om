@@ -120,14 +120,14 @@ export function ClientDirectoryPanel({
 
       <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
         <div className="overflow-auto max-h-[calc(100vh-22rem)]">
-          <table className="w-full text-left text-sm">
+          <table className="w-full table-fixed text-left text-sm">
             <thead className="sticky top-0 z-10">
               <tr className="bg-gray-50 text-[10px] font-black text-gray-500 uppercase tracking-tighter border-b border-gray-100">
-                <th className="p-4 bg-gray-50">Наименование</th>
-                <th className="p-4 bg-gray-50">БИН</th>
-                {isAdmin ? <th className="p-4 bg-gray-50">Менеджер</th> : null}
-                <th className="p-4 bg-gray-50 text-center">ЦП (всего)</th>
-                <th className="p-4 w-44 text-right bg-gray-50">Действия</th>
+                <th className="p-4 bg-gray-50 w-[34%]">Наименование</th>
+                <th className="p-4 bg-gray-50 w-[16%]">БИН</th>
+                {isAdmin ? <th className="p-4 bg-gray-50 w-[22%]">Менеджер</th> : null}
+                <th className="p-4 bg-gray-50 w-[14%] text-center">ЦП (всего)</th>
+                <th className="p-4 w-[14%] text-right bg-gray-50">Действия</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -152,7 +152,7 @@ export function ClientDirectoryPanel({
                     role="button"
                     tabIndex={0}
                   >
-                    <td className="p-4 font-bold text-gray-900">{c.name}</td>
+                    <td className="p-4 font-bold text-gray-900 truncate" title={c.name}>{c.name}</td>
                     <td className="p-4 font-mono text-xs text-gray-600 tracking-tight">
                       <span className="inline-flex items-center gap-1.5">
                         <Fingerprint size={12} className="text-gray-300" />
@@ -164,7 +164,7 @@ export function ClientDirectoryPanel({
                         <select
                           value={c.managerId ?? ''}
                           onChange={(e) => void onAssignManager?.(c.bin, e.target.value || null)}
-                          className="w-full min-w-[170px] bg-white border border-gray-200 rounded-lg px-2 py-1.5 text-xs font-bold"
+                          className="w-full min-w-[140px] bg-white border border-gray-200 rounded-lg px-2 py-1.5 text-xs font-bold"
                         >
                           <option value="">Не назначен</option>
                           {managerSelectOptions.map((m) => (

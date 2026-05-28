@@ -13,6 +13,15 @@ function formatDisplayDate(raw: string): string {
   return t || '—';
 }
 
+function formatPaidMonth(raw: string): string {
+  const t = (raw || '').trim();
+  const ymd = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (ymd) return `${ymd[2]}-${ymd[1]}`;
+  const ym = t.match(/^(\d{4})-(\d{2})$/);
+  if (ym) return `${ym[2]}-${ym[1]}`;
+  return t || '—';
+}
+
 type Props = {
   bin: string;
   meetingCp: number;
@@ -118,7 +127,7 @@ export function ClientCpEditor({
     }
   };
 
-  const paidCaption = cpPaid ? formatDisplayDate(cpPaidAt || '') : 'Не оплачено';
+  const paidCaption = cpPaid ? formatPaidMonth(cpPaidAt || '') : 'Не оплачено';
 
   if (!editable) {
     return (
@@ -158,7 +167,7 @@ export function ClientCpEditor({
               if (cpPaid) {
                 void applyClientPaid(false, null);
               } else {
-                setPaidAtModal({ input: cpPaidAt || new Date().toISOString().slice(0, 10) });
+                setPaidAtModal({ input: (cpPaidAt || new Date().toISOString().slice(0, 10)).slice(0, 7) });
               }
             }}
           >
@@ -184,29 +193,6 @@ export function ClientCpEditor({
               {' '}
               (по встречам <strong>{meetingCp}</strong>, без встречи <strong>{extraCp}</strong>)
             </p>
-            {isAdmin ? (
-              <div className="mb-4">
-                <button
-                  type="button"
-                  disabled={busy}
-                  className={`min-w-[120px] rounded-xl px-3 py-1.5 text-[10px] font-black uppercase tracking-wide border transition-colors ${
-                    cpPaid
-                      ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                      : 'border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100'
-                  }`}
-                  onClick={() => {
-                    if (cpPaid) {
-                      void applyClientPaid(false, null);
-                    } else {
-                      setPaidAtModal({ input: cpPaidAt || new Date().toISOString().slice(0, 10) });
-                    }
-                  }}
-                >
-                  ЦП клиента: {paidCaption}
-                </button>
-              </div>
-            ) : null}
-
             <section className="mb-6">
               <h5 className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">ЦП без встречи</h5>
               {isAdmin ? (
@@ -496,9 +482,9 @@ export function ClientCpEditor({
           }}
         >
           <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-5 max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
-            <h4 className="text-xs font-black text-gray-800 uppercase tracking-widest mb-2">Дата оплаты ЦП</h4>
+            <h4 className="text-xs font-black text-gray-800 uppercase tracking-widest mb-2">Месяц оплаты ЦП</h4>
             <input
-              type="date"
+              type="month"
               disabled={busy}
               className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm font-bold mb-4"
               value={paidAtModal.input}
@@ -518,12 +504,12 @@ export function ClientCpEditor({
                 disabled={busy}
                 className="px-3 py-2 rounded-xl text-[10px] font-black uppercase bg-blue-600 text-white"
                 onClick={async () => {
-                  const d = paidAtModal.input.trim();
-                  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) {
-                    alert('Выбери корректную дату оплаты.');
+                  const m = paidAtModal.input.trim();
+                  if (!/^\d{4}-\d{2}$/.test(m)) {
+                    alert('Выбери корректный месяц оплаты.');
                     return;
                   }
-                  await applyClientPaid(true, d);
+                  await applyClientPaid(true, `${m}-01`);
                   setPaidAtModal(null);
                 }}
               >
