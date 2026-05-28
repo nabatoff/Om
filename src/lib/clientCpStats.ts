@@ -134,7 +134,7 @@ export function buildClientListRows(
 
   const binMap = collectClientBinsFromReports(scoped);
   const rows: ClientListRow[] = [];
-  const managerFilter = options?.allCatalog ? undefined : options?.managerId;
+  const managerFilter = options?.managerId;
 
   const pushRow = (bin: string, name: string, reportScope: FullReport[]) => {
     const { meetingCp, cpMeetings } = clientCpStatsForBin(reportScope, bin);
@@ -155,28 +155,25 @@ export function buildClientListRows(
     });
   };
 
-  if (options?.allCatalog) {
-    for (const c of catalog) {
-      const bin = c.bin.trim();
-      if (!bin) continue;
-      pushRow(bin, c.name.trim() || binMap.get(bin) || '—', reports);
-    }
-    for (const [bin, name] of binMap) {
-      if (rows.some((r) => r.bin === bin)) continue;
-      pushRow(bin, name || '—', reports);
-    }
-  } else {
-    for (const [bin, name] of binMap) {
-      const cat = catalog.find((c) => c.bin.trim() === bin);
-      pushRow(bin, (cat?.name ?? name).trim() || '—', scoped);
-    }
-    for (const row of standaloneRows) {
-      if (managerFilter && row.managerId !== managerFilter) continue;
-      const bin = row.bin.trim();
-      if (!bin || rows.some((r) => r.bin === bin)) continue;
-      const cat = catalog.find((c) => c.bin.trim() === bin);
-      pushRow(bin, cat?.name.trim() || '—', scoped);
-    }
+  // Базово показываем всех клиентов из справочника, даже если движения = 0.
+  for (const c of catalog) {
+    const bin = c.bin.trim();
+    if (!bin || rows.some((r) => r.bin === bin)) continue;
+    pushRow(bin, c.name.trim() || binMap.get(bin) || '—', scoped);
+  }
+
+  // Плюс добавляем "сироты", которые встречаются в движениях, но не заведены в справочнике.
+  for (const [bin, name] of binMap) {
+    if (rows.some((r) => r.bin === bin)) continue;
+    pushRow(bin, name || '—', scoped);
+  }
+
+  for (const row of standaloneRows) {
+    if (managerFilter && row.managerId !== managerFilter) continue;
+    const bin = row.bin.trim();
+    if (!bin || rows.some((r) => r.bin === bin)) continue;
+    const cat = catalog.find((c) => c.bin.trim() === bin);
+    pushRow(bin, cat?.name.trim() || '—', scoped);
   }
 
   return rows.sort((a, b) => a.name.localeCompare(b.name, 'ru') || a.bin.localeCompare(b.bin, 'ru'));
