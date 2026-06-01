@@ -13,13 +13,42 @@ function formatDisplayDate(raw: string): string {
   return t || '—';
 }
 
+const PAID_MONTHS = [
+  { value: '01', label: 'Январь' },
+  { value: '02', label: 'Февраль' },
+  { value: '03', label: 'Март' },
+  { value: '04', label: 'Апрель' },
+  { value: '05', label: 'Май' },
+  { value: '06', label: 'Июнь' },
+  { value: '07', label: 'Июль' },
+  { value: '08', label: 'Август' },
+  { value: '09', label: 'Сентябрь' },
+  { value: '10', label: 'Октябрь' },
+  { value: '11', label: 'Ноябрь' },
+  { value: '12', label: 'Декабрь' },
+] as const;
+
 function formatPaidMonth(raw: string): string {
   const t = (raw || '').trim();
-  const ymd = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (ymd) return `${ymd[2]}-${ymd[1]}`;
-  const ym = t.match(/^(\d{4})-(\d{2})$/);
-  if (ym) return `${ym[2]}-${ym[1]}`;
-  return t || '—';
+  const m = t.match(/^(\d{4})-(\d{2})(?:-\d{2})?$/);
+  if (!m) return t || '—';
+  const monthLabel = PAID_MONTHS.find((item) => item.value === m[2])?.label ?? m[2];
+  return `${monthLabel} ${m[1]}`;
+}
+
+function paidYearOptions(): number[] {
+  const y = new Date().getFullYear();
+  return [y - 2, y - 1, y, y + 1];
+}
+
+function parsePaidMonthYear(raw: string | null | undefined): { month: string; year: string } {
+  const now = new Date();
+  const m = (raw || '').match(/^(\d{4})-(\d{2})/);
+  if (m) return { year: m[1], month: m[2] };
+  return {
+    year: String(now.getFullYear()),
+    month: String(now.getMonth() + 1).padStart(2, '0'),
+  };
 }
 
 type Props = {
@@ -59,7 +88,7 @@ export function ClientCpEditor({
   const [extraInput, setExtraInput] = useState('1');
   const [entryEdits, setEntryEdits] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
-  const [paidAtModal, setPaidAtModal] = useState<{ input: string } | null>(null);
+  const [paidAtModal, setPaidAtModal] = useState<{ month: string; year: string } | null>(null);
 
   const editable = Boolean(onRefreshReports);
   const label = totalCp >= 1 ? `${totalCp} шт.` : '—';
@@ -157,7 +186,7 @@ export function ClientCpEditor({
           <button
             type="button"
             disabled={busy}
-            className={`min-w-[98px] rounded-xl px-3 py-1.5 text-[10px] font-black uppercase tracking-wide border transition-colors ${
+            className={`min-w-[98px] rounded-xl px-3 py-1.5 text-[10px] font-bold tracking-wide border transition-colors ${
               cpPaid
                 ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
                 : 'border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100'
@@ -166,7 +195,7 @@ export function ClientCpEditor({
               if (cpPaid) {
                 void applyClientPaid(false, null);
               } else {
-                setPaidAtModal({ input: (cpPaidAt || new Date().toISOString().slice(0, 10)).slice(0, 7) });
+                setPaidAtModal(parsePaidMonthYear(cpPaidAt));
               }
             }}
           >
@@ -476,14 +505,39 @@ export function ClientCpEditor({
           }}
         >
           <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-5 max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
-            <h4 className="text-xs font-black text-gray-800 uppercase tracking-widest mb-2">Месяц оплаты ЦП</h4>
-            <input
-              type="month"
-              disabled={busy}
-              className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm font-bold mb-4"
-              value={paidAtModal.input}
-              onChange={(e) => setPaidAtModal((prev) => (prev ? { ...prev, input: e.target.value } : prev))}
-            />
+            <h4 className="text-xs font-black text-gray-800 uppercase tracking-widest mb-3">Месяц оплаты ЦП</h4>
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Месяц</label>
+                <select
+                  disabled={busy}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm font-bold"
+                  value={paidAtModal.month}
+                  onChange={(e) => setPaidAtModal((prev) => (prev ? { ...prev, month: e.target.value } : prev))}
+                >
+                  {PAID_MONTHS.map((m) => (
+                    <option key={m.value} value={m.value}>
+                      {m.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Год</label>
+                <select
+                  disabled={busy}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm font-bold"
+                  value={paidAtModal.year}
+                  onChange={(e) => setPaidAtModal((prev) => (prev ? { ...prev, year: e.target.value } : prev))}
+                >
+                  {paidYearOptions().map((y) => (
+                    <option key={y} value={String(y)}>
+                      {y}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
             <div className="flex gap-2 justify-end">
               <button
                 type="button"
@@ -498,12 +552,12 @@ export function ClientCpEditor({
                 disabled={busy}
                 className="px-3 py-2 rounded-xl text-[10px] font-black uppercase bg-blue-600 text-white"
                 onClick={async () => {
-                  const m = paidAtModal.input.trim();
-                  if (!/^\d{4}-\d{2}$/.test(m)) {
+                  const ym = `${paidAtModal.year}-${paidAtModal.month}`;
+                  if (!/^\d{4}-\d{2}$/.test(ym)) {
                     alert('Выбери корректный месяц оплаты.');
                     return;
                   }
-                  await applyClientPaid(true, `${m}-01`);
+                  await applyClientPaid(true, `${ym}-01`);
                   setPaidAtModal(null);
                 }}
               >

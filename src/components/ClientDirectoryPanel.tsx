@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Fingerprint, Pencil, Search, Trash2, UserPlus, Users } from 'lucide-react';
+import { ArrowDown, ArrowUp, Fingerprint, Pencil, Search, Trash2, UserPlus, Users } from 'lucide-react';
 import type { ClientListRow } from '../lib/clientCpStats';
 import { ClientCpEditor } from './ClientCpEditor';
 
@@ -22,6 +22,8 @@ type Props = {
   subtitle?: string;
   emptyHint?: string;
 };
+
+type CpSort = 'none' | 'desc' | 'asc';
 
 function normalizeText(value: string): string {
   return value
@@ -52,6 +54,7 @@ export function ClientDirectoryPanel({
   emptyHint,
 }: Props) {
   const [q, setQ] = useState('');
+  const [cpSort, setCpSort] = useState<CpSort>('none');
   const canMutate = Boolean(onAddClient && onEditClient && onDeleteClient);
 
   const filtered = useMemo(() => {
@@ -65,6 +68,15 @@ export function ClientDirectoryPanel({
         (digitsQuery ? c.bin.replace(/\D/g, '').includes(digitsQuery) : false),
     );
   }, [rows, q]);
+
+  const displayed = useMemo(() => {
+    if (!isAdmin || cpSort === 'none') return filtered;
+    return [...filtered].sort((a, b) => (cpSort === 'desc' ? b.totalCp - a.totalCp : a.totalCp - b.totalCp));
+  }, [filtered, cpSort, isAdmin]);
+
+  const cycleCpSort = () => {
+    setCpSort((prev) => (prev === 'none' ? 'desc' : prev === 'desc' ? 'asc' : 'none'));
+  };
 
   const defaultEmpty =
     emptyHint ?? (rows.length === 0 ? (canMutate ? 'Контрагентов пока нет. Нажми «Новый».' : 'Клиентов пока нет в ваших отчётах.') : 'Ничего не найдено.');
@@ -126,19 +138,34 @@ export function ClientDirectoryPanel({
                 <th className="p-4 bg-gray-50 w-[34%]">Наименование</th>
                 <th className="p-4 bg-gray-50 w-[16%]">БИН</th>
                 {isAdmin ? <th className="p-4 bg-gray-50 w-[22%]">Менеджер</th> : null}
-                <th className="p-4 bg-gray-50 w-[14%] text-center">ЦП (всего)</th>
+                <th className="p-4 bg-gray-50 w-[14%] text-center">
+                  {isAdmin ? (
+                    <button
+                      type="button"
+                      onClick={cycleCpSort}
+                      className="inline-flex items-center justify-center gap-1 w-full text-[10px] font-black uppercase tracking-tighter text-gray-500 hover:text-blue-600"
+                      title="Сортировка по количеству ЦП"
+                    >
+                      ЦП (всего)
+                      {cpSort === 'desc' ? <ArrowDown size={12} className="text-blue-600" /> : null}
+                      {cpSort === 'asc' ? <ArrowUp size={12} className="text-blue-600" /> : null}
+                    </button>
+                  ) : (
+                    'ЦП (всего)'
+                  )}
+                </th>
                 <th className="p-4 w-[14%] text-right bg-gray-50">Действия</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {filtered.length === 0 ? (
+              {displayed.length === 0 ? (
                 <tr>
                   <td colSpan={isAdmin ? 5 : 4} className="p-10 text-center text-gray-500 text-sm">
                     {defaultEmpty}
                   </td>
                 </tr>
               ) : (
-                filtered.map((c) => (
+                displayed.map((c) => (
                   <tr
                     key={c.bin}
                     className="hover:bg-blue-50/50 cursor-pointer transition-colors"
