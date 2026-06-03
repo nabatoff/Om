@@ -64,6 +64,7 @@ import { buildClientListRows, filterReportsForManager } from './lib/clientCpStat
 import { ClientDirectoryPanel } from './components/ClientDirectoryPanel';
 import { AdminSettingsPanel } from './components/AdminSettingsPanel';
 import {
+  buildClientKtpMap,
   countOrderLinesWithoutCommission,
   formatMoneyKzt,
   orderLineAmounts,
@@ -166,12 +167,13 @@ const App = () => {
     isOpen: boolean;
     entity: string;
     bin: string;
+    viaBin?: string;
     amounts: number[];
     totalAmount: number;
     mrpKztApplied?: number | null;
     isKtpApplied?: boolean | null;
     commissionAmount?: number | null;
-  }>({ isOpen: false, entity: '', bin: '', amounts: [], totalAmount: 0 });
+  }>({ isOpen: false, entity: '', bin: '', viaBin: '', amounts: [], totalAmount: 0 });
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
   const [newClientData, setNewClientData] = useState({ name: '', bin: '', managerId: '' });
   const [onClientCreatedCallback, setOnClientCreatedCallback] = useState<((c: UiClient) => void) | null>(null);
@@ -791,6 +793,8 @@ const App = () => {
     });
   }, [allOrdersByDateAndManager, ordersFilterCounterparty]);
 
+  const clientKtpByBin = useMemo(() => buildClientKtpMap(clients), [clients]);
+
   const reportsForClientScope = useMemo(() => {
     if (isAdmin) return allReports;
     return filterReportsForManager(allReports, sessionUserId, managerName);
@@ -1203,7 +1207,8 @@ const App = () => {
               <OrdersHistoryDashboard
                 isAdmin={isAdmin}
                 orders={allFilteredOrders}
-                  totalOrdersCount={allFilteredOrders.reduce((sum, order) => sum + order.orderCount, 0)}
+                clientKtpByBin={clientKtpByBin}
+                totalOrdersCount={allFilteredOrders.reduce((sum, order) => sum + order.orderCount, 0)}
                 filterManager={ordersFilterManager}
                 setFilterManager={setOrdersFilterManager}
                 filterDateFrom={ordersFilterDateFrom}
@@ -1219,6 +1224,7 @@ const App = () => {
                     isOpen: true,
                     entity: order.entityName,
                     bin: order.bin,
+                    viaBin: order.viaBin,
                     amounts: order.amounts,
                     totalAmount: order.totalAmount,
                     mrpKztApplied: order.mrpKztApplied,
@@ -1423,6 +1429,7 @@ const App = () => {
         <OrderItemsModal
           modal={orderDetailModal}
           isAdmin={isAdmin}
+          clientKtpByBin={clientKtpByBin}
           onClose={() => setOrderDetailModal({ ...orderDetailModal, isOpen: false })}
         />
       )}
@@ -3117,6 +3124,7 @@ const KpiDashboard = ({
 const OrdersHistoryDashboard = ({
   isAdmin,
   orders,
+  clientKtpByBin,
   totalOrdersCount,
   filterManager,
   setFilterManager,
@@ -3132,6 +3140,7 @@ const OrdersHistoryDashboard = ({
 }: {
   isAdmin: boolean;
   orders: (UiOrder & { manager: string; date: string })[];
+  clientKtpByBin: Map<string, boolean>;
   totalOrdersCount: number;
   filterManager: string;
   setFilterManager: SetState<string>;
@@ -3153,16 +3162,16 @@ const OrdersHistoryDashboard = ({
   const ordersCommissionTotal = useMemo(
     () =>
       orders.reduce((sum, o) => {
-        const total = resolveOrderCommissionTotal(o);
+        const total = resolveOrderCommissionTotal(o, clientKtpByBin);
         if (total == null) return sum;
         return sum + total;
       }, 0),
-    [orders],
+    [orders, clientKtpByBin],
   );
 
   const ordersWithoutCommissionCount = useMemo(
-    () => orders.reduce((sum, o) => sum + countOrderLinesWithoutCommission(o), 0),
-    [orders],
+    () => orders.reduce((sum, o) => sum + countOrderLinesWithoutCommission(o, clientKtpByBin), 0),
+    [orders, clientKtpByBin],
   );
 
   const uniqueCounterpartiesCount = useMemo(() => {
@@ -3266,7 +3275,7 @@ const OrdersHistoryDashboard = ({
             </p>
             {ordersWithoutCommissionCount > 0 ? (
               <p className="text-[9px] text-gray-400 font-bold mt-0.5">
-                без комиссии (№1, №2…): {ordersWithoutCommissionCount}
+                без комиссии: {ordersWithoutCommissionCount}
               </p>
             ) : null}
           </div>
@@ -3536,12 +3545,14 @@ const DetailsListModal = ({
 const OrderItemsModal = ({
   modal,
   isAdmin,
+  clientKtpByBin,
   onClose,
 }: {
   modal: {
     isOpen: boolean;
     entity: string;
     bin: string;
+    viaBin?: string;
     amounts: number[];
     totalAmount: number;
     mrpKztApplied?: number | null;
@@ -3549,10 +3560,11 @@ const OrderItemsModal = ({
     commissionAmount?: number | null;
   };
   isAdmin: boolean;
+  clientKtpByBin: Map<string, boolean>;
   onClose: () => void;
 }) => {
   const lineAmounts = orderLineAmounts(modal.amounts, modal.totalAmount);
-  const commission = resolveOrderCommissionDisplay(modal);
+  const commission = resolveOrderCommissionDisplay(modal, clientKtpByBin);
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[400] flex items-center justify-center p-4" onClick={onClose}>

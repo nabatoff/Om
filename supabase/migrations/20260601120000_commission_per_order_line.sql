@@ -1,5 +1,32 @@
 -- Комиссия по каждой строке amounts[], итог = сумма; лимит 4000 МРП на каждую строку.
 
+CREATE OR REPLACE FUNCTION public.crm_order_commission_is_ktp(p_bin text, p_via_bin text)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+AS $$
+  WITH v AS (
+    SELECT regexp_replace(trim(coalesce(p_via_bin, '')), '[^0-9]', '', 'g') AS via_digits
+  )
+  SELECT coalesce(
+    CASE
+      WHEN (SELECT length(via_digits) FROM v) = 12 THEN (
+        SELECT c.is_ktp
+        FROM public.crm_clients c, v
+        WHERE c.bin = v.via_digits
+        LIMIT 1
+      )
+      ELSE (
+        SELECT c.is_ktp
+        FROM public.crm_clients c
+        WHERE c.bin = regexp_replace(trim(coalesce(p_bin, '')), '[^0-9]', '', 'g')
+        LIMIT 1
+      )
+    END,
+    false
+  );
+$$;
+
 CREATE OR REPLACE FUNCTION public.sum_order_line_commissions(
   p_amounts numeric[],
   p_total numeric,
@@ -60,12 +87,7 @@ BEGIN
     WHERE (coalesce(p_overwrite, false) OR o.commission_amount IS NULL)
       AND coalesce(o.total_amount, 0) > 0
   LOOP
-    SELECT coalesce(c.is_ktp, false)
-      INTO v_ktp
-    FROM public.crm_clients c
-    WHERE c.bin = r.bin;
-
-    v_ktp := coalesce(v_ktp, false);
+    v_ktp := public.crm_order_commission_is_ktp(r.bin, r.via_bin);
     v_comm := public.sum_order_line_commissions(r.amounts, r.total_amount, v_ktp, v_mrp);
 
     UPDATE public.crm_confirmed_orders
@@ -272,18 +294,17 @@ BEGIN
     trim(coalesce(raw."viaEntityName", '')),
     trim(coalesce(raw."viaBin", '')),
     v_mrp,
-    coalesce(c.is_ktp, false),
+    public.crm_order_commission_is_ktp(trim(coalesce(raw.bin, '')), trim(coalesce(raw."viaBin", ''))),
     public.sum_order_line_commissions(
       coalesce(raw.amounts, ARRAY[]::numeric[]),
       coalesce(raw."totalAmount", 0)::numeric,
-      coalesce(c.is_ktp, false),
+      public.crm_order_commission_is_ktp(trim(coalesce(raw.bin, '')), trim(coalesce(raw."viaBin", ''))),
       v_mrp
     )
   FROM jsonb_to_recordset(v_orders) AS raw(
     "entityName" text, bin text, "orderCount" int, amounts numeric[],
     "totalAmount" numeric, "viaEntityName" text, "viaBin" text
   )
-  LEFT JOIN public.crm_clients c ON c.bin = trim(coalesce(raw.bin, ''))
   WHERE trim(coalesce(raw."entityName", '')) <> '' AND trim(coalesce(raw.bin, '')) <> '';
 
   RETURN v_report_id;

@@ -68,16 +68,64 @@ export function calculateOrderLinesCommission(
   return { lines, total: lines.reduce((s, n) => s + n, 0) };
 }
 
+export function calculateOrderCommission(
+  order: OrderCommissionFields,
+  mrp: number,
+  clientKtpByBin?: ReadonlyMap<string, boolean>,
+): { lines: number[]; total: number } {
+  const isKtp = isKtpForOrderCommission(order, clientKtpByBin);
+  return calculateOrderLinesCommission(order.amounts, order.totalAmount, isKtp, mrp);
+}
+
 export type OrderCommissionFields = {
   amounts: number[];
   totalAmount: number;
+  bin?: string;
+  viaBin?: string;
   isKtpApplied?: boolean | null;
   mrpKztApplied?: number | null;
   commissionAmount?: number | null;
 };
 
+/** БИН, по которому берётся КТП: via_bin (12 цифр), иначе контрагент. */
+export function commissionKtpBin(bin: string, viaBin?: string): string {
+  const via = String(viaBin ?? '').replace(/\D/g, '');
+  if (via.length === 12) return via;
+  return String(bin ?? '').replace(/\D/g, '');
+}
+
+export function buildClientKtpMap(
+  clients: ReadonlyArray<{ bin: string; isKtp?: boolean }>,
+): Map<string, boolean> {
+  const m = new Map<string, boolean>();
+  for (const c of clients) {
+    const b = c.bin.trim();
+    if (b) m.set(b, Boolean(c.isKtp));
+  }
+  return m;
+}
+
+/** КТП для расчёта комиссии: снимок при сохранении или справочник по via/контрагенту. */
+export function isKtpForOrderCommission(
+  order: OrderCommissionFields,
+  clientKtpByBin?: ReadonlyMap<string, boolean>,
+): boolean {
+  if (
+    order.isKtpApplied != null &&
+    (order.commissionAmount != null || order.mrpKztApplied != null)
+  ) {
+    return Boolean(order.isKtpApplied);
+  }
+  const key = commissionKtpBin(order.bin ?? '', order.viaBin);
+  if (key.length === 12 && clientKtpByBin) return clientKtpByBin.get(key) ?? false;
+  return Boolean(order.isKtpApplied);
+}
+
 /** Итоговая комиссия по записи: сначала снимок из БД, иначе расчёт по строкам amounts[]. */
-export function resolveOrderCommissionTotal(order: OrderCommissionFields): number | null {
+export function resolveOrderCommissionTotal(
+  order: OrderCommissionFields,
+  clientKtpByBin?: ReadonlyMap<string, boolean>,
+): number | null {
   const stored = order.commissionAmount;
   if (stored != null && !Number.isNaN(Number(stored))) return Number(stored);
 
@@ -85,36 +133,29 @@ export function resolveOrderCommissionTotal(order: OrderCommissionFields): numbe
   if (mrp == null || Number.isNaN(Number(mrp))) return null;
   if (orderLineAmounts(order.amounts, order.totalAmount).length === 0) return null;
 
-  return calculateOrderLinesCommission(
-    order.amounts,
-    order.totalAmount,
-    Boolean(order.isKtpApplied),
-    Number(mrp),
-  ).total;
+  return calculateOrderCommission(order, Number(mrp), clientKtpByBin).total;
 }
 
 /** Сколько отдельных заказов (№1, №2…) без комиссии в одной записи таблицы. */
-export function countOrderLinesWithoutCommission(order: OrderCommissionFields): number {
-  if (resolveOrderCommissionTotal(order) != null) return 0;
+export function countOrderLinesWithoutCommission(
+  order: OrderCommissionFields,
+  clientKtpByBin?: ReadonlyMap<string, boolean>,
+): number {
+  if (resolveOrderCommissionTotal(order, clientKtpByBin) != null) return 0;
   return orderLineAmounts(order.amounts, order.totalAmount).length;
 }
 
 /** Комиссия для модалки: построчно при снимке MRP + итог. */
-export function resolveOrderCommissionDisplay(order: OrderCommissionFields): {
-  lines: number[];
-  total: number | null;
-} {
-  const total = resolveOrderCommissionTotal(order);
+export function resolveOrderCommissionDisplay(
+  order: OrderCommissionFields,
+  clientKtpByBin?: ReadonlyMap<string, boolean>,
+): { lines: number[]; total: number | null } {
+  const total = resolveOrderCommissionTotal(order, clientKtpByBin);
   const mrp = order.mrpKztApplied;
   const items = orderLineAmounts(order.amounts, order.totalAmount);
 
   if (mrp != null && !Number.isNaN(Number(mrp)) && items.length > 0) {
-    const { lines } = calculateOrderLinesCommission(
-      order.amounts,
-      order.totalAmount,
-      Boolean(order.isKtpApplied),
-      Number(mrp),
-    );
+    const { lines } = calculateOrderCommission(order, Number(mrp), clientKtpByBin);
     return { lines, total };
   }
 

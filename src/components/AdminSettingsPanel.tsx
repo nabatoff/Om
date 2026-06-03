@@ -145,7 +145,7 @@ export function AdminSettingsPanel({ onRefreshReports, onMrpUpdated }: Props) {
       <section className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm space-y-4 max-w-xl">
         <h3 className="text-xs font-black text-gray-500 uppercase tracking-widest">Архив заказов</h3>
         <p className="text-sm text-gray-700">
-          Заказов без комиссии (№1, №2… внутри записи):{' '}
+          Заказов без комиссии:{' '}
           <span className="font-black">{pendingWithout ?? '—'}</span>
         </p>
         <p className="text-[10px] text-gray-400">
