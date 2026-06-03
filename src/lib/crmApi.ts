@@ -7,6 +7,8 @@ export type UiClient = {
   managerName?: string | null;
   cpPaid?: boolean;
   cpPaidAt?: string | null;
+  /** Только при админской загрузке справочника. */
+  isKtp?: boolean;
 };
 export type UiManagerProfile = { id: string; fullName: string };
 export type FormStats = {
@@ -39,6 +41,10 @@ export type UiOrder = {
   orderCount: number;
   amounts: number[];
   totalAmount: number;
+  /** Снимок при сохранении заказа (из БД). */
+  commissionAmount?: number | null;
+  mrpKztApplied?: number | null;
+  isKtpApplied?: boolean | null;
 };
 
 export type DeletedMeeting = {
@@ -104,6 +110,9 @@ type ReportRow = {
     amounts: string[] | number[] | null;
     total_amount: string | number;
     sort_order: number;
+    mrp_kzt_applied?: string | number | null;
+    is_ktp_applied?: boolean | null;
+    commission_amount?: string | number | null;
   }[];
 };
 
@@ -153,6 +162,15 @@ function mapReport(r: ReportRow): FullReport {
           orderCount: o.order_count,
           amounts: amts.map((n) => Number(n)),
           totalAmount: Number(o.total_amount),
+          commissionAmount:
+            o.commission_amount == null || o.commission_amount === ''
+              ? null
+              : Number(o.commission_amount),
+          mrpKztApplied:
+            o.mrp_kzt_applied == null || o.mrp_kzt_applied === ''
+              ? null
+              : Number(o.mrp_kzt_applied),
+          isKtpApplied: o.is_ktp_applied == null ? null : Boolean(o.is_ktp_applied),
         };
       }),
   };
@@ -163,8 +181,28 @@ const reportSelect = `
   processed_total, new_in_work, calls_total, validated_total,
   crm_assigned_meetings ( id, entity_name, bin, meeting_date, meeting_type, sort_order ),
   crm_conducted_meetings ( id, entity_name, bin, meeting_date, meeting_type, result, sort_order, cp_sent, cp_quantity, cp_paid ),
-  crm_confirmed_orders ( id, entity_name, bin, via_entity_name, via_bin, order_count, amounts, total_amount, sort_order )
+  crm_confirmed_orders ( id, entity_name, bin, via_entity_name, via_bin, order_count, amounts, total_amount, sort_order, mrp_kzt_applied, is_ktp_applied, commission_amount )
 `;
+
+function mapClientRow(c: {
+  name: string;
+  bin: string;
+  manager_id?: string | null;
+  cp_paid?: boolean | null;
+  cp_paid_at?: string | null;
+  is_ktp?: boolean | null;
+  manager?: { full_name?: string | null } | null;
+}): UiClient {
+  return {
+    name: c.name,
+    bin: String(c.bin).trim(),
+    managerId: c.manager_id ?? null,
+    managerName: c.manager?.full_name ?? null,
+    cpPaid: Boolean(c.cp_paid),
+    cpPaidAt: c.cp_paid_at ?? null,
+    ...(c.is_ktp !== undefined ? { isKtp: Boolean(c.is_ktp) } : {}),
+  };
+}
 
 export async function fetchClientsApi(): Promise<UiClient[]> {
   const { data, error } = await getSupabase()
@@ -172,14 +210,19 @@ export async function fetchClientsApi(): Promise<UiClient[]> {
     .select('name, bin, manager_id, cp_paid, cp_paid_at, manager:profiles!crm_clients_manager_id_fkey(full_name)')
     .order('name');
   if (error) throw error;
-  return (data || []).map((c) => ({
-    name: c.name,
-    bin: String(c.bin).trim(),
-    managerId: (c as { manager_id?: string | null }).manager_id ?? null,
-    managerName: (c as { manager?: { full_name?: string | null } | null }).manager?.full_name ?? null,
-    cpPaid: Boolean((c as { cp_paid?: boolean | null }).cp_paid),
-    cpPaidAt: (c as { cp_paid_at?: string | null }).cp_paid_at ?? null,
-  }));
+  return (data || []).map((c) => mapClientRow(c as Parameters<typeof mapClientRow>[0]));
+}
+
+/** Админ: справочник с флагом КТП. */
+export async function fetchClientsAdminApi(): Promise<UiClient[]> {
+  const { data, error } = await getSupabase()
+    .from('crm_clients')
+    .select(
+      'name, bin, manager_id, cp_paid, cp_paid_at, is_ktp, manager:profiles!crm_clients_manager_id_fkey(full_name)',
+    )
+    .order('name');
+  if (error) throw error;
+  return (data || []).map((c) => mapClientRow(c as Parameters<typeof mapClientRow>[0]));
 }
 
 export async function fetchManagerProfilesApi(): Promise<UiManagerProfile[]> {
@@ -346,6 +389,38 @@ export async function setClientManager(bin: string, managerId: string | null): P
     p_manager_id: managerId,
   });
   if (error) throw error;
+}
+
+/** Админ: флаг КТП у контрагента. */
+export async function setClientKtp(bin: string, isKtp: boolean): Promise<void> {
+  const { error } = await getSupabase().rpc('set_crm_client_ktp', {
+    p_bin: bin.trim(),
+    p_ktp: Boolean(isKtp),
+  });
+  if (error) throw error;
+}
+
+export async function fetchMrpApi(): Promise<number> {
+  const { data, error } = await getSupabase().rpc('get_crm_mrp');
+  if (error) throw error;
+  return Math.max(1, Math.floor(Number(data) || 4325));
+}
+
+export async function setMrpApi(mrp: number): Promise<void> {
+  const { error } = await getSupabase().rpc('set_crm_mrp', { p_mrp: mrp });
+  if (error) throw error;
+}
+
+export async function countOrdersWithoutCommissionApi(): Promise<number> {
+  const { data, error } = await getSupabase().rpc('count_orders_without_commission');
+  if (error) throw error;
+  return Math.max(0, Math.floor(Number(data) || 0));
+}
+
+export async function backfillOrderCommissionsApi(): Promise<number> {
+  const { data, error } = await getSupabase().rpc('backfill_order_commissions');
+  if (error) throw error;
+  return Math.max(0, Math.floor(Number(data) || 0));
 }
 
 /** Админ: общий флаг оплаты ЦП на уровне клиента. */

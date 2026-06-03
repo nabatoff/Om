@@ -12,6 +12,7 @@ type Props = {
   onRefreshReports?: () => Promise<void>;
   onToggleClientPaid?: (bin: string, paid: boolean, paidAt?: string | null) => Promise<void>;
   onAssignManager?: (bin: string, managerId: string | null) => Promise<void>;
+  onToggleKtp?: (bin: string, isKtp: boolean) => Promise<void>;
   managerSelectOptions?: Array<{ id: string; fullName: string }>;
   currentManagerId?: string | null;
   isAdmin?: boolean;
@@ -43,6 +44,7 @@ export function ClientDirectoryPanel({
   onRefreshReports,
   onToggleClientPaid,
   onAssignManager,
+  onToggleKtp,
   managerSelectOptions = [],
   currentManagerId,
   isAdmin,
@@ -135,9 +137,10 @@ export function ClientDirectoryPanel({
           <table className="w-full table-fixed text-left text-sm">
             <thead className="sticky top-0 z-10">
               <tr className="bg-gray-50 text-[10px] font-black text-gray-500 uppercase tracking-tighter border-b border-gray-100">
-                <th className="p-4 bg-gray-50 w-[34%]">Наименование</th>
-                <th className="p-4 bg-gray-50 w-[16%]">БИН</th>
-                {isAdmin ? <th className="p-4 bg-gray-50 w-[22%]">Менеджер</th> : null}
+                <th className="p-4 bg-gray-50 w-[30%]">Наименование</th>
+                <th className="p-4 bg-gray-50 w-[14%]">БИН</th>
+                {isAdmin ? <th className="p-4 bg-gray-50 w-[8%] text-center">КТП</th> : null}
+                {isAdmin ? <th className="p-4 bg-gray-50 w-[20%]">Менеджер</th> : null}
                 <th className="p-4 bg-gray-50 w-[14%] text-center">
                   {isAdmin ? (
                     <button
@@ -160,7 +163,7 @@ export function ClientDirectoryPanel({
             <tbody className="divide-y divide-gray-100">
               {displayed.length === 0 ? (
                 <tr>
-                  <td colSpan={isAdmin ? 5 : 4} className="p-10 text-center text-gray-500 text-sm">
+                  <td colSpan={isAdmin ? 6 : 4} className="p-10 text-center text-gray-500 text-sm">
                     {defaultEmpty}
                   </td>
                 </tr>
@@ -186,6 +189,18 @@ export function ClientDirectoryPanel({
                         {c.bin}
                       </span>
                     </td>
+                    {isAdmin ? (
+                      <td className="p-4 text-center" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(c.isKtp)}
+                          onChange={(e) => void onToggleKtp?.(c.bin, e.target.checked)}
+                          className="w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                          title="КТП"
+                          aria-label={`КТП ${c.name}`}
+                        />
+                      </td>
+                    ) : null}
                     {isAdmin ? (
                       <td className="p-4 text-xs text-gray-700" onClick={(e) => e.stopPropagation()}>
                         <select

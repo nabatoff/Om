@@ -22,6 +22,7 @@ import {
   UserCog,
   Send,
   Loader2,
+  Settings,
 } from 'lucide-react';
 import { adminDateFilterBounds, formatYmdLocal, reportDateMatchesAdminBounds } from './lib/periodBounds';
 import { PeriodFilterFields } from './components/PeriodFilterFields';
@@ -34,7 +35,10 @@ import {
   type UiOrder,
   type DeletedMeeting,
   fetchClientsApi,
+  fetchClientsAdminApi,
   fetchManagerProfilesApi,
+  fetchMrpApi,
+  setClientKtp,
   fetchDeletedMeetingsApi,
   fetchReportsApi,
   fetchStandaloneCpApi,
@@ -58,6 +62,8 @@ import {
 import { buildClientCrmHistory } from './lib/crmClientHistory';
 import { buildClientListRows, filterReportsForManager } from './lib/clientCpStats';
 import { ClientDirectoryPanel } from './components/ClientDirectoryPanel';
+import { AdminSettingsPanel } from './components/AdminSettingsPanel';
+import { validateOrderAmount } from './lib/commission';
 import { ClientHistoryModal } from './components/ClientHistoryModal';
 import { isSupabaseConfigured } from './lib/supabase';
 import { useAuth } from './context/AuthContext';
@@ -104,9 +110,9 @@ function getSavedCurrentView(): 'manager' | 'admin' | 'orders' | 'clients' {
   return raw === 'admin' || raw === 'orders' || raw === 'clients' ? raw : 'manager';
 }
 
-function getSavedAdminSubView(): 'dashboard' | 'kpi' | 'staff' | 'meetings' {
+function getSavedAdminSubView(): 'dashboard' | 'kpi' | 'staff' | 'meetings' | 'settings' {
   const raw = localStorage.getItem(LS_ADMIN_SUBVIEW);
-  return raw === 'kpi' || raw === 'staff' || raw === 'meetings' ? raw : 'dashboard';
+  return raw === 'kpi' || raw === 'staff' || raw === 'meetings' || raw === 'settings' ? raw : 'dashboard';
 }
 
 function getSavedManagerOrdersSection(): 'calendar' | 'meetings' | 'orders' {
@@ -175,7 +181,10 @@ const App = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [booting, setBooting] = useState(true);
-  const [adminSubView, setAdminSubView] = useState<'dashboard' | 'kpi' | 'staff' | 'meetings'>(() => getSavedAdminSubView());
+  const [adminSubView, setAdminSubView] = useState<'dashboard' | 'kpi' | 'staff' | 'meetings' | 'settings'>(() =>
+    getSavedAdminSubView(),
+  );
+  const [mrpKzt, setMrpKzt] = useState(4325);
   const [kpiFilterManager, setKpiFilterManager] = useState('Все');
   const [kpiFilterDateFrom, setKpiFilterDateFrom] = useState(() => adminDateFilterBounds('', '').from);
   const [kpiFilterDateTo, setKpiFilterDateTo] = useState(() => adminDateFilterBounds('', '').to);
@@ -215,12 +224,14 @@ const App = () => {
     }
     setLoadError(null);
     try {
-      const [c, r, basket, standalone] = await Promise.all([
-        fetchClientsApi(),
+      const [c, r, basket, standalone, mrp] = await Promise.all([
+        isAdmin ? fetchClientsAdminApi() : fetchClientsApi(),
         fetchReportsApi(),
         isAdmin ? fetchDeletedMeetingsApi() : Promise.resolve([]),
         fetchStandaloneCpApi().catch(() => [] as ClientStandaloneCp[]),
+        fetchMrpApi().catch(() => 4325),
       ]);
+      setMrpKzt(mrp);
       const managers = isAdmin
         ? await fetchManagerProfilesApi().catch(() => [] as Array<{ id: string; fullName: string }>)
         : [];
@@ -328,6 +339,16 @@ const App = () => {
     if (!supabaseOk) {
       if (!silent) alert('Supabase не настроен (.env).');
       return false;
+    }
+    if (!skipValidation) {
+      for (const o of confirmedOrders) {
+        if (!o.bin || o.totalAmount <= 0) continue;
+        const v = validateOrderAmount(o.totalAmount, mrpKzt);
+        if (!v.ok) {
+          if (!silent) alert(v.message);
+          return false;
+        }
+      }
     }
     setSaving(true);
     try {
@@ -475,6 +496,19 @@ const App = () => {
       );
     },
     [isAdmin, managerProfiles],
+  );
+
+  const toggleClientKtp = useCallback(
+    async (bin: string, isKtp: boolean) => {
+      if (!supabaseOk) return;
+      try {
+        await setClientKtp(bin, isKtp);
+        setClients((prev) => prev.map((c) => (c.bin === bin ? { ...c, isKtp } : c)));
+      } catch (e) {
+        alert(e instanceof Error ? e.message : 'Не удалось обновить КТП');
+      }
+    },
+    [supabaseOk],
   );
 
   const toggleClientPaid = useCallback(
@@ -914,6 +948,7 @@ const App = () => {
             setMeetingResultTemp={setMeetingResultTemp}
             clients={clients}
             allReports={allReports}
+            mrpKzt={mrpKzt}
             onOpenAddClient={(inputValue, callback) => {
               const isBin = /^\d{12}$/.test(inputValue.trim());
               setEditingClientBin(null);
@@ -971,6 +1006,16 @@ const App = () => {
               >
                 <UserCog size={14} />
                 Сотрудники
+              </button>
+              <button
+                type="button"
+                onClick={() => setAdminSubView('settings')}
+                className={`flex-1 min-w-[110px] sm:min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all ${
+                  adminSubView === 'settings' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
+                }`}
+              >
+                <Settings size={14} />
+                Настройки
               </button>
             </div>
             <div className="flex flex-col sm:flex-row sm:items-end gap-2 w-full sm:w-auto">
@@ -1053,6 +1098,9 @@ const App = () => {
                 onRefreshReports={refresh}
               />
             )}
+            {adminSubView === 'settings' && (
+              <AdminSettingsPanel onRefreshReports={refresh} onMrpUpdated={setMrpKzt} />
+            )}
           </div>
         )}
 
@@ -1065,6 +1113,7 @@ const App = () => {
             onToggleClientPaid={isAdmin ? toggleClientPaid : undefined}
             managerSelectOptions={managerProfiles}
             onAssignManager={isAdmin ? assignClientManager : undefined}
+            onToggleKtp={isAdmin ? toggleClientKtp : undefined}
             managerFilter={adminClientsFilterManager}
             managerOptions={adminClientManagerOptions}
             onManagerFilterChange={setAdminClientsFilterManager}
@@ -1402,6 +1451,7 @@ const ManagerDashboard = ({
   clients,
   onOpenAddClient,
   allReports,
+  mrpKzt,
 }: {
   stats: FormStats;
   setStats: SetState<FormStats>;
@@ -1424,6 +1474,7 @@ const ManagerDashboard = ({
   clients: UiClient[];
   onOpenAddClient: (input: string, cb: (c: UiClient) => void) => void;
   allReports: FullReport[];
+  mrpKzt: number;
 }) => {
   const [statDraft, setStatDraft] = useState<Record<keyof FormStats, string>>({
     processedTotal: String(stats.processedTotal),
@@ -1581,6 +1632,7 @@ const ManagerDashboard = ({
         clients={clients}
         onOpenAddClient={onOpenAddClient}
         seedKey={`orders-${reportDate}`}
+        mrpKzt={mrpKzt}
         onSaveItem={() => onSaveAction({ refreshAfterSave: false })}
       />
       <div className="flex justify-end pt-4">
@@ -1660,6 +1712,7 @@ const OrdersBlock = ({
   clients,
   onOpenAddClient,
   seedKey,
+  mrpKzt,
   onSaveItem,
 }: {
   data: UiOrder[];
@@ -1667,6 +1720,7 @@ const OrdersBlock = ({
   clients: UiClient[];
   onOpenAddClient: (input: string, cb: (c: UiClient) => void) => void;
   seedKey: string;
+  mrpKzt: number;
   onSaveItem: () => Promise<boolean>;
 }) => {
   const orderSig = (o: UiOrder) =>
@@ -1675,6 +1729,11 @@ const OrdersBlock = ({
   useEffect(() => {
     setSavedOrders(new Set(data.map(orderSig)));
   }, [seedKey]);
+
+  const orderAmountError = (total: number) => {
+    const v = validateOrderAmount(total, mrpKzt);
+    return v.ok ? null : v.message;
+  };
 
   const addOrder = () =>
     setData([...data, { entityName: '', bin: '', viaEntityName: '', viaBin: '', orderCount: 1, amounts: [0], totalAmount: 0 }]);
@@ -1711,7 +1770,10 @@ const OrdersBlock = ({
         </button>
       </div>
       <div className="space-y-6 text-left">
-        {data.map((order, oIdx) => (
+        {data.map((order, oIdx) => {
+          const amountErr = order.totalAmount > 0 ? orderAmountError(order.totalAmount) : null;
+          const canSaveOrder = Boolean(order.entityName.trim() && order.bin.trim() && !amountErr);
+          return (
           <div key={oIdx} className="bg-gray-50/50 p-6 rounded-[32px] border border-gray-100 space-y-4 relative">
             <button
               type="button"
@@ -1778,6 +1840,12 @@ const OrdersBlock = ({
                 </div>
               ))}
             </div>
+            {amountErr ? (
+              <p className="text-[10px] font-bold text-red-600 flex items-center gap-1">
+                <AlertTriangle size={12} />
+                {amountErr}
+              </p>
+            ) : null}
             <div className="flex justify-end">
               {savedOrders.has(orderSig(order)) ? (
                 <span className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-100">
@@ -1786,7 +1854,12 @@ const OrdersBlock = ({
               ) : (
                 <button
                   type="button"
+                  disabled={!canSaveOrder}
                   onClick={async () => {
+                    if (amountErr) {
+                      alert(amountErr);
+                      return;
+                    }
                     const currentOrderSig = orderSig(order);
                     const ok = await onSaveItem();
                     if (ok) {
@@ -1797,14 +1870,15 @@ const OrdersBlock = ({
                       });
                     }
                   }}
-                  className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider text-blue-700 bg-blue-50 border border-blue-100 hover:bg-blue-100"
+                  className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider text-blue-700 bg-blue-50 border border-blue-100 hover:bg-blue-100 disabled:opacity-40 disabled:pointer-events-none"
                 >
                   Сохранить
                 </button>
               )}
             </div>
           </div>
-        ))}
+        );
+        })}
       </div>
     </div>
   );
@@ -3047,6 +3121,20 @@ const OrdersHistoryDashboard = ({
     [orders],
   );
 
+  const ordersCommissionTotal = useMemo(
+    () =>
+      orders.reduce((sum, o) => {
+        if (o.commissionAmount == null || Number.isNaN(o.commissionAmount)) return sum;
+        return sum + o.commissionAmount;
+      }, 0),
+    [orders],
+  );
+
+  const ordersWithoutCommissionCount = useMemo(
+    () => orders.filter((o) => o.commissionAmount == null && o.totalAmount > 0).length,
+    [orders],
+  );
+
   const uniqueCounterpartiesCount = useMemo(() => {
     const seen = new Set<string>();
     for (const o of orders) {
@@ -3140,6 +3228,17 @@ const OrdersHistoryDashboard = ({
           <p className="text-[10px] font-black text-gray-400 uppercase">Итого сумма по заказам</p>
           <p className="text-lg font-black text-emerald-700 whitespace-nowrap">{new Intl.NumberFormat('ru-RU').format(ordersTotalAmount)} ₸</p>
         </div>
+        {isAdmin ? (
+          <div>
+            <p className="text-[10px] font-black text-gray-400 uppercase">Итого комиссия</p>
+            <p className="text-lg font-black text-violet-700 whitespace-nowrap">
+              {new Intl.NumberFormat('ru-RU').format(ordersCommissionTotal)} ₸
+            </p>
+            {ordersWithoutCommissionCount > 0 ? (
+              <p className="text-[9px] text-gray-400 font-bold mt-0.5">без комиссии: {ordersWithoutCommissionCount}</p>
+            ) : null}
+          </div>
+        ) : null}
       </div>
       <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest">Подтверждённые заказы</h2>
       <div className="bg-white border border-gray-200 rounded-3xl shadow-sm overflow-x-auto text-left">
@@ -3183,8 +3282,25 @@ const OrdersHistoryDashboard = ({
                     <List size={14} /> {order.orderCount}
                   </button>
                 </td>
-                <td className="py-5 px-8 text-right font-black text-emerald-600">
-                  {new Intl.NumberFormat('ru-RU').format(order.totalAmount)} ₸
+                <td className="py-5 px-8 text-right">
+                  <div className="font-black text-emerald-600">{new Intl.NumberFormat('ru-RU').format(order.totalAmount)} ₸</div>
+                  {isAdmin ? (
+                    <div className="text-[10px] text-gray-500 font-bold mt-1">
+                      {order.commissionAmount != null ? (
+                        <>
+                          Комиссия: {new Intl.NumberFormat('ru-RU').format(order.commissionAmount)} ₸
+                          {order.isKtpApplied ? (
+                            <span className="ml-1 text-violet-600">· КТП</span>
+                          ) : null}
+                          {order.mrpKztApplied != null ? (
+                            <span className="ml-1 text-gray-400">· MRP {order.mrpKztApplied}</span>
+                          ) : null}
+                        </>
+                      ) : (
+                        'Комиссия: —'
+                      )}
+                    </div>
+                  ) : null}
                 </td>
               </tr>
             ))}

@@ -19,6 +19,7 @@ export type ClientListRow = {
   bin: string;
   managerId: string | null;
   managerName: string | null;
+  isKtp?: boolean;
   cpPaid: boolean;
   cpPaidAt: string | null;
   managerNames: string[];
@@ -124,7 +125,15 @@ function standaloneForBin(
 
 export function buildClientListRows(
   reports: FullReport[],
-  catalog: { name: string; bin: string; managerId?: string | null; managerName?: string | null; cpPaid?: boolean; cpPaidAt?: string | null }[],
+  catalog: {
+    name: string;
+    bin: string;
+    managerId?: string | null;
+    managerName?: string | null;
+    cpPaid?: boolean;
+    cpPaidAt?: string | null;
+    isKtp?: boolean;
+  }[],
   standaloneRows: ClientStandaloneCp[],
   options?: {
     managerId?: string | null;
@@ -174,6 +183,7 @@ export function buildClientListRows(
       bin,
       managerId: cat?.managerId ?? null,
       managerName: cat?.managerName ?? null,
+      ...(cat?.isKtp !== undefined ? { isKtp: Boolean(cat.isKtp) } : {}),
       cpPaid: Boolean(cat?.cpPaid),
       cpPaidAt: cat?.cpPaidAt ?? null,
       managerNames: Array.from(managers),
