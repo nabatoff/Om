@@ -68,24 +68,57 @@ export function calculateOrderLinesCommission(
   return { lines, total: lines.reduce((s, n) => s + n, 0) };
 }
 
-/** Комиссия для отображения: по строкам amounts[] при наличии снимка MRP. */
-export function resolveOrderCommissionDisplay(order: {
+export type OrderCommissionFields = {
   amounts: number[];
   totalAmount: number;
   isKtpApplied?: boolean | null;
   mrpKztApplied?: number | null;
   commissionAmount?: number | null;
-}): { lines: number[]; total: number | null } {
+};
+
+/** Итоговая комиссия по записи: сначала снимок из БД, иначе расчёт по строкам amounts[]. */
+export function resolveOrderCommissionTotal(order: OrderCommissionFields): number | null {
+  const stored = order.commissionAmount;
+  if (stored != null && !Number.isNaN(Number(stored))) return Number(stored);
+
   const mrp = order.mrpKztApplied;
-  if (mrp == null || Number.isNaN(Number(mrp))) {
-    if (order.commissionAmount == null) return { lines: [], total: null };
-    return { lines: [], total: order.commissionAmount };
-  }
-  const isKtp = Boolean(order.isKtpApplied);
+  if (mrp == null || Number.isNaN(Number(mrp))) return null;
+  if (orderLineAmounts(order.amounts, order.totalAmount).length === 0) return null;
+
+  return calculateOrderLinesCommission(
+    order.amounts,
+    order.totalAmount,
+    Boolean(order.isKtpApplied),
+    Number(mrp),
+  ).total;
+}
+
+/** Сколько отдельных заказов (№1, №2…) без комиссии в одной записи таблицы. */
+export function countOrderLinesWithoutCommission(order: OrderCommissionFields): number {
+  if (resolveOrderCommissionTotal(order) != null) return 0;
+  return orderLineAmounts(order.amounts, order.totalAmount).length;
+}
+
+/** Комиссия для модалки: построчно при снимке MRP + итог. */
+export function resolveOrderCommissionDisplay(order: OrderCommissionFields): {
+  lines: number[];
+  total: number | null;
+} {
+  const total = resolveOrderCommissionTotal(order);
+  const mrp = order.mrpKztApplied;
   const items = orderLineAmounts(order.amounts, order.totalAmount);
-  const { lines, total } = calculateOrderLinesCommission(order.amounts, order.totalAmount, isKtp, mrp);
-  if (items.length === 0) return { lines: [], total: order.commissionAmount ?? null };
-  return { lines, total };
+
+  if (mrp != null && !Number.isNaN(Number(mrp)) && items.length > 0) {
+    const { lines } = calculateOrderLinesCommission(
+      order.amounts,
+      order.totalAmount,
+      Boolean(order.isKtpApplied),
+      Number(mrp),
+    );
+    return { lines, total };
+  }
+
+  return { lines: [], total };
 }
 
 export function validateOrderLinesAmount(

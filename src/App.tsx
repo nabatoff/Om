@@ -64,9 +64,11 @@ import { buildClientListRows, filterReportsForManager } from './lib/clientCpStat
 import { ClientDirectoryPanel } from './components/ClientDirectoryPanel';
 import { AdminSettingsPanel } from './components/AdminSettingsPanel';
 import {
+  countOrderLinesWithoutCommission,
   formatMoneyKzt,
   orderLineAmounts,
   resolveOrderCommissionDisplay,
+  resolveOrderCommissionTotal,
   validateOrderLinesAmount,
 } from './lib/commission';
 import { ClientHistoryModal } from './components/ClientHistoryModal';
@@ -3151,7 +3153,7 @@ const OrdersHistoryDashboard = ({
   const ordersCommissionTotal = useMemo(
     () =>
       orders.reduce((sum, o) => {
-        const { total } = resolveOrderCommissionDisplay(o);
+        const total = resolveOrderCommissionTotal(o);
         if (total == null) return sum;
         return sum + total;
       }, 0),
@@ -3159,12 +3161,7 @@ const OrdersHistoryDashboard = ({
   );
 
   const ordersWithoutCommissionCount = useMemo(
-    () =>
-      orders.filter((o) => {
-        if (o.totalAmount <= 0) return false;
-        const { total } = resolveOrderCommissionDisplay(o);
-        return total == null;
-      }).length,
+    () => orders.reduce((sum, o) => sum + countOrderLinesWithoutCommission(o), 0),
     [orders],
   );
 
@@ -3268,7 +3265,9 @@ const OrdersHistoryDashboard = ({
               {new Intl.NumberFormat('ru-RU').format(ordersCommissionTotal)} ₸
             </p>
             {ordersWithoutCommissionCount > 0 ? (
-              <p className="text-[9px] text-gray-400 font-bold mt-0.5">без комиссии: {ordersWithoutCommissionCount}</p>
+              <p className="text-[9px] text-gray-400 font-bold mt-0.5">
+                без комиссии (№1, №2…): {ordersWithoutCommissionCount}
+              </p>
             ) : null}
           </div>
         ) : null}
