@@ -63,7 +63,12 @@ import { buildClientCrmHistory } from './lib/crmClientHistory';
 import { buildClientListRows, filterReportsForManager } from './lib/clientCpStats';
 import { ClientDirectoryPanel } from './components/ClientDirectoryPanel';
 import { AdminSettingsPanel } from './components/AdminSettingsPanel';
-import { validateOrderAmount } from './lib/commission';
+import {
+  formatMoneyKzt,
+  orderLineAmounts,
+  resolveOrderCommissionDisplay,
+  validateOrderLinesAmount,
+} from './lib/commission';
 import { ClientHistoryModal } from './components/ClientHistoryModal';
 import { isSupabaseConfigured } from './lib/supabase';
 import { useAuth } from './context/AuthContext';
@@ -160,7 +165,11 @@ const App = () => {
     entity: string;
     bin: string;
     amounts: number[];
-  }>({ isOpen: false, entity: '', bin: '', amounts: [] });
+    totalAmount: number;
+    mrpKztApplied?: number | null;
+    isKtpApplied?: boolean | null;
+    commissionAmount?: number | null;
+  }>({ isOpen: false, entity: '', bin: '', amounts: [], totalAmount: 0 });
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
   const [newClientData, setNewClientData] = useState({ name: '', bin: '', managerId: '' });
   const [onClientCreatedCallback, setOnClientCreatedCallback] = useState<((c: UiClient) => void) | null>(null);
@@ -342,8 +351,8 @@ const App = () => {
     }
     if (!skipValidation) {
       for (const o of confirmedOrders) {
-        if (!o.bin || o.totalAmount <= 0) continue;
-        const v = validateOrderAmount(o.totalAmount, mrpKzt);
+        if (!o.bin) continue;
+        const v = validateOrderLinesAmount(o.amounts, o.totalAmount, mrpKzt);
         if (!v.ok) {
           if (!silent) alert(v.message);
           return false;
@@ -1203,7 +1212,18 @@ const App = () => {
                 setFilterCounterparty={setOrdersFilterCounterparty}
                 counterpartyOptions={ordersCounterpartyOptions}
                 managerOptions={managerFilterOptions}
-                openOrderDetails={(entity, bin, amounts) => setOrderDetailModal({ isOpen: true, entity, bin, amounts })}
+                openOrderDetails={(order) =>
+                  setOrderDetailModal({
+                    isOpen: true,
+                    entity: order.entityName,
+                    bin: order.bin,
+                    amounts: order.amounts,
+                    totalAmount: order.totalAmount,
+                    mrpKztApplied: order.mrpKztApplied,
+                    isKtpApplied: order.isKtpApplied,
+                    commissionAmount: order.commissionAmount,
+                  })
+                }
               />
             )}
           </div>
@@ -1398,7 +1418,11 @@ const App = () => {
       )}
 
       {orderDetailModal.isOpen && (
-        <OrderItemsModal modal={orderDetailModal} onClose={() => setOrderDetailModal({ ...orderDetailModal, isOpen: false })} />
+        <OrderItemsModal
+          modal={orderDetailModal}
+          isAdmin={isAdmin}
+          onClose={() => setOrderDetailModal({ ...orderDetailModal, isOpen: false })}
+        />
       )}
 
       {clientHistoryFor && (() => {
@@ -1730,8 +1754,8 @@ const OrdersBlock = ({
     setSavedOrders(new Set(data.map(orderSig)));
   }, [seedKey]);
 
-  const orderAmountError = (total: number) => {
-    const v = validateOrderAmount(total, mrpKzt);
+  const orderAmountError = (amounts: number[], total: number) => {
+    const v = validateOrderLinesAmount(amounts, total, mrpKzt);
     return v.ok ? null : v.message;
   };
 
@@ -1771,7 +1795,10 @@ const OrdersBlock = ({
       </div>
       <div className="space-y-6 text-left">
         {data.map((order, oIdx) => {
-          const amountErr = order.totalAmount > 0 ? orderAmountError(order.totalAmount) : null;
+          const amountErr =
+            order.totalAmount > 0 || order.amounts.some((a) => a > 0)
+              ? orderAmountError(order.amounts, order.totalAmount)
+              : null;
           const canSaveOrder = Boolean(order.entityName.trim() && order.bin.trim() && !amountErr);
           return (
           <div key={oIdx} className="bg-gray-50/50 p-6 rounded-[32px] border border-gray-100 space-y-4 relative">
@@ -3114,7 +3141,7 @@ const OrdersHistoryDashboard = ({
   setFilterCounterparty: SetState<string>;
   counterpartyOptions: string[];
   managerOptions: string[];
-  openOrderDetails: (entity: string, bin: string, amounts: number[]) => void;
+  openOrderDetails: (order: UiOrder & { manager: string; date: string }) => void;
 }) => {
   const ordersTotalAmount = useMemo(
     () => orders.reduce((sum, o) => sum + o.totalAmount, 0),
@@ -3124,14 +3151,20 @@ const OrdersHistoryDashboard = ({
   const ordersCommissionTotal = useMemo(
     () =>
       orders.reduce((sum, o) => {
-        if (o.commissionAmount == null || Number.isNaN(o.commissionAmount)) return sum;
-        return sum + o.commissionAmount;
+        const { total } = resolveOrderCommissionDisplay(o);
+        if (total == null) return sum;
+        return sum + total;
       }, 0),
     [orders],
   );
 
   const ordersWithoutCommissionCount = useMemo(
-    () => orders.filter((o) => o.commissionAmount == null && o.totalAmount > 0).length,
+    () =>
+      orders.filter((o) => {
+        if (o.totalAmount <= 0) return false;
+        const { total } = resolveOrderCommissionDisplay(o);
+        return total == null;
+      }).length,
     [orders],
   );
 
@@ -3276,7 +3309,7 @@ const OrdersHistoryDashboard = ({
                 <td className="py-5 px-4 text-center">
                   <button
                     type="button"
-                    onClick={() => openOrderDetails(order.entityName, order.bin, order.amounts)}
+                    onClick={() => openOrderDetails(order)}
                     className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-xl font-black text-xs border border-blue-100"
                   >
                     <List size={14} /> {order.orderCount}
@@ -3284,23 +3317,26 @@ const OrdersHistoryDashboard = ({
                 </td>
                 <td className="py-5 px-8 text-right">
                   <div className="font-black text-emerald-600">{new Intl.NumberFormat('ru-RU').format(order.totalAmount)} ₸</div>
-                  {isAdmin ? (
-                    <div className="text-[10px] text-gray-500 font-bold mt-1">
-                      {order.commissionAmount != null ? (
-                        <>
-                          Комиссия: {new Intl.NumberFormat('ru-RU').format(order.commissionAmount)} ₸
-                          {order.isKtpApplied ? (
-                            <span className="ml-1 text-violet-600">· КТП</span>
-                          ) : null}
-                          {order.mrpKztApplied != null ? (
-                            <span className="ml-1 text-gray-400">· MRP {order.mrpKztApplied}</span>
-                          ) : null}
-                        </>
-                      ) : (
-                        'Комиссия: —'
-                      )}
-                    </div>
-                  ) : null}
+                  {isAdmin ? (() => {
+                    const { total } = resolveOrderCommissionDisplay(order);
+                    return (
+                      <div className="text-[10px] text-gray-500 font-bold mt-1">
+                        {total != null ? (
+                          <>
+                            Комиссия (сумма по заказам): {formatMoneyKzt(total)} ₸
+                            {order.isKtpApplied ? (
+                              <span className="ml-1 text-violet-600">· КТП</span>
+                            ) : null}
+                            {order.mrpKztApplied != null ? (
+                              <span className="ml-1 text-gray-400">· MRP {order.mrpKztApplied}</span>
+                            ) : null}
+                          </>
+                        ) : (
+                          'Комиссия: —'
+                        )}
+                      </div>
+                    );
+                  })() : null}
                 </td>
               </tr>
             ))}
@@ -3520,40 +3556,73 @@ const DetailsListModal = ({
 
 const OrderItemsModal = ({
   modal,
+  isAdmin,
   onClose,
 }: {
-  modal: { isOpen: boolean; entity: string; bin: string; amounts: number[] };
+  modal: {
+    isOpen: boolean;
+    entity: string;
+    bin: string;
+    amounts: number[];
+    totalAmount: number;
+    mrpKztApplied?: number | null;
+    isKtpApplied?: boolean | null;
+    commissionAmount?: number | null;
+  };
+  isAdmin: boolean;
   onClose: () => void;
-}) => (
-  <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[400] flex items-center justify-center p-4" onClick={onClose}>
-    <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
-      <div className="p-8 border-b flex justify-between items-center bg-gray-50/50 text-left">
-        <div>
-          <h3 className="font-black text-gray-900 text-lg uppercase">{modal.entity}</h3>
-          <p className="text-[10px] text-gray-400 font-bold uppercase mt-1">БИН: {modal.bin}</p>
-        </div>
-        <button type="button" onClick={onClose} className="p-3 hover:bg-gray-100 rounded-full text-gray-400">
-          <X size={24} />
-        </button>
-      </div>
-      <div className="p-8 space-y-4 max-h-[50vh] overflow-y-auto text-left">
-        {modal.amounts.map((amt, idx) => (
-          <div key={idx} className="flex justify-between p-4 bg-gray-50 rounded-2xl border border-gray-100">
-            <span className="text-[10px] font-black text-gray-400 uppercase">Заказ №{idx + 1}</span>
-            <span className="text-lg font-black text-gray-800">{new Intl.NumberFormat('ru-RU').format(amt)} ₸</span>
+}) => {
+  const lineAmounts = orderLineAmounts(modal.amounts, modal.totalAmount);
+  const commission = resolveOrderCommissionDisplay(modal);
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[400] flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="p-8 border-b flex justify-between items-center bg-gray-50/50 text-left">
+          <div>
+            <h3 className="font-black text-gray-900 text-lg uppercase">{modal.entity}</h3>
+            <p className="text-[10px] text-gray-400 font-bold uppercase mt-1">БИН: {modal.bin}</p>
           </div>
-        ))}
-      </div>
-      <div className="p-8 bg-gray-50 flex justify-end items-center gap-4 text-right">
-        <span className="text-xl font-black text-emerald-600">
-          {new Intl.NumberFormat('ru-RU').format(modal.amounts.reduce((a, b) => a + b, 0))} ₸
-        </span>
-        <button type="button" onClick={onClose} className="ml-4 bg-gray-900 text-white px-8 py-3 rounded-2xl text-xs font-black uppercase">
-          Ок
-        </button>
+          <button type="button" onClick={onClose} className="p-3 hover:bg-gray-100 rounded-full text-gray-400">
+            <X size={24} />
+          </button>
+        </div>
+        <div className="p-8 space-y-4 max-h-[50vh] overflow-y-auto text-left">
+          {lineAmounts.map((amt, idx) => (
+            <div key={idx} className="flex justify-between items-start gap-4 p-4 bg-gray-50 rounded-2xl border border-gray-100">
+              <span className="text-[10px] font-black text-gray-400 uppercase pt-1">Заказ №{idx + 1}</span>
+              <div className="text-right">
+                <span className="text-lg font-black text-gray-800 block">{formatMoneyKzt(amt)} ₸</span>
+                {isAdmin ? (
+                  <span className="text-[10px] font-bold text-violet-700 mt-1 block">
+                    {commission.lines[idx] != null
+                      ? `Комиссия: ${formatMoneyKzt(commission.lines[idx])} ₸`
+                      : 'Комиссия: —'}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="p-8 bg-gray-50 flex flex-col sm:flex-row justify-between sm:items-center gap-3 text-right">
+          <div className="text-left sm:text-right">
+            <p className="text-[10px] font-black text-gray-400 uppercase">Итого сумма</p>
+            <span className="text-xl font-black text-emerald-600">
+              {formatMoneyKzt(lineAmounts.reduce((a, b) => a + b, 0))} ₸
+            </span>
+            {isAdmin && commission.total != null ? (
+              <p className="text-[10px] font-bold text-violet-700 mt-1">
+                Итого комиссия: {formatMoneyKzt(commission.total)} ₸
+              </p>
+            ) : null}
+          </div>
+          <button type="button" onClick={onClose} className="bg-gray-900 text-white px-8 py-3 rounded-2xl text-xs font-black uppercase shrink-0">
+            Ок
+          </button>
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 export default App;

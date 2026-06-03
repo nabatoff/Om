@@ -417,8 +417,10 @@ export async function countOrdersWithoutCommissionApi(): Promise<number> {
   return Math.max(0, Math.floor(Number(data) || 0));
 }
 
-export async function backfillOrderCommissionsApi(): Promise<number> {
-  const { data, error } = await getSupabase().rpc('backfill_order_commissions');
+export async function backfillOrderCommissionsApi(overwrite = false): Promise<number> {
+  const { data, error } = await getSupabase().rpc('backfill_order_commissions', {
+    p_overwrite: Boolean(overwrite),
+  });
   if (error) throw error;
   return Math.max(0, Math.floor(Number(data) || 0));
 }

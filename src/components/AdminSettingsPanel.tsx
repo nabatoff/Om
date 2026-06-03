@@ -63,16 +63,20 @@ export function AdminSettingsPanel({ onRefreshReports, onMrpUpdated }: Props) {
 
   const runBackfill = async () => {
     const pending = pendingWithout ?? 0;
+    const overwrite = window.confirm(
+      'Пересчитать также заказы, у которых комиссия уже заполнена?\n\n' +
+        'ОК — пересчитать все (по каждому заказу №1, №2…).\n' +
+        'Отмена — только пустые комиссии.',
+    );
     const ok = window.confirm(
-      `Заполнить комиссии по архиву?\n\n` +
-        `Будет обработано до ${pending} заказов без комиссии.\n` +
-        `Используются текущие КТП клиентов и текущий МРП (${thresholds.mrp} ₸).\n` +
-        `Уже заполненные комиссии не перезаписываются.`,
+      `${overwrite ? 'Пересчитать все комиссии' : 'Заполнить комиссии по архиву'}?\n\n` +
+        `Ориентир: ${pending} заказов без комиссии.\n` +
+        `КТП и МРП (${thresholds.mrp} ₸) — текущие. Комиссия считается на каждую сумму в списке заказов.`,
     );
     if (!ok) return;
     setBackfilling(true);
     try {
-      const updated = await backfillOrderCommissionsApi();
+      const updated = await backfillOrderCommissionsApi(overwrite);
       const left = await countOrdersWithoutCommissionApi();
       setPendingWithout(left);
       await onRefreshReports?.();
