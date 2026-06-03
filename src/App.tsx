@@ -39,6 +39,7 @@ import {
   fetchManagerProfilesApi,
   fetchMrpApi,
   setClientKtp,
+  recalcOrderCommissionsForClientBinApi,
   fetchDeletedMeetingsApi,
   fetchReportsApi,
   fetchStandaloneCpApi,
@@ -516,12 +517,14 @@ const App = () => {
       if (!supabaseOk) return;
       try {
         await setClientKtp(bin, isKtp);
+        await recalcOrderCommissionsForClientBinApi(bin);
         setClients((prev) => prev.map((c) => (c.bin === bin ? { ...c, isKtp } : c)));
+        await refresh();
       } catch (e) {
         alert(e instanceof Error ? e.message : 'Не удалось обновить КТП');
       }
     },
-    [supabaseOk],
+    [supabaseOk, refresh],
   );
 
   const toggleClientPaid = useCallback(

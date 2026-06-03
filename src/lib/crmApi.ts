@@ -400,6 +400,15 @@ export async function setClientKtp(bin: string, isKtp: boolean): Promise<void> {
   if (error) throw error;
 }
 
+/** Пересчитать комиссии по заказам, где КТП берётся с этого БИН (контрагент или «заказ через»). */
+export async function recalcOrderCommissionsForClientBinApi(bin: string): Promise<number> {
+  const { data, error } = await getSupabase().rpc('recalc_order_commissions_for_client_bin', {
+    p_bin: bin.trim(),
+  });
+  if (error) throw error;
+  return Math.max(0, Math.floor(Number(data) || 0));
+}
+
 export async function fetchMrpApi(): Promise<number> {
   const { data, error } = await getSupabase().rpc('get_crm_mrp');
   if (error) throw error;
