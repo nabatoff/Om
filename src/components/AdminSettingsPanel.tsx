@@ -70,17 +70,17 @@ export function AdminSettingsPanel({ onRefreshReports, onMrpUpdated }: Props) {
     );
     const ok = window.confirm(
       `${overwrite ? 'Пересчитать все комиссии' : 'Заполнить комиссии по архиву'}?\n\n` +
-        `Ориентир: ${pending} заказов без комиссии.\n` +
-        `КТП и МРП (${thresholds.mrp} ₸) — текущие. Комиссия считается на каждую сумму в списке заказов.`,
+        `Ориентир: ${pending} отдельных заказов (№1, №2…) без комиссии.\n` +
+        `КТП и МРП (${thresholds.mrp} ₸) — текущие. Backfill заполняет комиссию по каждой сумме в записи.`,
     );
     if (!ok) return;
     setBackfilling(true);
     try {
       const updated = await backfillOrderCommissionsApi(overwrite);
+      await onRefreshReports?.();
       const left = await countOrdersWithoutCommissionApi();
       setPendingWithout(left);
-      await onRefreshReports?.();
-      alert(`Обновлено заказов: ${updated}`);
+      alert(`Обновлено записей в архиве: ${updated}. Осталось заказов без комиссии: ${left}`);
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Backfill не удался');
     } finally {
@@ -145,8 +145,11 @@ export function AdminSettingsPanel({ onRefreshReports, onMrpUpdated }: Props) {
       <section className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm space-y-4 max-w-xl">
         <h3 className="text-xs font-black text-gray-500 uppercase tracking-widest">Архив заказов</h3>
         <p className="text-sm text-gray-700">
-          Заказов без комиссии:{' '}
+          Заказов без комиссии (№1, №2… внутри записи):{' '}
           <span className="font-black">{pendingWithout ?? '—'}</span>
+        </p>
+        <p className="text-[10px] text-gray-400">
+          Считаются отдельные суммы в списке заказов, а не строки таблицы «Заказы».
         </p>
         <button
           type="button"

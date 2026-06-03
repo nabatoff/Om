@@ -3315,28 +3315,8 @@ const OrdersHistoryDashboard = ({
                     <List size={14} /> {order.orderCount}
                   </button>
                 </td>
-                <td className="py-5 px-8 text-right">
-                  <div className="font-black text-emerald-600">{new Intl.NumberFormat('ru-RU').format(order.totalAmount)} ₸</div>
-                  {isAdmin ? (() => {
-                    const { total } = resolveOrderCommissionDisplay(order);
-                    return (
-                      <div className="text-[10px] text-gray-500 font-bold mt-1">
-                        {total != null ? (
-                          <>
-                            Комиссия (сумма по заказам): {formatMoneyKzt(total)} ₸
-                            {order.isKtpApplied ? (
-                              <span className="ml-1 text-violet-600">· КТП</span>
-                            ) : null}
-                            {order.mrpKztApplied != null ? (
-                              <span className="ml-1 text-gray-400">· MRP {order.mrpKztApplied}</span>
-                            ) : null}
-                          </>
-                        ) : (
-                          'Комиссия: —'
-                        )}
-                      </div>
-                    );
-                  })() : null}
+                <td className="py-5 px-8 text-right font-black text-emerald-600 whitespace-nowrap">
+                  {new Intl.NumberFormat('ru-RU').format(order.totalAmount)} ₸
                 </td>
               </tr>
             ))}
