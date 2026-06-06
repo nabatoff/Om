@@ -69,10 +69,13 @@ import {
   countOrderLinesWithoutCommission,
   formatMoneyKzt,
   orderLineAmounts,
+  resolveMergedOrdersCommissionDisplay,
   resolveOrderCommissionDisplay,
   resolveOrderCommissionTotal,
   validateOrderLinesAmount,
+  type OrderCommissionFields,
 } from './lib/commission';
+import { groupOrdersByCounterparty, type GroupedCounterpartyOrder } from './lib/ordersGrouping';
 import { ClientHistoryModal } from './components/ClientHistoryModal';
 import { isSupabaseConfigured } from './lib/supabase';
 import { useAuth } from './context/AuthContext';
@@ -174,6 +177,7 @@ const App = () => {
     mrpKztApplied?: number | null;
     isKtpApplied?: boolean | null;
     commissionAmount?: number | null;
+    sourceOrders?: OrderCommissionFields[];
   }>({ isOpen: false, entity: '', bin: '', viaBin: '', amounts: [], totalAmount: 0 });
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
   const [newClientData, setNewClientData] = useState({ name: '', bin: '', managerId: '' });
@@ -189,6 +193,7 @@ const App = () => {
   const [ordersFilterDateFrom, setOrdersFilterDateFrom] = useState(() => adminDateFilterBounds('', '').from);
   const [ordersFilterDateTo, setOrdersFilterDateTo] = useState(() => adminDateFilterBounds('', '').to);
   const [ordersFilterCounterparty, setOrdersFilterCounterparty] = useState('');
+  const [ordersViewMode, setOrdersViewMode] = useState<'records' | 'byCounterparty'>('records');
   const [managerOrdersSection, setManagerOrdersSection] = useState<'calendar' | 'meetings' | 'orders'>(() =>
     getSavedManagerOrdersSection(),
   );
@@ -796,6 +801,11 @@ const App = () => {
     });
   }, [allOrdersByDateAndManager, ordersFilterCounterparty]);
 
+  const groupedFilteredOrders = useMemo(
+    () => groupOrdersByCounterparty(allFilteredOrders),
+    [allFilteredOrders],
+  );
+
   const clientKtpByBin = useMemo(() => buildClientKtpMap(clients), [clients]);
 
   const reportsForClientScope = useMemo(() => {
@@ -1210,6 +1220,9 @@ const App = () => {
               <OrdersHistoryDashboard
                 isAdmin={isAdmin}
                 orders={allFilteredOrders}
+                groupedOrders={groupedFilteredOrders}
+                viewMode={ordersViewMode}
+                setViewMode={setOrdersViewMode}
                 clientKtpByBin={clientKtpByBin}
                 totalOrdersCount={allFilteredOrders.reduce((sum, order) => sum + order.orderCount, 0)}
                 filterManager={ordersFilterManager}
@@ -1233,6 +1246,17 @@ const App = () => {
                     mrpKztApplied: order.mrpKztApplied,
                     isKtpApplied: order.isKtpApplied,
                     commissionAmount: order.commissionAmount,
+                  })
+                }
+                openGroupedOrderDetails={(group) =>
+                  setOrderDetailModal({
+                    isOpen: true,
+                    entity: group.entityName,
+                    bin: group.bin,
+                    viaBin: '',
+                    amounts: group.amounts,
+                    totalAmount: group.totalAmount,
+                    sourceOrders: group.sourceOrders,
                   })
                 }
               />
@@ -3127,6 +3151,9 @@ const KpiDashboard = ({
 const OrdersHistoryDashboard = ({
   isAdmin,
   orders,
+  groupedOrders,
+  viewMode,
+  setViewMode,
   clientKtpByBin,
   totalOrdersCount,
   filterManager,
@@ -3140,9 +3167,13 @@ const OrdersHistoryDashboard = ({
   counterpartyOptions,
   managerOptions,
   openOrderDetails,
+  openGroupedOrderDetails,
 }: {
   isAdmin: boolean;
   orders: (UiOrder & { manager: string; date: string })[];
+  groupedOrders: GroupedCounterpartyOrder[];
+  viewMode: 'records' | 'byCounterparty';
+  setViewMode: SetState<'records' | 'byCounterparty'>;
   clientKtpByBin: Map<string, boolean>;
   totalOrdersCount: number;
   filterManager: string;
@@ -3156,7 +3187,11 @@ const OrdersHistoryDashboard = ({
   counterpartyOptions: string[];
   managerOptions: string[];
   openOrderDetails: (order: UiOrder & { manager: string; date: string }) => void;
+  openGroupedOrderDetails: (group: GroupedCounterpartyOrder) => void;
 }) => {
+  const isGroupedView = isAdmin && viewMode === 'byCounterparty';
+  const displayRowCount = isGroupedView ? groupedOrders.length : orders.length;
+
   const ordersTotalAmount = useMemo(
     () => orders.reduce((sum, o) => sum + o.totalAmount, 0),
     [orders],
@@ -3178,12 +3213,13 @@ const OrdersHistoryDashboard = ({
   );
 
   const uniqueCounterpartiesCount = useMemo(() => {
+    if (isGroupedView) return groupedOrders.length;
     const seen = new Set<string>();
     for (const o of orders) {
       seen.add(`${o.entityName.trim().toLowerCase()}|${o.bin.trim()}`);
     }
     return seen.size;
-  }, [orders]);
+  }, [orders, groupedOrders, isGroupedView]);
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-500 text-left">
@@ -3256,7 +3292,7 @@ const OrdersHistoryDashboard = ({
       <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm flex flex-wrap gap-6 items-center">
         <div>
           <p className="text-[10px] font-black text-gray-400 uppercase">Количество записей</p>
-          <p className="text-lg font-black text-gray-900">{orders.length}</p>
+          <p className="text-lg font-black text-gray-900">{displayRowCount}</p>
         </div>
         <div>
           <p className="text-[10px] font-black text-gray-400 uppercase">Количество заказов</p>
@@ -3284,7 +3320,31 @@ const OrdersHistoryDashboard = ({
           </div>
         ) : null}
       </div>
-      <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest">Подтверждённые заказы</h2>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest">Подтверждённые заказы</h2>
+        {isAdmin ? (
+          <div className="inline-flex rounded-xl border border-gray-200 bg-gray-50 p-1">
+            <button
+              type="button"
+              onClick={() => setViewMode('records')}
+              className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors ${
+                viewMode === 'records' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              По записям
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('byCounterparty')}
+              className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors ${
+                viewMode === 'byCounterparty' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              По контрагентам
+            </button>
+          </div>
+        ) : null}
+      </div>
       <div className="bg-white border border-gray-200 rounded-3xl shadow-sm overflow-x-auto text-left">
         <table className="w-full text-left border-collapse min-w-[1120px]">
           <thead>
@@ -3299,38 +3359,64 @@ const OrdersHistoryDashboard = ({
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
-            {orders.map((order, idx) => (
-              <tr key={idx} className="hover:bg-gray-50/50 text-sm">
-                <td className="py-5 px-8 text-gray-500 whitespace-nowrap">{formatDisplayDate(order.date)}</td>
-                {isAdmin && <td className="py-5 px-4 font-bold text-gray-800 whitespace-nowrap">{order.manager}</td>}
-                <td className="py-5 px-4 font-mono text-gray-400 text-[11px]">{order.bin}</td>
-                <td className="py-5 px-4 font-black text-gray-800">{order.entityName}</td>
-                <td className="py-5 px-4 text-gray-800">
-                  {order.viaEntityName.trim() ? (
-                    <>
-                      <span className="font-bold">{order.viaEntityName}</span>
-                      {order.viaBin.trim() ? (
-                        <div className="text-[10px] font-mono text-gray-400 mt-0.5">{order.viaBin}</div>
-                      ) : null}
-                    </>
-                  ) : (
-                    <span className="text-gray-400">—</span>
-                  )}
-                </td>
-                <td className="py-5 px-4 text-center">
-                  <button
-                    type="button"
-                    onClick={() => openOrderDetails(order)}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-xl font-black text-xs border border-blue-100"
-                  >
-                    <List size={14} /> {order.orderCount}
-                  </button>
-                </td>
-                <td className="py-5 px-8 text-right font-black text-emerald-600 whitespace-nowrap">
-                  {new Intl.NumberFormat('ru-RU').format(order.totalAmount)} ₸
-                </td>
-              </tr>
-            ))}
+            {isGroupedView
+              ? groupedOrders.map((group, idx) => (
+                  <tr key={idx} className="hover:bg-gray-50/50 text-sm">
+                    <td className="py-5 px-8 text-gray-500 whitespace-nowrap">{formatDisplayDate(group.date)}</td>
+                    {isAdmin && (
+                      <td className="py-5 px-4 font-bold text-gray-800 whitespace-nowrap">{group.manager}</td>
+                    )}
+                    <td className="py-5 px-4 font-mono text-gray-400 text-[11px]">{group.bin}</td>
+                    <td className="py-5 px-4 font-black text-gray-800">{group.entityName}</td>
+                    <td className="py-5 px-4 text-gray-400">—</td>
+                    <td className="py-5 px-4 text-center">
+                      <button
+                        type="button"
+                        onClick={() => openGroupedOrderDetails(group)}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-xl font-black text-xs border border-blue-100"
+                      >
+                        <List size={14} /> {group.orderCount}
+                      </button>
+                    </td>
+                    <td className="py-5 px-8 text-right font-black text-emerald-600 whitespace-nowrap">
+                      {new Intl.NumberFormat('ru-RU').format(group.totalAmount)} ₸
+                    </td>
+                  </tr>
+                ))
+              : orders.map((order, idx) => (
+                  <tr key={idx} className="hover:bg-gray-50/50 text-sm">
+                    <td className="py-5 px-8 text-gray-500 whitespace-nowrap">{formatDisplayDate(order.date)}</td>
+                    {isAdmin && (
+                      <td className="py-5 px-4 font-bold text-gray-800 whitespace-nowrap">{order.manager}</td>
+                    )}
+                    <td className="py-5 px-4 font-mono text-gray-400 text-[11px]">{order.bin}</td>
+                    <td className="py-5 px-4 font-black text-gray-800">{order.entityName}</td>
+                    <td className="py-5 px-4 text-gray-800">
+                      {order.viaEntityName.trim() ? (
+                        <>
+                          <span className="font-bold">{order.viaEntityName}</span>
+                          {order.viaBin.trim() ? (
+                            <div className="text-[10px] font-mono text-gray-400 mt-0.5">{order.viaBin}</div>
+                          ) : null}
+                        </>
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
+                    </td>
+                    <td className="py-5 px-4 text-center">
+                      <button
+                        type="button"
+                        onClick={() => openOrderDetails(order)}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-xl font-black text-xs border border-blue-100"
+                      >
+                        <List size={14} /> {order.orderCount}
+                      </button>
+                    </td>
+                    <td className="py-5 px-8 text-right font-black text-emerald-600 whitespace-nowrap">
+                      {new Intl.NumberFormat('ru-RU').format(order.totalAmount)} ₸
+                    </td>
+                  </tr>
+                ))}
           </tbody>
         </table>
       </div>
@@ -3561,13 +3647,17 @@ const OrderItemsModal = ({
     mrpKztApplied?: number | null;
     isKtpApplied?: boolean | null;
     commissionAmount?: number | null;
+    sourceOrders?: OrderCommissionFields[];
   };
   isAdmin: boolean;
   clientKtpByBin: Map<string, boolean>;
   onClose: () => void;
 }) => {
   const lineAmounts = orderLineAmounts(modal.amounts, modal.totalAmount);
-  const commission = resolveOrderCommissionDisplay(modal, clientKtpByBin);
+  const commission =
+    modal.sourceOrders && modal.sourceOrders.length > 0
+      ? resolveMergedOrdersCommissionDisplay(modal.sourceOrders, clientKtpByBin)
+      : resolveOrderCommissionDisplay(modal, clientKtpByBin);
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[400] flex items-center justify-center p-4" onClick={onClose}>

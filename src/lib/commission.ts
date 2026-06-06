@@ -162,6 +162,37 @@ export function resolveOrderCommissionDisplay(
   return { lines: [], total };
 }
 
+/** Комиссия для модалки объединённых записей (группировка по контрагенту). */
+export function resolveMergedOrdersCommissionDisplay(
+  sources: OrderCommissionFields[],
+  clientKtpByBin?: ReadonlyMap<string, boolean>,
+): { lines: (number | null)[]; total: number | null } {
+  const lines: (number | null)[] = [];
+  let total = 0;
+  let hasAnyCommission = false;
+  let allKnown = true;
+
+  for (const src of sources) {
+    const items = orderLineAmounts(src.amounts, src.totalAmount);
+    const { lines: srcLines, total: srcTotal } = resolveOrderCommissionDisplay(src, clientKtpByBin);
+
+    if (srcLines.length > 0) {
+      for (const l of srcLines) lines.push(l);
+    } else {
+      for (let i = 0; i < items.length; i++) lines.push(null);
+    }
+
+    if (srcTotal != null) {
+      total += srcTotal;
+      hasAnyCommission = true;
+    } else if (items.length > 0) {
+      allKnown = false;
+    }
+  }
+
+  return { lines, total: hasAnyCommission && allKnown ? total : hasAnyCommission ? total : null };
+}
+
 export function validateOrderLinesAmount(
   amounts: number[],
   totalAmount: number,
