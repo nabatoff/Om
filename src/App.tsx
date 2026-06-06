@@ -38,6 +38,7 @@ import {
   fetchClientsApi,
   fetchClientsAdminApi,
   fetchManagerProfilesApi,
+  fetchAdminAnalyticsTabEnabledApi,
   fetchMrpApi,
   setClientKtp,
   recalcOrderCommissionsForClientBinApi,
@@ -225,6 +226,7 @@ const App = () => {
     'salesDashboard' | 'dashboard' | 'kpi' | 'staff' | 'meetings' | 'settings'
   >(() => getSavedAdminSubView());
   const [mrpKzt, setMrpKzt] = useState(4325);
+  const [adminAnalyticsTabEnabled, setAdminAnalyticsTabEnabled] = useState(true);
   const [kpiFilterManager, setKpiFilterManager] = useState('Все');
   const [kpiFilterDateFrom, setKpiFilterDateFrom] = useState(() => adminDateFilterBounds('', '').from);
   const [kpiFilterDateTo, setKpiFilterDateTo] = useState(() => adminDateFilterBounds('', '').to);
@@ -264,14 +266,16 @@ const App = () => {
     }
     setLoadError(null);
     try {
-      const [c, r, basket, standalone, mrp] = await Promise.all([
+      const [c, r, basket, standalone, mrp, analyticsTabEnabled] = await Promise.all([
         isAdmin ? fetchClientsAdminApi() : fetchClientsApi(),
         fetchReportsApi(),
         isAdmin ? fetchDeletedMeetingsApi() : Promise.resolve([]),
         fetchStandaloneCpApi().catch(() => [] as ClientStandaloneCp[]),
         fetchMrpApi().catch(() => 4325),
+        isAdmin ? fetchAdminAnalyticsTabEnabledApi().catch(() => true) : Promise.resolve(true),
       ]);
       setMrpKzt(mrp);
+      if (isAdmin) setAdminAnalyticsTabEnabled(analyticsTabEnabled);
       const managers = isAdmin
         ? await fetchManagerProfilesApi().catch(() => [] as Array<{ id: string; fullName: string }>)
         : [];
@@ -316,10 +320,16 @@ const App = () => {
   }, [managerOrdersSection]);
 
   useEffect(() => {
-    if (currentView !== 'admin') {
-      setAdminSubView('dashboard');
+    if (currentView === 'admin') {
+      setAdminSubView('salesDashboard');
     }
   }, [currentView]);
+
+  useEffect(() => {
+    if (!adminAnalyticsTabEnabled && adminSubView === 'dashboard') {
+      setAdminSubView('salesDashboard');
+    }
+  }, [adminAnalyticsTabEnabled, adminSubView]);
 
   useEffect(() => {
     if (currentView !== 'orders') {
@@ -951,7 +961,10 @@ const App = () => {
               {isAdmin && (
                 <button
                   type="button"
-                  onClick={() => setCurrentView('admin')}
+                  onClick={() => {
+                    setCurrentView('admin');
+                    setAdminSubView('salesDashboard');
+                  }}
                   className={`flex-1 md:flex-none min-w-[120px] sm:min-w-0 flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all ${currentView === 'admin' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                 >
                   <List size={14} /> АДМИНКА
@@ -1026,16 +1039,18 @@ const App = () => {
                 <BarChart2 size={14} />
                 Дашборд
               </button>
-              <button
-                type="button"
-                onClick={() => setAdminSubView('dashboard')}
-                className={`flex-1 min-w-[110px] sm:min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all ${
-                  adminSubView === 'dashboard' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
-                }`}
-              >
-                <LayoutGrid size={14} />
-                Аналитика
-              </button>
+              {adminAnalyticsTabEnabled ? (
+                <button
+                  type="button"
+                  onClick={() => setAdminSubView('dashboard')}
+                  className={`flex-1 min-w-[110px] sm:min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all ${
+                    adminSubView === 'dashboard' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
+                  }`}
+                >
+                  <LayoutGrid size={14} />
+                  Аналитика
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => setAdminSubView('kpi')}
@@ -1124,7 +1139,7 @@ const App = () => {
                 managerOptions={managerFilterOptions}
               />
             )}
-            {adminSubView === 'dashboard' && (
+            {adminAnalyticsTabEnabled && adminSubView === 'dashboard' && (
               <AdminDashboard
                 reports={filteredReports}
                 filterManager={adminFilterManager}
@@ -1166,7 +1181,11 @@ const App = () => {
               />
             )}
             {adminSubView === 'settings' && (
-              <AdminSettingsPanel onRefreshReports={refresh} onMrpUpdated={setMrpKzt} />
+              <AdminSettingsPanel
+                onRefreshReports={refresh}
+                onMrpUpdated={setMrpKzt}
+                onAnalyticsTabEnabledChange={setAdminAnalyticsTabEnabled}
+              />
             )}
           </div>
         )}

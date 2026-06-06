@@ -380,7 +380,7 @@ export function SalesComparisonDashboard({
                         }`}
                       >
                         {delta.positive ? '+' : ''}
-                        {delta.raw} п.п. MoM
+                        {delta.raw} п.п. к прошлому месяцу
                       </span>
                     </div>
                   </div>
@@ -404,7 +404,7 @@ export function SalesComparisonDashboard({
                     <th className="py-3 px-5 text-right">{dataCompare.name} (прошлый месяц)</th>
                     <th className="py-3 px-5 text-right">{dataCurrent.name} (текущий)</th>
                     <th className="py-3 px-5 text-right">Абсолютное изм.</th>
-                    <th className="py-3 px-5 text-right">Относительное (MoM)</th>
+                    <th className="py-3 px-5 text-right">Относительное к прошлому месяцу</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 text-sm">

@@ -420,6 +420,19 @@ export async function setMrpApi(mrp: number): Promise<void> {
   if (error) throw error;
 }
 
+export async function fetchAdminAnalyticsTabEnabledApi(): Promise<boolean> {
+  const { data, error } = await getSupabase().rpc('get_crm_admin_analytics_tab_enabled');
+  if (error) throw error;
+  return Boolean(data);
+}
+
+export async function setAdminAnalyticsTabEnabledApi(enabled: boolean): Promise<void> {
+  const { error } = await getSupabase().rpc('set_crm_admin_analytics_tab_enabled', {
+    p_enabled: Boolean(enabled),
+  });
+  if (error) throw error;
+}
+
 export async function countOrdersWithoutCommissionApi(): Promise<number> {
   const { data, error } = await getSupabase().rpc('count_orders_without_commission');
   if (error) throw error;

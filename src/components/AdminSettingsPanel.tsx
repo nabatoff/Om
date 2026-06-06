@@ -3,7 +3,9 @@ import { Loader2, Settings } from 'lucide-react';
 import {
   backfillOrderCommissionsApi,
   countOrdersWithoutCommissionApi,
+  fetchAdminAnalyticsTabEnabledApi,
   fetchMrpApi,
+  setAdminAnalyticsTabEnabledApi,
   setMrpApi,
 } from '../lib/crmApi';
 import { formatMoneyKzt, getCommissionThresholds } from '../lib/commission';
@@ -11,14 +13,17 @@ import { formatMoneyKzt, getCommissionThresholds } from '../lib/commission';
 type Props = {
   onRefreshReports?: () => Promise<void>;
   onMrpUpdated?: (mrp: number) => void;
+  onAnalyticsTabEnabledChange?: (enabled: boolean) => void;
 };
 
-export function AdminSettingsPanel({ onRefreshReports, onMrpUpdated }: Props) {
+export function AdminSettingsPanel({ onRefreshReports, onMrpUpdated, onAnalyticsTabEnabledChange }: Props) {
   const [mrp, setMrp] = useState('4325');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [pendingWithout, setPendingWithout] = useState<number | null>(null);
   const [backfilling, setBackfilling] = useState(false);
+  const [analyticsTabEnabled, setAnalyticsTabEnabled] = useState(true);
+  const [analyticsTabSaving, setAnalyticsTabSaving] = useState(false);
 
   const thresholds = useMemo(() => {
     const n = Math.max(1, Math.floor(Number(mrp.replace(/\s/g, '')) || 0));
@@ -28,9 +33,15 @@ export function AdminSettingsPanel({ onRefreshReports, onMrpUpdated }: Props) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [m, pending] = await Promise.all([fetchMrpApi(), countOrdersWithoutCommissionApi()]);
+      const [m, pending, analyticsEnabled] = await Promise.all([
+        fetchMrpApi(),
+        countOrdersWithoutCommissionApi(),
+        fetchAdminAnalyticsTabEnabledApi(),
+      ]);
       setMrp(String(m));
       setPendingWithout(pending);
+      setAnalyticsTabEnabled(analyticsEnabled);
+      onAnalyticsTabEnabledChange?.(analyticsEnabled);
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Не удалось загрузить настройки');
     } finally {
@@ -58,6 +69,20 @@ export function AdminSettingsPanel({ onRefreshReports, onMrpUpdated }: Props) {
       alert(e instanceof Error ? e.message : 'Не удалось сохранить МРП');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const toggleAnalyticsTab = async () => {
+    const next = !analyticsTabEnabled;
+    setAnalyticsTabSaving(true);
+    try {
+      await setAdminAnalyticsTabEnabledApi(next);
+      setAnalyticsTabEnabled(next);
+      onAnalyticsTabEnabledChange?.(next);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Не удалось сохранить настройку');
+    } finally {
+      setAnalyticsTabSaving(false);
     }
   };
 
@@ -139,6 +164,33 @@ export function AdminSettingsPanel({ onRefreshReports, onMrpUpdated }: Props) {
         </ul>
         <p className="text-[10px] text-gray-400">
           Смена МРП влияет только на новые сохранения заказов и лимит при вводе. Старые заказы в таблице не пересчитываются.
+        </p>
+      </section>
+
+      <section className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm space-y-4 max-w-xl">
+        <h3 className="text-xs font-black text-gray-500 uppercase tracking-widest">Интерфейс админки</h3>
+        <p className="text-sm text-gray-700">
+          Вкладка «Аналитика» (таблица контрагентов):{' '}
+          <span className="font-black">{analyticsTabEnabled ? 'включена' : 'отключена'}</span>
+        </p>
+        <button
+          type="button"
+          disabled={analyticsTabSaving}
+          onClick={() => void toggleAnalyticsTab()}
+          className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider border disabled:opacity-60 ${
+            analyticsTabEnabled
+              ? 'border-rose-200 bg-rose-50 text-rose-800 hover:bg-rose-100'
+              : 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+          }`}
+        >
+          {analyticsTabSaving
+            ? 'Сохранение…'
+            : analyticsTabEnabled
+              ? 'Отключить вкладку «Аналитика»'
+              : 'Включить вкладку «Аналитика»'}
+        </button>
+        <p className="text-[10px] text-gray-400">
+          Настройка сохраняется для всех администраторов. Дашборд, KPI и остальные вкладки не затрагиваются.
         </p>
       </section>
 
