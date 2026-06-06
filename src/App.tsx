@@ -3148,6 +3148,27 @@ const KpiDashboard = ({
   );
 };
 
+const OrderSumCell = ({
+  amount,
+  commission,
+  showCommission,
+}: {
+  amount: number;
+  commission: number | null;
+  showCommission: boolean;
+}) => (
+  <td className="py-5 px-8 text-right whitespace-nowrap">
+    <span className="font-black text-emerald-600 block">
+      {new Intl.NumberFormat('ru-RU').format(amount)} ₸
+    </span>
+    {showCommission && commission != null ? (
+      <span className="text-[10px] font-bold text-violet-700 mt-0.5 block">
+        Итого комиссия: {new Intl.NumberFormat('ru-RU').format(commission)} ₸
+      </span>
+    ) : null}
+  </td>
+);
+
 const OrdersHistoryDashboard = ({
   isAdmin,
   orders,
@@ -3220,6 +3241,22 @@ const OrdersHistoryDashboard = ({
     }
     return seen.size;
   }, [orders, groupedOrders, isGroupedView]);
+
+  const commissionForGroup = useCallback(
+    (group: GroupedCounterpartyOrder): number | null => {
+      let sum = 0;
+      let hasAny = false;
+      for (const o of group.sourceOrders) {
+        const total = resolveOrderCommissionTotal(o, clientKtpByBin);
+        if (total != null) {
+          sum += total;
+          hasAny = true;
+        }
+      }
+      return hasAny ? sum : null;
+    },
+    [clientKtpByBin],
+  );
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-500 text-left">
@@ -3378,9 +3415,11 @@ const OrdersHistoryDashboard = ({
                         <List size={14} /> {group.orderCount}
                       </button>
                     </td>
-                    <td className="py-5 px-8 text-right font-black text-emerald-600 whitespace-nowrap">
-                      {new Intl.NumberFormat('ru-RU').format(group.totalAmount)} ₸
-                    </td>
+                    <OrderSumCell
+                      amount={group.totalAmount}
+                      commission={commissionForGroup(group)}
+                      showCommission={isAdmin}
+                    />
                   </tr>
                 ))
               : orders.map((order, idx) => (
@@ -3412,9 +3451,11 @@ const OrdersHistoryDashboard = ({
                         <List size={14} /> {order.orderCount}
                       </button>
                     </td>
-                    <td className="py-5 px-8 text-right font-black text-emerald-600 whitespace-nowrap">
-                      {new Intl.NumberFormat('ru-RU').format(order.totalAmount)} ₸
-                    </td>
+                    <OrderSumCell
+                      amount={order.totalAmount}
+                      commission={resolveOrderCommissionTotal(order, clientKtpByBin)}
+                      showCommission={isAdmin}
+                    />
                   </tr>
                 ))}
           </tbody>
