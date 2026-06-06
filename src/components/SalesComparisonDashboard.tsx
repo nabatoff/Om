@@ -276,7 +276,7 @@ export function SalesComparisonDashboard({
               </select>
             </div>
             <div className="flex items-center gap-2 bg-gray-50 p-1.5 rounded-xl border border-gray-200">
-              <span className="text-xs font-semibold text-gray-500 pl-2">Базовый:</span>
+              <span className="text-xs font-semibold text-gray-500 pl-2">Прошлый месяц:</span>
               <select
                 value={compareMonth}
                 onChange={(e) => setCompareMonth(e.target.value)}
