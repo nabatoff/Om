@@ -23,6 +23,7 @@ import {
   Send,
   Loader2,
   Settings,
+  BarChart2,
 } from 'lucide-react';
 import { adminDateFilterBounds, formatYmdLocal, reportDateMatchesAdminBounds } from './lib/periodBounds';
 import { PeriodFilterFields } from './components/PeriodFilterFields';
@@ -64,6 +65,19 @@ import { buildClientCrmHistory } from './lib/crmClientHistory';
 import { buildClientListRows, filterReportsForManager } from './lib/clientCpStats';
 import { ClientDirectoryPanel } from './components/ClientDirectoryPanel';
 import { AdminSettingsPanel } from './components/AdminSettingsPanel';
+import { SalesComparisonDashboard } from './components/SalesComparisonDashboard';
+import {
+  countAssignedNewMeetings,
+  countConductedNewMeetings,
+  countConductedRepeatMeetings,
+  countCounterpartiesConductedNewWithOrder,
+  dedupeReportsByDayManager,
+  formatKpiPercent,
+  isNewMeetingType,
+  isRepeatMeetingType,
+  kpiConversionPercent,
+  normalizeKpiMeetingType,
+} from './lib/kpiMetrics';
 import {
   buildClientKtpMap,
   countOrderLinesWithoutCommission,
@@ -122,9 +136,16 @@ function getSavedCurrentView(): 'manager' | 'admin' | 'orders' | 'clients' {
   return raw === 'admin' || raw === 'orders' || raw === 'clients' ? raw : 'manager';
 }
 
-function getSavedAdminSubView(): 'dashboard' | 'kpi' | 'staff' | 'meetings' | 'settings' {
+function getSavedAdminSubView(): 'salesDashboard' | 'dashboard' | 'kpi' | 'staff' | 'meetings' | 'settings' {
   const raw = localStorage.getItem(LS_ADMIN_SUBVIEW);
-  return raw === 'kpi' || raw === 'staff' || raw === 'meetings' || raw === 'settings' ? raw : 'dashboard';
+  return raw === 'salesDashboard' ||
+    raw === 'dashboard' ||
+    raw === 'kpi' ||
+    raw === 'staff' ||
+    raw === 'meetings' ||
+    raw === 'settings'
+    ? raw
+    : 'salesDashboard';
 }
 
 function getSavedManagerOrdersSection(): 'calendar' | 'meetings' | 'orders' {
@@ -200,9 +221,9 @@ const App = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [booting, setBooting] = useState(true);
-  const [adminSubView, setAdminSubView] = useState<'dashboard' | 'kpi' | 'staff' | 'meetings' | 'settings'>(() =>
-    getSavedAdminSubView(),
-  );
+  const [adminSubView, setAdminSubView] = useState<
+    'salesDashboard' | 'dashboard' | 'kpi' | 'staff' | 'meetings' | 'settings'
+  >(() => getSavedAdminSubView());
   const [mrpKzt, setMrpKzt] = useState(4325);
   const [kpiFilterManager, setKpiFilterManager] = useState('Все');
   const [kpiFilterDateFrom, setKpiFilterDateFrom] = useState(() => adminDateFilterBounds('', '').from);
@@ -997,6 +1018,16 @@ const App = () => {
             <div className="flex flex-wrap gap-2 bg-white border border-gray-200 rounded-2xl p-2 w-full md:w-auto">
               <button
                 type="button"
+                onClick={() => setAdminSubView('salesDashboard')}
+                className={`flex-1 min-w-[110px] sm:min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all ${
+                  adminSubView === 'salesDashboard' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
+                }`}
+              >
+                <BarChart2 size={14} />
+                Дашборд
+              </button>
+              <button
+                type="button"
                 onClick={() => setAdminSubView('dashboard')}
                 className={`flex-1 min-w-[110px] sm:min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all ${
                   adminSubView === 'dashboard' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
@@ -1085,6 +1116,14 @@ const App = () => {
               </button>
             </div>
             </div>
+            {adminSubView === 'salesDashboard' && (
+              <SalesComparisonDashboard
+                allReports={allReports}
+                filterManager={adminFilterManager}
+                setFilterManager={setAdminFilterManager}
+                managerOptions={managerFilterOptions}
+              />
+            )}
             {adminSubView === 'dashboard' && (
               <AdminDashboard
                 reports={filteredReports}
@@ -2741,114 +2780,6 @@ const AdminDashboard = ({
   );
 };
 
-function normalizeKpiMeetingType(value: string): string {
-  return value.trim().toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ');
-}
-
-function isNewMeetingType(type: string): boolean {
-  return normalizeKpiMeetingType(type).startsWith('нов');
-}
-
-function isRepeatMeetingType(type: string): boolean {
-  return normalizeKpiMeetingType(type).startsWith('повтор');
-}
-
-function normalizeKpiText(value: string): string {
-  return value.trim().toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ');
-}
-
-function normalizeKpiBin(value: string): string {
-  return value.replace(/\D/g, '');
-}
-
-function countAssignedNewMeetings(report: FullReport): number {
-  return report.assignedMeetings.filter((m) => isNewMeetingType(m.type)).length;
-}
-
-function countConductedNewMeetings(report: FullReport, allReports: FullReport[]): number {
-  const managerNorm = normalizeKpiText(report.manager);
-  const targetReports = allReports.filter((r) => normalizeKpiText(r.manager) === managerNorm && r.date >= report.date);
-  if (targetReports.length === 0) return 0;
-  let count = 0;
-  for (const assigned of report.assignedMeetings) {
-    if (!isNewMeetingType(assigned.type)) continue;
-    const plannedName = normalizeKpiText(assigned.entityName);
-    const plannedBin = normalizeKpiBin(assigned.bin);
-    const plannedType = normalizeKpiMeetingType(assigned.type);
-    const hasEvidence = targetReports.some((lr) =>
-      lr.conductedMeetings.some(
-        (cm) =>
-          normalizeKpiBin(cm.bin) === plannedBin &&
-          normalizeKpiText(cm.entityName) === plannedName &&
-          normalizeKpiMeetingType(cm.type) === plannedType &&
-          cm.date >= assigned.date,
-      ),
-    );
-    if (hasEvidence) count += 1;
-  }
-  return count;
-}
-
-/** Уникальные контрагенты (БИН+название), по которым в сводке выполняется KPI «проведено новых» (та же логика, что countConductedNewMeetings). */
-function collectCounterpartyKeysWithKpiConductedNew(summaryReports: FullReport[], allReports: FullReport[]): Set<string> {
-  const keys = new Set<string>();
-  for (const report of summaryReports) {
-    const managerNorm = normalizeKpiText(report.manager);
-    const targetReports = allReports.filter((r) => normalizeKpiText(r.manager) === managerNorm && r.date >= report.date);
-    for (const assigned of report.assignedMeetings) {
-      if (!isNewMeetingType(assigned.type)) continue;
-      const plannedName = normalizeKpiText(assigned.entityName);
-      const plannedBin = normalizeKpiBin(assigned.bin);
-      const plannedType = normalizeKpiMeetingType(assigned.type);
-      const hasEvidence = targetReports.some((lr) =>
-        lr.conductedMeetings.some(
-          (cm) =>
-            normalizeKpiBin(cm.bin) === plannedBin &&
-            normalizeKpiText(cm.entityName) === plannedName &&
-            normalizeKpiMeetingType(cm.type) === plannedType &&
-            cm.date >= assigned.date,
-        ),
-      );
-      if (hasEvidence) keys.add(`${plannedBin}|${plannedName}`);
-    }
-  }
-  return keys;
-}
-
-function collectCounterpartyKeysWithConfirmedOrder(summaryReports: FullReport[]): Set<string> {
-  const keys = new Set<string>();
-  for (const report of summaryReports) {
-    for (const o of report.confirmedOrders) {
-      keys.add(`${normalizeKpiBin(o.bin)}|${normalizeKpiText(o.entityName)}`);
-    }
-  }
-  return keys;
-}
-
-function countCounterpartiesConductedNewWithOrder(summaryReports: FullReport[], allReports: FullReport[]): number {
-  const withNew = collectCounterpartyKeysWithKpiConductedNew(summaryReports, allReports);
-  const withOrder = collectCounterpartyKeysWithConfirmedOrder(summaryReports);
-  let n = 0;
-  for (const k of withNew) {
-    if (withOrder.has(k)) n += 1;
-  }
-  return n;
-}
-
-function countConductedRepeatMeetings(report: FullReport): number {
-  return report.conductedMeetings.filter((m) => isRepeatMeetingType(m.type)).length;
-}
-
-function kpiConversionPercent(numerator: number, denominator: number): number | null {
-  if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator <= 0) return null;
-  return (numerator / denominator) * 100;
-}
-
-function formatKpiPercent(value: number | null): string {
-  if (value == null || !Number.isFinite(value)) return '—';
-  return `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1, minimumFractionDigits: 0 }).format(value)}%`;
-}
-
 const KpiDashboard = ({
   allReports,
   reports,
@@ -2877,22 +2808,13 @@ const KpiDashboard = ({
     kpiTablePeriod.isDefaultMonth ? ' · текущий месяц по умолчанию' : ''
   }`;
 
-  const kpiRows = useMemo(() => {
-    const byKey = new Map<string, FullReport>();
-    for (const r of reports) {
-      const key = `${r.date}|${r.manager}`;
-      const prev = byKey.get(key);
-      if (!prev) {
-        byKey.set(key, r);
-        continue;
-      }
-      const prevScore =
-        prev.stats.processedTotal + prev.stats.newInWork + prev.stats.callsTotal + prev.stats.validatedTotal;
-      const curScore = r.stats.processedTotal + r.stats.newInWork + r.stats.callsTotal + r.stats.validatedTotal;
-      if (curScore >= prevScore) byKey.set(key, r);
-    }
-    return Array.from(byKey.values()).sort((a, b) => b.date.localeCompare(a.date) || a.manager.localeCompare(b.manager, 'ru'));
-  }, [reports]);
+  const kpiRows = useMemo(
+    () =>
+      dedupeReportsByDayManager(reports).sort(
+        (a, b) => b.date.localeCompare(a.date) || a.manager.localeCompare(b.manager, 'ru'),
+      ),
+    [reports],
+  );
 
   const meetingTotals = useMemo(() => {
     let conductedFact = 0;
@@ -2916,19 +2838,7 @@ const KpiDashboard = ({
       const matchManager = filterManager === 'Все' || r.manager === filterManager;
       return matchManager && reportDateMatchesAdminBounds(r.date, bounds);
     });
-    const byKey = new Map<string, FullReport>();
-    for (const r of source) {
-      const key = `${r.date}|${r.manager}`;
-      const prev = byKey.get(key);
-      if (!prev) {
-        byKey.set(key, r);
-        continue;
-      }
-      const prevScore =
-        prev.stats.processedTotal + prev.stats.newInWork + prev.stats.callsTotal + prev.stats.validatedTotal;
-      const curScore = r.stats.processedTotal + r.stats.newInWork + r.stats.callsTotal + r.stats.validatedTotal;
-      if (curScore >= prevScore) byKey.set(key, r);
-    }
+    const summaryReports = dedupeReportsByDayManager(source);
     let processedTotal = 0;
     let newInWork = 0;
     let callsTotal = 0;
@@ -2936,7 +2846,7 @@ const KpiDashboard = ({
     let assignedNew = 0;
     let conductedNew = 0;
     let conductedRepeat = 0;
-    for (const r of byKey.values()) {
+    for (const r of summaryReports) {
       processedTotal += r.stats.processedTotal;
       newInWork += r.stats.newInWork;
       callsTotal += r.stats.callsTotal;
@@ -2948,14 +2858,13 @@ const KpiDashboard = ({
     const passedQualificationPct = kpiConversionPercent(validatedTotal, callsTotal);
     const assignedGepPct = kpiConversionPercent(assignedNew, validatedTotal);
     const conductedGepPct = kpiConversionPercent(conductedNew, assignedNew);
-    const summaryReports = Array.from(byKey.values());
     const confirmedOrderConvNumerator = countCounterpartiesConductedNewWithOrder(summaryReports, allReports);
     const confirmedOrderConvPct = kpiConversionPercent(confirmedOrderConvNumerator, conductedNew);
     return {
       monthPrefix,
       periodLabel,
       isDefaultMonth: bounds.isDefaultMonth,
-      reportsCount: byKey.size,
+      reportsCount: summaryReports.length,
       processedTotal,
       newInWork,
       callsTotal,
