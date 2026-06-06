@@ -321,7 +321,7 @@ export function SalesComparisonDashboard({
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-black text-gray-700 uppercase tracking-wider">Абсолютные показатели за период</h3>
               <div className="text-xs text-gray-500 bg-white px-2.5 py-1 rounded-lg border border-gray-200">
-                Зелёный / красный = отклонение относительно {dataCompare.name}
+                Зелёный / красный = отклонение относительно прошлого месяца
               </div>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
@@ -341,7 +341,7 @@ export function SalesComparisonDashboard({
                       <div className="text-2xl font-black text-gray-900">{currVal}</div>
                     </div>
                     <div className="mt-4 pt-2 border-t border-gray-100 flex items-center justify-between">
-                      <span className="text-[10px] text-gray-400">Базовый: {compVal}</span>
+                      <span className="text-[10px] text-gray-400">Прошлый месяц: {compVal}</span>
                       <div className={`flex items-center text-xs font-bold ${delta.positive ? 'text-emerald-600' : 'text-rose-600'}`}>
                         {delta.positive ? <TrendingUp className="w-3 h-3 mr-0.5" /> : <TrendingDown className="w-3 h-3 mr-0.5" />}
                         <span>
@@ -372,7 +372,7 @@ export function SalesComparisonDashboard({
                     </div>
                     <div className="pt-3 border-t border-gray-100 flex items-center justify-between text-xs">
                       <span className="text-gray-500">
-                        В базовом: <strong className="text-gray-700">{formatKpiPercent(dataCompare.conversions[conv.key])}</strong>
+                        В прошлом месяце: <strong className="text-gray-700">{formatKpiPercent(dataCompare.conversions[conv.key])}</strong>
                       </span>
                       <span
                         className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-bold ${
@@ -401,7 +401,7 @@ export function SalesComparisonDashboard({
                 <thead>
                   <tr className="bg-gray-50 text-[11px] uppercase font-black text-gray-500 border-b border-gray-200">
                     <th className="py-3 px-5">Показатель</th>
-                    <th className="py-3 px-5 text-right">{dataCompare.name} (база)</th>
+                    <th className="py-3 px-5 text-right">{dataCompare.name} (прошлый месяц)</th>
                     <th className="py-3 px-5 text-right">{dataCurrent.name} (текущий)</th>
                     <th className="py-3 px-5 text-right">Абсолютное изм.</th>
                     <th className="py-3 px-5 text-right">Относительное (MoM)</th>
@@ -501,7 +501,7 @@ export function SalesComparisonDashboard({
                     <h4 className="font-bold text-emerald-800 mb-1">Лучший рост конверсии</h4>
                     <p className="text-xs leading-relaxed">
                       <strong>{insights.bestGrowth.label}</strong>: {formatKpiPercent(insights.bestGrowth.curr)} vs{' '}
-                      {formatKpiPercent(insights.bestGrowth.comp)} в базовом периоде (
+                      {formatKpiPercent(insights.bestGrowth.comp)} в прошлом месяце (
                       {insights.bestGrowth.delta >= 0 ? '+' : ''}
                       {insights.bestGrowth.delta.toFixed(1)} п.п.)
                     </p>
