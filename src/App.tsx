@@ -24,6 +24,7 @@ import {
   Loader2,
   Settings,
   BarChart2,
+  ClipboardCheck,
 } from 'lucide-react';
 import { adminDateFilterBounds, formatYmdLocal, reportDateMatchesAdminBounds } from './lib/periodBounds';
 import { PeriodFilterFields } from './components/PeriodFilterFields';
@@ -65,6 +66,7 @@ import {
 import { buildClientCrmHistory } from './lib/crmClientHistory';
 import { buildClientListRows, filterReportsForManager } from './lib/clientCpStats';
 import { ClientDirectoryPanel } from './components/ClientDirectoryPanel';
+import { EnsTruCheckPanel } from './components/EnsTruCheckPanel';
 import { AdminSettingsPanel } from './components/AdminSettingsPanel';
 import { SalesComparisonDashboard } from './components/SalesComparisonDashboard';
 import {
@@ -132,9 +134,11 @@ const LS_CURRENT_VIEW = 'om.currentView';
 const LS_ADMIN_SUBVIEW = 'om.adminSubView';
 const LS_MANAGER_ORDERS_SECTION = 'om.managerOrdersSection';
 
-function getSavedCurrentView(): 'manager' | 'admin' | 'orders' | 'clients' {
+type CurrentView = 'manager' | 'admin' | 'orders' | 'clients' | 'ensTru';
+
+function getSavedCurrentView(): CurrentView {
   const raw = localStorage.getItem(LS_CURRENT_VIEW);
-  return raw === 'admin' || raw === 'orders' || raw === 'clients' ? raw : 'manager';
+  return raw === 'admin' || raw === 'orders' || raw === 'clients' || raw === 'ensTru' ? raw : 'manager';
 }
 
 function getSavedAdminSubView(): 'salesDashboard' | 'dashboard' | 'kpi' | 'staff' | 'meetings' | 'settings' {
@@ -157,7 +161,7 @@ function getSavedManagerOrdersSection(): 'calendar' | 'meetings' | 'orders' {
 const App = () => {
   const { session, ready: authReady, managerName, signOut, isAdmin } = useAuth();
   const sessionUserId = session?.user?.id;
-  const [currentView, setCurrentView] = useState<'manager' | 'admin' | 'orders' | 'clients'>(() => getSavedCurrentView());
+  const [currentView, setCurrentView] = useState<CurrentView>(() => getSavedCurrentView());
   const [clients, setClients] = useState<UiClient[]>([]);
   const [managerProfiles, setManagerProfiles] = useState<Array<{ id: string; fullName: string }>>([]);
   const [standaloneCp, setStandaloneCp] = useState<ClientStandaloneCp[]>([]);
@@ -304,6 +308,9 @@ const App = () => {
   useEffect(() => {
     if (!isAdmin && currentView === 'admin') {
       setCurrentView('manager');
+    }
+    if (isAdmin && currentView === 'ensTru') {
+      setCurrentView('admin');
     }
   }, [isAdmin, currentView]);
 
@@ -984,6 +991,15 @@ const App = () => {
               >
                 <ShoppingBag size={14} /> ЗАКАЗЫ
               </button>
+              {!isAdmin && (
+                <button
+                  type="button"
+                  onClick={() => setCurrentView('ensTru')}
+                  className={`flex-1 md:flex-none min-w-[120px] sm:min-w-0 flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all ${currentView === 'ensTru' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  <ClipboardCheck size={14} /> ПРОВЕРКА ЕНСТРУ
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1189,6 +1205,8 @@ const App = () => {
             )}
           </div>
         )}
+
+        {!isAdmin && currentView === 'ensTru' && <EnsTruCheckPanel />}
 
         {currentView === 'clients' && (
           <ClientDirectoryPanel
