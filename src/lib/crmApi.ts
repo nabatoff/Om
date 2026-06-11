@@ -1,4 +1,7 @@
+import type { ClientCategory } from './clientProfile';
 import { getSupabase } from './supabase';
+
+export type { ClientCategory };
 
 export type UiClient = {
   name: string;
@@ -7,9 +10,20 @@ export type UiClient = {
   managerName?: string | null;
   cpPaid?: boolean;
   cpPaidAt?: string | null;
+  categoryId?: string | null;
+  categoryName?: string | null;
+  gzTurnoverPrevYear?: number | null;
+  /** Первый день месяца привлечения, YYYY-MM-DD. */
+  attractionMonth?: string | null;
   /** Только при админской загрузке справочника. */
   isKtp?: boolean;
 };
+
+const clientSelectFields =
+  'name, bin, manager_id, cp_paid, cp_paid_at, category_id, gz_turnover_prev_year, attraction_month, manager:profiles!crm_clients_manager_id_fkey(full_name), category:crm_client_categories(id, name)';
+
+const clientAdminSelectFields =
+  'name, bin, manager_id, cp_paid, cp_paid_at, is_ktp, category_id, gz_turnover_prev_year, attraction_month, manager:profiles!crm_clients_manager_id_fkey(full_name), category:crm_client_categories(id, name)';
 export type UiManagerProfile = { id: string; fullName: string };
 export type FormStats = {
   processedTotal: number;
@@ -191,8 +205,17 @@ function mapClientRow(c: {
   cp_paid?: boolean | null;
   cp_paid_at?: string | null;
   is_ktp?: boolean | null;
+  category_id?: string | null;
+  gz_turnover_prev_year?: string | number | null;
+  attraction_month?: string | null;
   manager?: { full_name?: string | null } | null;
+  category?: { id?: string | null; name?: string | null } | null;
 }): UiClient {
+  const gzRaw = c.gz_turnover_prev_year;
+  const gz =
+    gzRaw === null || gzRaw === undefined || gzRaw === ''
+      ? null
+      : Math.max(0, Number(gzRaw) || 0);
   return {
     name: c.name,
     bin: String(c.bin).trim(),
@@ -200,29 +223,74 @@ function mapClientRow(c: {
     managerName: c.manager?.full_name ?? null,
     cpPaid: Boolean(c.cp_paid),
     cpPaidAt: c.cp_paid_at ?? null,
+    categoryId: c.category_id ?? c.category?.id ?? null,
+    categoryName: c.category?.name ?? null,
+    gzTurnoverPrevYear: gz,
+    attractionMonth: c.attraction_month ? String(c.attraction_month).slice(0, 10) : null,
     ...(c.is_ktp !== undefined ? { isKtp: Boolean(c.is_ktp) } : {}),
   };
 }
 
+function clientInsertPayload(c: UiClient) {
+  return {
+    name: c.name,
+    bin: c.bin,
+    manager_id: c.managerId ?? null,
+    category_id: c.categoryId ?? null,
+    gz_turnover_prev_year: c.gzTurnoverPrevYear ?? null,
+    attraction_month: c.attractionMonth ?? null,
+  };
+}
+
 export async function fetchClientsApi(): Promise<UiClient[]> {
-  const { data, error } = await getSupabase()
-    .from('crm_clients')
-    .select('name, bin, manager_id, cp_paid, cp_paid_at, manager:profiles!crm_clients_manager_id_fkey(full_name)')
-    .order('name');
+  const { data, error } = await getSupabase().from('crm_clients').select(clientSelectFields).order('name');
   if (error) throw error;
   return (data || []).map((c) => mapClientRow(c as Parameters<typeof mapClientRow>[0]));
 }
 
 /** Админ: справочник с флагом КТП. */
 export async function fetchClientsAdminApi(): Promise<UiClient[]> {
-  const { data, error } = await getSupabase()
-    .from('crm_clients')
-    .select(
-      'name, bin, manager_id, cp_paid, cp_paid_at, is_ktp, manager:profiles!crm_clients_manager_id_fkey(full_name)',
-    )
-    .order('name');
+  const { data, error } = await getSupabase().from('crm_clients').select(clientAdminSelectFields).order('name');
   if (error) throw error;
   return (data || []).map((c) => mapClientRow(c as Parameters<typeof mapClientRow>[0]));
+}
+
+export async function fetchClientCategoriesApi(): Promise<ClientCategory[]> {
+  const { data, error } = await getSupabase()
+    .from('crm_client_categories')
+    .select('id, name')
+    .order('sort_order')
+    .order('name');
+  if (error) throw error;
+  return (data || []).map((r) => ({ id: String(r.id), name: String(r.name) }));
+}
+
+export async function upsertClientCategoryApi(name: string): Promise<string> {
+  const { data, error } = await getSupabase().rpc('upsert_crm_client_category', { p_name: name.trim() });
+  if (error) throw error;
+  return String(data);
+}
+
+export async function deleteClientCategoryApi(id: string): Promise<void> {
+  const { error } = await getSupabase().rpc('delete_crm_client_category', { p_id: id });
+  if (error) throw error;
+}
+
+export async function setClientProfileApi(
+  bin: string,
+  profile: {
+    categoryId?: string | null;
+    gzTurnoverPrevYear?: number | null;
+    attractionMonth?: string | null;
+  },
+): Promise<void> {
+  const { error } = await getSupabase().rpc('set_crm_client_profile', {
+    p_bin: bin.trim(),
+    p_category_id: profile.categoryId ?? null,
+    p_gz_turnover: profile.gzTurnoverPrevYear ?? null,
+    p_attraction_month: profile.attractionMonth ?? null,
+  });
+  if (error) throw error;
 }
 
 export async function fetchManagerProfilesApi(): Promise<UiManagerProfile[]> {
@@ -296,8 +364,8 @@ export async function fetchDeletedMeetingsApi(): Promise<DeletedMeeting[]> {
 export async function createClientRow(c: UiClient): Promise<UiClient> {
   const { data, error } = await getSupabase()
     .from('crm_clients')
-    .insert({ name: c.name, bin: c.bin, manager_id: c.managerId ?? null })
-    .select('name, bin, manager_id, cp_paid, cp_paid_at, manager:profiles!crm_clients_manager_id_fkey(full_name)')
+    .insert(clientInsertPayload(c))
+    .select(clientSelectFields)
     .single();
   if (error) {
     if (error.code === '23505') {
@@ -308,14 +376,7 @@ export async function createClientRow(c: UiClient): Promise<UiClient> {
     }
     throw error;
   }
-  return {
-    name: data.name,
-    bin: String(data.bin).trim(),
-    managerId: (data as { manager_id?: string | null }).manager_id ?? null,
-    managerName: (data as { manager?: { full_name?: string | null } | null }).manager?.full_name ?? null,
-    cpPaid: Boolean((data as { cp_paid?: boolean | null }).cp_paid),
-    cpPaidAt: (data as { cp_paid_at?: string | null }).cp_paid_at ?? null,
-  };
+  return mapClientRow(data as Parameters<typeof mapClientRow>[0]);
 }
 
 export async function deleteClientByBin(bin: string): Promise<void> {
@@ -337,22 +398,21 @@ export async function updateClientRow(originalBin: string, next: UiClient): Prom
   if (oldB === newB) {
     const { data, error } = await getSupabase()
       .from('crm_clients')
-      .update({ name })
+      .update({
+        name,
+        category_id: next.categoryId ?? null,
+        gz_turnover_prev_year: next.gzTurnoverPrevYear ?? null,
+        attraction_month: next.attractionMonth ?? null,
+      })
       .eq('bin', oldB)
-      .select('name, bin, manager_id, cp_paid, cp_paid_at, manager:profiles!crm_clients_manager_id_fkey(full_name)')
+      .select(clientSelectFields)
       .single();
     if (error) {
       if (error.code === '23505') throw new Error('Контрагент с таким БИН уже существует');
+      if (error.code === '42501') throw new Error('Недостаточно прав для изменения профиля клиента');
       throw error;
     }
-    return {
-      name: data.name,
-      bin: String(data.bin).trim(),
-      managerId: (data as { manager_id?: string | null }).manager_id ?? null,
-      managerName: (data as { manager?: { full_name?: string | null } | null }).manager?.full_name ?? null,
-      cpPaid: Boolean((data as { cp_paid?: boolean | null }).cp_paid),
-      cpPaidAt: (data as { cp_paid_at?: string | null }).cp_paid_at ?? null,
-    };
+    return mapClientRow(data as Parameters<typeof mapClientRow>[0]);
   }
   const { error: rpcError } = await getSupabase().rpc('update_crm_client', {
     p_old_bin: oldB,
@@ -367,18 +427,11 @@ export async function updateClientRow(originalBin: string, next: UiClient): Prom
   }
   const { data, error } = await getSupabase()
     .from('crm_clients')
-    .select('name, bin, manager_id, cp_paid, cp_paid_at, manager:profiles!crm_clients_manager_id_fkey(full_name)')
+    .select(clientSelectFields)
     .eq('bin', newB)
     .single();
   if (error) throw error;
-  return {
-    name: data.name,
-    bin: String(data.bin).trim(),
-    managerId: (data as { manager_id?: string | null }).manager_id ?? null,
-    managerName: (data as { manager?: { full_name?: string | null } | null }).manager?.full_name ?? null,
-    cpPaid: Boolean((data as { cp_paid?: boolean | null }).cp_paid),
-    cpPaidAt: (data as { cp_paid_at?: string | null }).cp_paid_at ?? null,
-  };
+  return mapClientRow(data as Parameters<typeof mapClientRow>[0]);
 }
 
 /** Админ: назначить/сменить менеджера у контрагента. */

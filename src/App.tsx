@@ -38,7 +38,10 @@ import {
   type DeletedMeeting,
   fetchClientsApi,
   fetchClientsAdminApi,
+  fetchClientCategoriesApi,
   fetchManagerProfilesApi,
+  setClientProfileApi,
+  upsertClientCategoryApi,
   fetchAdminAnalyticsTabEnabledApi,
   fetchMrpApi,
   setClientKtp,
@@ -93,6 +96,16 @@ import {
   type OrderCommissionFields,
 } from './lib/commission';
 import { groupOrdersByCounterparty, type GroupedCounterpartyOrder } from './lib/ordersGrouping';
+import {
+  ATTRACTION_MONTH_OPTIONS,
+  NEW_CATEGORY_VALUE,
+  attractionMonthFromParts,
+  attractionYearOptions,
+  emptyNewClientForm,
+  newClientFormFromClient,
+  type ClientCategory,
+  type NewClientFormData,
+} from './lib/clientProfile';
 import { ClientHistoryModal } from './components/ClientHistoryModal';
 import { isSupabaseConfigured } from './lib/supabase';
 import { useAuth } from './context/AuthContext';
@@ -133,12 +146,27 @@ type SaveReportOptions = {
 const LS_CURRENT_VIEW = 'om.currentView';
 const LS_ADMIN_SUBVIEW = 'om.adminSubView';
 const LS_MANAGER_ORDERS_SECTION = 'om.managerOrdersSection';
+const LS_CLIENTS_ORDERS_SUBVIEW = 'om.clientsOrdersSubView';
 
-type CurrentView = 'manager' | 'admin' | 'orders' | 'clients' | 'ensTru';
+type CurrentView = 'manager' | 'admin' | 'orders' | 'clients' | 'clientsOrders' | 'ensTru';
+type ClientsOrdersSubView = 'clients' | 'orders';
 
 function getSavedCurrentView(): CurrentView {
   const raw = localStorage.getItem(LS_CURRENT_VIEW);
-  return raw === 'admin' || raw === 'orders' || raw === 'clients' || raw === 'ensTru' ? raw : 'manager';
+  if (
+    raw === 'admin' ||
+    raw === 'orders' ||
+    raw === 'clients' ||
+    raw === 'clientsOrders' ||
+    raw === 'ensTru'
+  ) {
+    return raw;
+  }
+  return 'manager';
+}
+
+function getSavedClientsOrdersSubView(): ClientsOrdersSubView {
+  return localStorage.getItem(LS_CLIENTS_ORDERS_SUBVIEW) === 'orders' ? 'orders' : 'clients';
 }
 
 function getSavedAdminSubView(): 'salesDashboard' | 'dashboard' | 'kpi' | 'staff' | 'meetings' | 'settings' {
@@ -206,7 +234,9 @@ const App = () => {
     sourceOrders?: OrderCommissionFields[];
   }>({ isOpen: false, entity: '', bin: '', viaBin: '', amounts: [], totalAmount: 0 });
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
-  const [newClientData, setNewClientData] = useState({ name: '', bin: '', managerId: '' });
+  const [newClientData, setNewClientData] = useState<NewClientFormData>(() => emptyNewClientForm());
+  const [clientCategories, setClientCategories] = useState<ClientCategory[]>([]);
+  const [clientProfileSaving, setClientProfileSaving] = useState(false);
   const [onClientCreatedCallback, setOnClientCreatedCallback] = useState<((c: UiClient) => void) | null>(null);
   /** Если задан — модалка в режиме редактирования существующего контрагента (ключ = исходный БИН). */
   const [editingClientBin, setEditingClientBin] = useState<string | null>(null);
@@ -229,6 +259,9 @@ const App = () => {
   const [adminSubView, setAdminSubView] = useState<
     'salesDashboard' | 'dashboard' | 'kpi' | 'staff' | 'meetings' | 'settings'
   >(() => getSavedAdminSubView());
+  const [clientsOrdersSubView, setClientsOrdersSubView] = useState<ClientsOrdersSubView>(() =>
+    getSavedClientsOrdersSubView(),
+  );
   const [mrpKzt, setMrpKzt] = useState(4325);
   const [adminAnalyticsTabEnabled, setAdminAnalyticsTabEnabled] = useState(true);
   const [kpiFilterManager, setKpiFilterManager] = useState('Все');
@@ -270,16 +303,20 @@ const App = () => {
     }
     setLoadError(null);
     try {
-      const [c, r, basket, standalone, mrp, analyticsTabEnabled] = await Promise.all([
+      const [c, r, basket, standalone, mrp, analyticsTabEnabled, cats] = await Promise.all([
         isAdmin ? fetchClientsAdminApi() : fetchClientsApi(),
         fetchReportsApi(),
         isAdmin ? fetchDeletedMeetingsApi() : Promise.resolve([]),
         fetchStandaloneCpApi().catch(() => [] as ClientStandaloneCp[]),
         fetchMrpApi().catch(() => 4325),
         isAdmin ? fetchAdminAnalyticsTabEnabledApi().catch(() => true) : Promise.resolve(true),
+        isAdmin ? fetchClientCategoriesApi().catch(() => [] as ClientCategory[]) : Promise.resolve([]),
       ]);
       setMrpKzt(mrp);
-      if (isAdmin) setAdminAnalyticsTabEnabled(analyticsTabEnabled);
+      if (isAdmin) {
+        setAdminAnalyticsTabEnabled(analyticsTabEnabled);
+        setClientCategories(cats);
+      }
       const managers = isAdmin
         ? await fetchManagerProfilesApi().catch(() => [] as Array<{ id: string; fullName: string }>)
         : [];
@@ -312,6 +349,17 @@ const App = () => {
     if (isAdmin && currentView === 'ensTru') {
       setCurrentView('admin');
     }
+    if (!isAdmin && currentView === 'clientsOrders') {
+      setCurrentView('clients');
+    }
+    if (isAdmin && currentView === 'clients') {
+      setCurrentView('clientsOrders');
+      setClientsOrdersSubView('clients');
+    }
+    if (isAdmin && currentView === 'orders') {
+      setCurrentView('clientsOrders');
+      setClientsOrdersSubView('orders');
+    }
   }, [isAdmin, currentView]);
 
   useEffect(() => {
@@ -323,8 +371,19 @@ const App = () => {
   }, [adminSubView]);
 
   useEffect(() => {
+    localStorage.setItem(LS_CLIENTS_ORDERS_SUBVIEW, clientsOrdersSubView);
+  }, [clientsOrdersSubView]);
+
+  useEffect(() => {
     localStorage.setItem(LS_MANAGER_ORDERS_SECTION, managerOrdersSection);
   }, [managerOrdersSection]);
+
+  useEffect(() => {
+    if (!isClientModalOpen) return;
+    void fetchClientCategoriesApi()
+      .then(setClientCategories)
+      .catch(() => setClientCategories([]));
+  }, [isClientModalOpen]);
 
   useEffect(() => {
     if (currentView === 'admin') {
@@ -465,6 +524,24 @@ const App = () => {
     [supabaseOk, currentView, managerReportForDate?.id, managerReportDate],
   );
 
+  const resolveClientCategoryId = async (): Promise<string | null> => {
+    if (newClientData.categoryId === NEW_CATEGORY_VALUE) {
+      const catName = newClientData.newCategoryName.trim();
+      if (catName.length < 2) {
+        throw new Error('Укажите название новой категории (не менее 2 символов)');
+      }
+      return upsertClientCategoryApi(catName);
+    }
+    return newClientData.categoryId || null;
+  };
+
+  const buildClientProfileFields = () => {
+    const gzRaw = newClientData.gzTurnoverPrevYear.trim();
+    const gzTurnoverPrevYear = gzRaw ? Math.max(0, Math.floor(Number(gzRaw.replace(/\s/g, '')) || 0)) : null;
+    const attractionMonth = attractionMonthFromParts(newClientData.attractionYear, newClientData.attractionMonth);
+    return { gzTurnoverPrevYear, attractionMonth };
+  };
+
   const saveClientModal = async () => {
     if (newClientData.name.trim().length < 2 || newClientData.bin.length !== 12) {
       alert('Необходимо заполнить наименование и БИН (12 цифр)');
@@ -483,30 +560,40 @@ const App = () => {
     }
     const openedFromInlinePicker = Boolean(onClientCreatedCallback);
     try {
+      const categoryId = await resolveClientCategoryId();
+      const { gzTurnoverPrevYear, attractionMonth } = buildClientProfileFields();
+      const profileFields = { categoryId, gzTurnoverPrevYear, attractionMonth };
       if (editingClientBin) {
         if (bin !== editingClientBin && clients.some((c) => c.bin === bin)) {
           alert('Контрагент с таким БИН уже существует');
           return;
         }
-        const updatedClient = await updateClientRow(editingClientBin, { name, bin });
+        const existing = clients.find((c) => c.bin === editingClientBin);
+        const updatedClient = await updateClientRow(editingClientBin, {
+          name,
+          bin,
+          ...(isAdmin ? profileFields : {}),
+          categoryName:
+            clientCategories.find((c) => c.id === categoryId)?.name ?? existing?.categoryName ?? null,
+        });
         if (isAdmin) {
           await setClientManager(bin, managerId);
         }
+        const merged = {
+          ...updatedClient,
+          ...profileFields,
+          categoryName:
+            clientCategories.find((c) => c.id === categoryId)?.name ?? updatedClient.categoryName ?? null,
+          managerId,
+          managerName: managerProfiles.find((m) => m.id === managerId)?.fullName ?? null,
+        };
         setClients((prev) =>
           prev
-            .map((c) =>
-              c.bin === editingClientBin
-                ? {
-                    ...updatedClient,
-                    managerId,
-                    managerName: managerProfiles.find((m) => m.id === managerId)?.fullName ?? null,
-                  }
-                : c,
-            )
+            .map((c) => (c.bin === editingClientBin ? merged : c))
             .sort((a, b) => a.name.localeCompare(b.name, 'ru')),
         );
         setClientHistoryFor((prev) =>
-          prev?.bin === editingClientBin || prev?.bin === bin ? { ...prev, name, bin } : prev,
+          prev?.bin === editingClientBin || prev?.bin === bin ? { ...prev, ...merged } : prev,
         );
         setOnClientCreatedCallback(null);
       } else {
@@ -515,7 +602,13 @@ const App = () => {
           alert('Контрагент с таким БИН уже существует');
           return;
         }
-        const newUser = await createClientRow({ name, bin, managerId });
+        const newUser = await createClientRow({
+          name,
+          bin,
+          managerId,
+          ...profileFields,
+          categoryName: clientCategories.find((c) => c.id === categoryId)?.name ?? null,
+        });
         setClients((prev) => {
           if (prev.some((c) => c.bin === newUser.bin)) return prev;
           return [...prev, newUser].sort((a, b) => a.name.localeCompare(b.name, 'ru'));
@@ -523,18 +616,60 @@ const App = () => {
         onClientCreatedCallback?.(newUser);
         setOnClientCreatedCallback(null);
       }
-      // В инлайн-подборе (из встреч/заказов) refresh сбрасывает несохраненные строки формы.
-      // Для таких сценариев достаточно локального обновления clients + callback.
       if (!openedFromInlinePicker) {
         await refresh();
       }
       setIsClientModalOpen(false);
       setEditingClientBin(null);
-      setNewClientData({ name: '', bin: '', managerId: '' });
+      setNewClientData(emptyNewClientForm());
     } catch (e) {
       alert(e instanceof Error ? e.message : editingClientBin ? 'Ошибка сохранения' : 'Ошибка создания');
     }
   };
+
+  const saveClientProfile = useCallback(
+    async (
+      bin: string,
+      profile: {
+        categoryId: string | null;
+        newCategoryName?: string;
+        gzTurnoverPrevYear: number | null;
+        attractionMonth: string | null;
+      },
+    ) => {
+      if (!isAdmin) return;
+      setClientProfileSaving(true);
+      try {
+        let categoryId = profile.categoryId;
+        let cats = clientCategories;
+        if (profile.newCategoryName) {
+          categoryId = await upsertClientCategoryApi(profile.newCategoryName);
+          cats = await fetchClientCategoriesApi();
+          setClientCategories(cats);
+        }
+        await setClientProfileApi(bin, {
+          categoryId,
+          gzTurnoverPrevYear: profile.gzTurnoverPrevYear,
+          attractionMonth: profile.attractionMonth,
+        });
+        const categoryName = cats.find((c) => c.id === categoryId)?.name ?? null;
+        const patch = {
+          categoryId,
+          categoryName,
+          gzTurnoverPrevYear: profile.gzTurnoverPrevYear,
+          attractionMonth: profile.attractionMonth,
+        };
+        setClients((prev) => prev.map((c) => (c.bin === bin ? { ...c, ...patch } : c)));
+        setClientHistoryFor((prev) => (prev?.bin === bin ? { ...prev, ...patch } : prev));
+        await refresh();
+      } catch (e) {
+        alert(e instanceof Error ? e.message : 'Не удалось сохранить профиль');
+      } finally {
+        setClientProfileSaving(false);
+      }
+    },
+    [isAdmin, clientCategories, refresh],
+  );
 
   const assignClientManager = useCallback(
     async (bin: string, managerId: string | null) => {
@@ -977,20 +1112,33 @@ const App = () => {
                   <List size={14} /> АДМИНКА
                 </button>
               )}
-              <button
-                type="button"
-                onClick={() => setCurrentView('clients')}
-                className={`flex-1 md:flex-none min-w-[120px] sm:min-w-0 flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all ${currentView === 'clients' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-              >
-                <Users size={14} /> КЛИЕНТЫ
-              </button>
-              <button
-                type="button"
-                onClick={() => setCurrentView('orders')}
-                className={`flex-1 md:flex-none min-w-[120px] sm:min-w-0 flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all ${currentView === 'orders' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-              >
-                <ShoppingBag size={14} /> ЗАКАЗЫ
-              </button>
+              {isAdmin ? (
+                <button
+                  type="button"
+                  onClick={() => setCurrentView('clientsOrders')}
+                  className={`flex-1 md:flex-none min-w-[120px] sm:min-w-0 flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all ${currentView === 'clientsOrders' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  <Users size={14} />
+                  <ShoppingBag size={14} /> КЛИЕНТЫ И ЗАКАЗЫ
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentView('clients')}
+                    className={`flex-1 md:flex-none min-w-[120px] sm:min-w-0 flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all ${currentView === 'clients' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                  >
+                    <Users size={14} /> КЛИЕНТЫ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentView('orders')}
+                    className={`flex-1 md:flex-none min-w-[120px] sm:min-w-0 flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all ${currentView === 'orders' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                  >
+                    <ShoppingBag size={14} /> ЗАКАЗЫ
+                  </button>
+                </>
+              )}
               {!isAdmin && (
                 <button
                   type="button"
@@ -1031,9 +1179,9 @@ const App = () => {
               const isBin = /^\d{12}$/.test(inputValue.trim());
               setEditingClientBin(null);
               setNewClientData({
+                ...emptyNewClientForm(sessionUserId ?? ''),
                 name: isBin ? '' : inputValue,
                 bin: isBin ? inputValue : '',
-                managerId: sessionUserId ?? '',
               });
               setOnClientCreatedCallback(() => callback);
               setIsClientModalOpen(true);
@@ -1208,7 +1356,32 @@ const App = () => {
 
         {!isAdmin && currentView === 'ensTru' && <EnsTruCheckPanel />}
 
-        {currentView === 'clients' && (
+        {isAdmin && currentView === 'clientsOrders' && (
+          <div className="flex flex-wrap gap-2 bg-white border border-gray-200 rounded-2xl p-2 w-full md:w-auto">
+            <button
+              type="button"
+              onClick={() => setClientsOrdersSubView('clients')}
+              className={`flex-1 min-w-[130px] sm:min-w-[170px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all ${
+                clientsOrdersSubView === 'clients' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              <Users size={14} />
+              Клиенты
+            </button>
+            <button
+              type="button"
+              onClick={() => setClientsOrdersSubView('orders')}
+              className={`flex-1 min-w-[130px] sm:min-w-[170px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all ${
+                clientsOrdersSubView === 'orders' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              <ShoppingBag size={14} />
+              Заказы
+            </button>
+          </div>
+        )}
+
+        {(currentView === 'clients' || (isAdmin && currentView === 'clientsOrders' && clientsOrdersSubView === 'clients')) && (
           <ClientDirectoryPanel
             rows={visibleClientRows}
             onRefreshReports={refresh}
@@ -1228,7 +1401,7 @@ const App = () => {
               isAdmin
                 ? () => {
                     setEditingClientBin(null);
-                    setNewClientData({ name: '', bin: '', managerId: '' });
+                    setNewClientData(emptyNewClientForm());
                     setOnClientCreatedCallback(null);
                     setIsClientModalOpen(true);
                   }
@@ -1238,7 +1411,7 @@ const App = () => {
               isAdmin
                 ? (c) => {
                     setEditingClientBin(c.bin);
-                    setNewClientData({ name: c.name, bin: c.bin, managerId: c.managerId ?? '' });
+                    setNewClientData(newClientFormFromClient(c));
                     setOnClientCreatedCallback(null);
                     setIsClientModalOpen(true);
                   }
@@ -1248,7 +1421,7 @@ const App = () => {
           />
         )}
 
-        {currentView === 'orders' && (
+        {(currentView === 'orders' || (isAdmin && currentView === 'clientsOrders' && clientsOrdersSubView === 'orders')) && (
           <div className="space-y-8">
             {!isAdmin && (
               <div className="bg-white border border-gray-200 rounded-2xl p-2 shadow-sm flex flex-wrap gap-2 w-full md:w-auto">
@@ -1347,7 +1520,7 @@ const App = () => {
           onClick={() => {
             setIsClientModalOpen(false);
             setEditingClientBin(null);
-            setNewClientData({ name: '', bin: '', managerId: '' });
+            setNewClientData(emptyNewClientForm());
           }}
         >
           <div
@@ -1365,7 +1538,7 @@ const App = () => {
                 onClick={() => {
                   setIsClientModalOpen(false);
                   setEditingClientBin(null);
-                  setNewClientData({ name: '', bin: '', managerId: '' });
+                  setNewClientData(emptyNewClientForm());
                 }}
                 className="text-gray-400 hover:text-gray-600"
               >
@@ -1419,13 +1592,84 @@ const App = () => {
                   </select>
                 </div>
               )}
+              <div className="space-y-2 text-left">
+                <label className="text-[10px] font-black text-gray-400 uppercase ml-2 tracking-tighter">Категория</label>
+                <select
+                  className="w-full bg-gray-50 border-none p-4 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all outline-none"
+                  value={newClientData.categoryId}
+                  onChange={(e) => setNewClientData({ ...newClientData, categoryId: e.target.value })}
+                >
+                  <option value="">—</option>
+                  {clientCategories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                  <option value={NEW_CATEGORY_VALUE}>— Новая категория —</option>
+                </select>
+                {newClientData.categoryId === NEW_CATEGORY_VALUE && (
+                  <input
+                    type="text"
+                    className="w-full bg-gray-50 border-none p-4 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all outline-none"
+                    placeholder="Название категории"
+                    value={newClientData.newCategoryName}
+                    onChange={(e) => setNewClientData({ ...newClientData, newCategoryName: e.target.value })}
+                  />
+                )}
+              </div>
+              <div className="space-y-2 text-left">
+                <label className="text-[10px] font-black text-gray-400 uppercase ml-2 tracking-tighter">
+                  Обороты ГЗ (прошлый год), ₸
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  className="w-full bg-gray-50 border-none p-4 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all outline-none"
+                  placeholder="Необязательно"
+                  value={newClientData.gzTurnoverPrevYear}
+                  onChange={(e) =>
+                    setNewClientData({ ...newClientData, gzTurnoverPrevYear: e.target.value.replace(/[^\d]/g, '') })
+                  }
+                />
+              </div>
+              <div className="space-y-2 text-left">
+                <label className="text-[10px] font-black text-gray-400 uppercase ml-2 tracking-tighter">
+                  Месяц привлечения
+                </label>
+                <div className="flex gap-2">
+                  <select
+                    className="flex-1 bg-gray-50 border-none p-4 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all outline-none"
+                    value={newClientData.attractionMonth}
+                    onChange={(e) =>
+                      setNewClientData({ ...newClientData, attractionMonth: Number(e.target.value) })
+                    }
+                  >
+                    {ATTRACTION_MONTH_OPTIONS.map((m) => (
+                      <option key={m.value} value={m.value}>
+                        {m.label}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    className="w-28 bg-gray-50 border-none p-4 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all outline-none"
+                    value={newClientData.attractionYear}
+                    onChange={(e) => setNewClientData({ ...newClientData, attractionYear: Number(e.target.value) })}
+                  >
+                    {attractionYearOptions().map((y) => (
+                      <option key={y} value={y}>
+                        {y}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
             </div>
             <div className="p-8 bg-gray-50 flex gap-4">
               <button
                 onClick={() => {
                   setIsClientModalOpen(false);
                   setEditingClientBin(null);
-                  setNewClientData({ name: '', bin: '', managerId: '' });
+                  setNewClientData(emptyNewClientForm());
                 }}
                 className="flex-1 px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-widest"
               >
@@ -1553,6 +1797,9 @@ const App = () => {
             standaloneByManager={row?.standaloneByManager ?? []}
             currentManagerId={sessionUserId}
             isAdmin={isAdmin}
+            categories={clientCategories}
+            profileSaving={clientProfileSaving}
+            onSaveProfile={isAdmin ? saveClientProfile : undefined}
             onToggleClientPaid={isAdmin ? toggleClientPaid : undefined}
             onRefreshReports={refresh}
             onClose={() => setClientHistoryFor(null)}

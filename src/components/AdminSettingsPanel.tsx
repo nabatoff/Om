@@ -3,10 +3,14 @@ import { Loader2, Settings } from 'lucide-react';
 import {
   backfillOrderCommissionsApi,
   countOrdersWithoutCommissionApi,
+  deleteClientCategoryApi,
   fetchAdminAnalyticsTabEnabledApi,
+  fetchClientCategoriesApi,
   fetchMrpApi,
   setAdminAnalyticsTabEnabledApi,
   setMrpApi,
+  upsertClientCategoryApi,
+  type ClientCategory,
 } from '../lib/crmApi';
 import { formatMoneyKzt, getCommissionThresholds } from '../lib/commission';
 
@@ -24,6 +28,9 @@ export function AdminSettingsPanel({ onRefreshReports, onMrpUpdated, onAnalytics
   const [backfilling, setBackfilling] = useState(false);
   const [analyticsTabEnabled, setAnalyticsTabEnabled] = useState(true);
   const [analyticsTabSaving, setAnalyticsTabSaving] = useState(false);
+  const [categories, setCategories] = useState<ClientCategory[]>([]);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [categorySaving, setCategorySaving] = useState(false);
 
   const thresholds = useMemo(() => {
     const n = Math.max(1, Math.floor(Number(mrp.replace(/\s/g, '')) || 0));
@@ -33,14 +40,16 @@ export function AdminSettingsPanel({ onRefreshReports, onMrpUpdated, onAnalytics
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [m, pending, analyticsEnabled] = await Promise.all([
+      const [m, pending, analyticsEnabled, cats] = await Promise.all([
         fetchMrpApi(),
         countOrdersWithoutCommissionApi(),
         fetchAdminAnalyticsTabEnabledApi(),
+        fetchClientCategoriesApi(),
       ]);
       setMrp(String(m));
       setPendingWithout(pending);
       setAnalyticsTabEnabled(analyticsEnabled);
+      setCategories(cats);
       onAnalyticsTabEnabledChange?.(analyticsEnabled);
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Не удалось загрузить настройки');
@@ -83,6 +92,37 @@ export function AdminSettingsPanel({ onRefreshReports, onMrpUpdated, onAnalytics
       alert(e instanceof Error ? e.message : 'Не удалось сохранить настройку');
     } finally {
       setAnalyticsTabSaving(false);
+    }
+  };
+
+  const addCategory = async () => {
+    const name = newCategoryName.trim();
+    if (name.length < 2) {
+      alert('Название категории — не менее 2 символов');
+      return;
+    }
+    setCategorySaving(true);
+    try {
+      await upsertClientCategoryApi(name);
+      setNewCategoryName('');
+      setCategories(await fetchClientCategoriesApi());
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Не удалось добавить категорию');
+    } finally {
+      setCategorySaving(false);
+    }
+  };
+
+  const removeCategory = async (id: string, name: string) => {
+    if (!window.confirm(`Удалить категорию «${name}»? У клиентов поле станет пустым.`)) return;
+    setCategorySaving(true);
+    try {
+      await deleteClientCategoryApi(id);
+      setCategories(await fetchClientCategoriesApi());
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Не удалось удалить категорию');
+    } finally {
+      setCategorySaving(false);
     }
   };
 
@@ -164,6 +204,55 @@ export function AdminSettingsPanel({ onRefreshReports, onMrpUpdated, onAnalytics
         </ul>
         <p className="text-[10px] text-gray-400">
           Смена МРП влияет только на новые сохранения заказов и лимит при вводе. Старые заказы в таблице не пересчитываются.
+        </p>
+      </section>
+
+      <section className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm space-y-4 max-w-xl">
+        <h3 className="text-xs font-black text-gray-500 uppercase tracking-widest">Категории клиентов</h3>
+        {categories.length === 0 ? (
+          <p className="text-sm text-gray-500">Категорий пока нет.</p>
+        ) : (
+          <ul className="space-y-2">
+            {categories.map((cat) => (
+              <li
+                key={cat.id}
+                className="flex items-center justify-between gap-3 px-3 py-2 rounded-xl bg-gray-50 border border-gray-100"
+              >
+                <span className="text-sm font-bold text-gray-800">{cat.name}</span>
+                <button
+                  type="button"
+                  disabled={categorySaving}
+                  onClick={() => void removeCategory(cat.id, cat.name)}
+                  className="text-[10px] font-black uppercase tracking-wider text-rose-600 hover:text-rose-800 disabled:opacity-50"
+                >
+                  Удалить
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="flex flex-wrap gap-3 items-end">
+          <div className="space-y-1 flex-1 min-w-[180px]">
+            <label className="text-[10px] font-black text-gray-400 uppercase">Новая категория</label>
+            <input
+              type="text"
+              value={newCategoryName}
+              onChange={(e) => setNewCategoryName(e.target.value)}
+              className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold"
+              placeholder="Госзаказ"
+            />
+          </div>
+          <button
+            type="button"
+            disabled={categorySaving}
+            onClick={() => void addCategory()}
+            className="px-4 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-black uppercase tracking-wider hover:bg-blue-500 disabled:opacity-60"
+          >
+            {categorySaving ? 'Сохранение…' : 'Добавить'}
+          </button>
+        </div>
+        <p className="text-[10px] text-gray-400">
+          Категории также можно создать при заведении нового контрагента.
         </p>
       </section>
 
