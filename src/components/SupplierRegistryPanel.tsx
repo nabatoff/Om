@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Building2,
@@ -28,13 +28,14 @@ import {
   formatRegistryMoney,
   hasOrdersInYear,
   monthsInYear,
+  sumDisplayedMonthsAmount,
   sumMonthAmount,
   sumMonthCommission,
   type RegistryMonthModalData,
   type SupplierRegistryRow,
 } from '../lib/supplierRegistry';
 
-type SortKey = 'name' | 'managerName' | 'monthsWithUs';
+type SortKey = 'name' | 'managerName' | 'monthsWithUs' | 'totalTurnover';
 type ViewMode = 'cohort' | 'year';
 
 function normalizeSearchText(value: string): string {
@@ -62,45 +63,60 @@ type Props = {
   onOpenClient?: (client: UiClient) => void;
 };
 
+type DossierPlacement = 'right' | 'above' | 'below';
+
 type DossierAnchor = {
   supplier: SupplierRegistryRow;
   left: number;
   top: number;
-  above: boolean;
+  placement: DossierPlacement;
 };
+
+const DOSSIER_W = 288;
+const DOSSIER_H = 300;
 
 function SupplierDossierPopover({
   anchor,
   clientByBin,
   onOpenClient,
-  onClose,
-  onCancelClose,
+  onDismiss,
+  onPointerEnter,
+  onPointerLeave,
 }: {
   anchor: DossierAnchor;
   clientByBin: Map<string, UiClient>;
   onOpenClient?: (client: UiClient) => void;
-  onClose: () => void;
-  onCancelClose: () => void;
+  onDismiss: () => void;
+  onPointerEnter: () => void;
+  onPointerLeave: () => void;
 }) {
-  const { supplier, above } = anchor;
-  const left = Math.max(12, Math.min(anchor.left, window.innerWidth - 300));
+  const { supplier, placement } = anchor;
+  const left =
+    placement === 'right'
+      ? Math.min(anchor.left, window.innerWidth - DOSSIER_W - 12)
+      : Math.max(12, Math.min(anchor.left, window.innerWidth - DOSSIER_W));
+
+  const style: CSSProperties =
+    placement === 'right'
+      ? { left, top: anchor.top }
+      : placement === 'above'
+        ? { left, top: anchor.top, transform: 'translateY(-100%)' }
+        : { left, top: anchor.top };
 
   return createPortal(
     <div
       className="fixed z-[500] w-72 bg-white rounded-2xl shadow-xl border border-gray-100 p-5"
-      style={
-        above
-          ? { left, top: anchor.top, transform: 'translateY(-100%)' }
-          : { left, top: anchor.top }
-      }
-      onMouseEnter={onCancelClose}
-      onMouseLeave={onClose}
+      style={style}
+      onMouseEnter={onPointerEnter}
+      onMouseLeave={onPointerLeave}
     >
       <div
-        className={`absolute left-8 w-4 h-4 bg-white rotate-45 ${
-          above
-            ? '-bottom-2 border-b border-r border-gray-100'
-            : '-top-2 border-t border-l border-gray-100'
+        className={`absolute w-4 h-4 bg-white rotate-45 ${
+          placement === 'right'
+            ? '-left-2 top-6 border-l border-b border-gray-100'
+            : placement === 'above'
+              ? '-bottom-2 left-8 border-b border-r border-gray-100'
+              : '-top-2 left-8 border-t border-l border-gray-100'
         }`}
       />
       <div className="relative z-10">
@@ -109,7 +125,10 @@ function SupplierDossierPopover({
           {onOpenClient && clientByBin.has(supplier.bin) && (
             <button
               type="button"
-              onClick={() => onOpenClient(clientByBin.get(supplier.bin)!)}
+              onClick={() => {
+                onDismiss();
+                onOpenClient(clientByBin.get(supplier.bin)!);
+              }}
               className="text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center gap-1"
             >
               <Edit2 size={12} />
@@ -245,6 +264,7 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
 
   const [searchTerm, setSearchTerm] = useState('');
   const [managerFilter, setManagerFilter] = useState('Все');
+  const [categoryFilter, setCategoryFilter] = useState('Все');
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' }>({
     key: 'name',
     direction: 'asc',
@@ -255,19 +275,50 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
   const [modalData, setModalData] = useState<RegistryMonthModalData | null>(null);
   const [dossierAnchor, setDossierAnchor] = useState<DossierAnchor | null>(null);
   const dossierHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dossierOverPopoverRef = useRef(false);
+
+  const dismissDossier = () => {
+    cancelHideDossier();
+    dossierOverPopoverRef.current = false;
+    setDossierAnchor(null);
+  };
 
   const cancelHideDossier = () => {
     if (dossierHideTimer.current) clearTimeout(dossierHideTimer.current);
+    dossierHideTimer.current = null;
   };
 
   const scheduleHideDossier = () => {
     cancelHideDossier();
-    dossierHideTimer.current = setTimeout(() => setDossierAnchor(null), 120);
+    dossierHideTimer.current = setTimeout(() => {
+      if (!dossierOverPopoverRef.current) dismissDossier();
+    }, 250);
+  };
+
+  const showDossierFromCell = (supplier: SupplierRegistryRow, cell: HTMLElement) => {
+    cancelHideDossier();
+    if (dossierAnchor && dossierAnchor.supplier.bin !== supplier.bin) return;
+
+    const rect = cell.getBoundingClientRect();
+    const spaceRight = window.innerWidth - rect.right;
+    let placement: DossierPlacement = 'right';
+    let left = rect.right + 8;
+    let top = Math.max(12, Math.min(rect.top, window.innerHeight - DOSSIER_H - 12));
+
+    if (spaceRight < DOSSIER_W + 16) {
+      const spaceAbove = rect.top;
+      const spaceBelow = window.innerHeight - rect.bottom;
+      placement = spaceAbove >= DOSSIER_H || spaceAbove >= spaceBelow ? 'above' : 'below';
+      left = rect.left + 56;
+      top = placement === 'above' ? rect.top - 8 : rect.bottom + 8;
+    }
+
+    setDossierAnchor({ supplier, left, top, placement });
   };
 
   useEffect(() => {
     if (!dossierAnchor) return;
-    const hide = () => setDossierAnchor(null);
+    const hide = () => dismissDossier();
     window.addEventListener('scroll', hide, true);
     window.addEventListener('resize', hide);
     return () => {
@@ -292,6 +343,19 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
 
   const effectiveManagerFilter = managerOptions.includes(managerFilter) ? managerFilter : 'Все';
 
+  const categoryOptions = useMemo(() => {
+    const names = new Set<string>();
+    let hasUncategorized = false;
+    for (const row of rows) {
+      if (row.categoryName) names.add(row.categoryName);
+      else hasUncategorized = true;
+    }
+    const sorted = Array.from(names).sort((a, b) => a.localeCompare(b, 'ru'));
+    return ['Все', ...(hasUncategorized ? ['Без категории'] : []), ...sorted];
+  }, [rows]);
+
+  const effectiveCategoryFilter = categoryOptions.includes(categoryFilter) ? categoryFilter : 'Все';
+
   const displayedMonths = useMemo(() => {
     if (viewMode === 'cohort') {
       return [effectiveCohortMonth, addCalendarMonths(effectiveCohortMonth, 1), addCalendarMonths(effectiveCohortMonth, 2)];
@@ -314,6 +378,14 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
         }
       }
 
+      if (effectiveCategoryFilter !== 'Все') {
+        if (effectiveCategoryFilter === 'Без категории') {
+          if (row.categoryName) return false;
+        } else if (row.categoryName !== effectiveCategoryFilter) {
+          return false;
+        }
+      }
+
       if (viewMode === 'year') {
         return hasOrdersInYear(row, effectiveYear);
       }
@@ -325,12 +397,20 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
 
     list = [...list].sort((a, b) => {
       const key = sortConfig.key;
-      let av: string | number | null = a[key];
-      let bv: string | number | null = b[key];
-      if (key === 'managerName') {
+      let av: string | number | null;
+      let bv: string | number | null;
+
+      if (key === 'totalTurnover') {
+        av = sumDisplayedMonthsAmount(a, displayedMonths);
+        bv = sumDisplayedMonthsAmount(b, displayedMonths);
+      } else if (key === 'managerName') {
         av = a.managerName ?? '';
         bv = b.managerName ?? '';
+      } else {
+        av = a[key];
+        bv = b[key];
       }
+
       if (av == null && bv == null) return 0;
       if (av == null) return 1;
       if (bv == null) return -1;
@@ -340,13 +420,25 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
     });
 
     return list;
-  }, [rows, searchTerm, viewMode, effectiveCohortMonth, effectiveYear, effectiveManagerFilter, sortConfig]);
+  }, [
+    rows,
+    searchTerm,
+    viewMode,
+    effectiveCohortMonth,
+    effectiveYear,
+    effectiveManagerFilter,
+    effectiveCategoryFilter,
+    sortConfig,
+    displayedMonths,
+  ]);
 
   const handleSort = (key: SortKey) => {
-    setSortConfig((prev) => ({
-      key,
-      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc',
-    }));
+    setSortConfig((prev) => {
+      if (prev.key === key) {
+        return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+      }
+      return { key, direction: key === 'totalTurnover' ? 'desc' : 'asc' };
+    });
   };
 
   const openModal = (supplier: SupplierRegistryRow, monthKey: string, orders: SupplierRegistryRow['ordersByMonth'][string]) => {
@@ -449,7 +541,7 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
         </div>
       </div>
 
-      <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-200 flex flex-col sm:flex-row gap-3">
+      <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-200 flex flex-col sm:flex-row gap-3 flex-wrap">
         <select
           value={effectiveManagerFilter}
           onChange={(e) => setManagerFilter(e.target.value)}
@@ -461,7 +553,18 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
             </option>
           ))}
         </select>
-        <div className="relative flex-1 min-w-0">
+        <select
+          value={effectiveCategoryFilter}
+          onChange={(e) => setCategoryFilter(e.target.value)}
+          className="px-3 py-2.5 rounded-xl border border-gray-200 text-sm font-medium bg-gray-50 min-w-[180px] shrink-0"
+        >
+          {categoryOptions.map((c) => (
+            <option key={c} value={c}>
+              {c === 'Все' ? 'Все категории' : c}
+            </option>
+          ))}
+        </select>
+        <div className="relative flex-1 min-w-[220px]">
           <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
@@ -515,8 +618,14 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
                 <th className="p-4 text-xs font-black text-gray-500 uppercase text-center border-l border-gray-200 bg-gray-50">
                   Всего заказов
                 </th>
-                <th className="p-4 text-xs font-black text-gray-500 uppercase text-right bg-gray-50">
-                  Суммарный оборот
+                <th
+                  className="p-4 text-xs font-black text-gray-500 uppercase text-right bg-gray-50 cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('totalTurnover')}
+                >
+                  <div className="flex items-center justify-end">
+                    Суммарный оборот
+                    <SortIcon col="totalTurnover" />
+                  </div>
                 </th>
               </tr>
             </thead>
@@ -542,19 +651,7 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
                   <tr key={supplier.bin} className="hover:bg-gray-50/80 transition-colors">
                     <td
                       className="p-4"
-                      onMouseEnter={(e) => {
-                        cancelHideDossier();
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        const spaceAbove = rect.top;
-                        const spaceBelow = window.innerHeight - rect.bottom;
-                        const above = spaceAbove >= 300 || spaceAbove >= spaceBelow;
-                        setDossierAnchor({
-                          supplier,
-                          left: rect.left + 56,
-                          top: above ? rect.top - 8 : rect.bottom + 8,
-                          above,
-                        });
-                      }}
+                      onMouseEnter={(e) => showDossierFromCell(supplier, e.currentTarget)}
                       onMouseLeave={scheduleHideDossier}
                     >
                       <div className="flex items-center">
@@ -651,8 +748,15 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
           anchor={dossierAnchor}
           clientByBin={clientByBin}
           onOpenClient={onOpenClient}
-          onClose={scheduleHideDossier}
-          onCancelClose={cancelHideDossier}
+          onDismiss={dismissDossier}
+          onPointerEnter={() => {
+            dossierOverPopoverRef.current = true;
+            cancelHideDossier();
+          }}
+          onPointerLeave={() => {
+            dossierOverPopoverRef.current = false;
+            scheduleHideDossier();
+          }}
         />
       ) : null}
 

@@ -197,6 +197,14 @@ export function countOrderLinesInMonth(orders: RegistryOrderLine[]): number {
   return orders.reduce((sum, o) => sum + o.amounts.length, 0);
 }
 
+export function sumDisplayedMonthsAmount(row: SupplierRegistryRow, months: string[]): number {
+  let total = 0;
+  for (const month of months) {
+    total += sumMonthAmount(row.ordersByMonth[month] ?? []);
+  }
+  return total;
+}
+
 export function sumMonthAmount(orders: RegistryOrderLine[]): number {
   return orders.reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0);
 }
