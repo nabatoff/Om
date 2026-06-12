@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Building2,
@@ -18,9 +18,6 @@ import {
   addCalendarMonths,
   buildCohortMilestoneCounts,
   buildSupplierRegistryRows,
-  COHORT_MONTH1_MIN_TURNOVER,
-  COHORT_MONTH2_MIN_TURNOVER,
-  COHORT_MONTH3_MIN_TURNOVER,
   collectRegistryMonthOptions,
   collectRegistryYears,
   countOrderLinesInMonth,
@@ -66,27 +63,65 @@ function normalizeSearchText(value: string): string {
     .trim();
 }
 
+const FILTER_CONTROL_CLASS =
+  'w-full h-11 px-3 rounded-xl border border-gray-200 text-sm font-medium bg-white text-gray-800 outline-none focus:ring-2 focus:ring-blue-500/30';
+
+function FilterField({
+  label,
+  className,
+  children,
+}: {
+  label: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className={className}>
+      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">{label}</p>
+      {children}
+    </div>
+  );
+}
+
+function FilterSelect({
+  value,
+  onChange,
+  children,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="relative">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={`${FILTER_CONTROL_CLASS} appearance-none pr-9 cursor-pointer`}
+      >
+        {children}
+      </select>
+      <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+    </div>
+  );
+}
+
 function CohortMilestoneCard({
-  title,
   monthLabel,
   minLabel,
   count,
 }: {
-  title: string;
   monthLabel: string;
   minLabel: string;
   count: number;
 }) {
   return (
-    <div
-      className="w-[104px] shrink-0 bg-gray-50 border border-gray-200 rounded-xl px-2.5 py-2.5 flex flex-col justify-center"
-      title={`${title} · ${monthLabel} · ${minLabel}`}
-    >
-      <div className="flex items-center justify-between gap-1 leading-none">
-        <span className="text-[9px] font-black text-gray-500 uppercase truncate">{title}</span>
-        <span className="text-sm font-black text-gray-900 shrink-0">{count}</span>
+    <div className="w-[132px] shrink-0 h-11 bg-white border border-gray-200 rounded-xl px-3 flex items-center justify-between gap-2">
+      <div className="min-w-0">
+        <p className="text-xs font-bold text-gray-800 leading-tight truncate">{monthLabel}</p>
+        <p className="text-[10px] font-bold text-emerald-600 leading-tight mt-0.5 truncate">{minLabel}</p>
       </div>
-      <p className="text-[8px] font-bold text-gray-500 truncate leading-tight mt-1">{monthLabel}</p>
+      <span className="text-2xl font-black text-gray-900 leading-none shrink-0 tabular-nums">{count}</span>
     </div>
   );
 }
@@ -558,59 +593,59 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
         </div>
       </div>
 
-      <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-200 flex flex-col lg:flex-row lg:items-stretch gap-3">
-        <select
-          value={effectiveManagerFilter}
-          onChange={(e) => setManagerFilter(e.target.value)}
-          className="px-3 py-2.5 rounded-xl border border-gray-200 text-sm font-medium bg-gray-50 min-w-[180px] shrink-0"
-        >
-          {managerOptions.map((m) => (
-            <option key={m} value={m}>
-              {m === 'Все' ? 'Все менеджеры' : m}
-            </option>
-          ))}
-        </select>
-        <select
-          value={effectiveCategoryFilter}
-          onChange={(e) => setCategoryFilter(e.target.value)}
-          className="px-3 py-2.5 rounded-xl border border-gray-200 text-sm font-medium bg-gray-50 min-w-[180px] shrink-0"
-        >
-          {categoryOptions.map((c) => (
-            <option key={c} value={c}>
-              {c === 'Все' ? 'Все категории' : c}
-            </option>
-          ))}
-        </select>
-        <div className="relative flex-1 min-w-0">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-          <input
-            type="text"
-            placeholder="Поиск..."
-            className="block w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm font-medium bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
+      <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-200 flex flex-col xl:flex-row xl:items-end gap-4">
+        <FilterField label="Менеджер" className="w-full sm:w-[190px] shrink-0">
+          <FilterSelect value={effectiveManagerFilter} onChange={setManagerFilter}>
+            {managerOptions.map((m) => (
+              <option key={m} value={m}>
+                {m === 'Все' ? 'Все менеджеры' : m}
+              </option>
+            ))}
+          </FilterSelect>
+        </FilterField>
+        <FilterField label="Категория" className="w-full sm:w-[190px] shrink-0">
+          <FilterSelect value={effectiveCategoryFilter} onChange={setCategoryFilter}>
+            {categoryOptions.map((c) => (
+              <option key={c} value={c}>
+                {c === 'Все' ? 'Все категории' : c}
+              </option>
+            ))}
+          </FilterSelect>
+        </FilterField>
+        <FilterField label="Поиск" className="flex-1 min-w-0 w-full">
+          <div className="relative">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Поиск по названию..."
+              className={`${FILTER_CONTROL_CLASS} pl-9`}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+        </FilterField>
         {viewMode === 'cohort' && cohortMilestones ? (
-          <div className="flex items-stretch gap-2 shrink-0 self-end">
-            <CohortMilestoneCard
-              title="1 мес."
-              monthLabel={formatRegistryMonthLabel(cohortMilestones.month1.monthKey)}
-              minLabel={`от ${formatMoneyKzt(COHORT_MONTH1_MIN_TURNOVER)} ₸`}
-              count={cohortMilestones.month1.count}
-            />
-            <CohortMilestoneCard
-              title="2 мес."
-              monthLabel={formatRegistryMonthLabel(cohortMilestones.month2.monthKey)}
-              minLabel={`от ${formatMoneyKzt(COHORT_MONTH2_MIN_TURNOVER)} ₸`}
-              count={cohortMilestones.month2.count}
-            />
-            <CohortMilestoneCard
-              title="3 мес."
-              monthLabel={formatRegistryMonthLabel(cohortMilestones.month3.monthKey)}
-              minLabel={`от ${formatMoneyKzt(COHORT_MONTH3_MIN_TURNOVER)} ₸`}
-              count={cohortMilestones.month3.count}
-            />
+          <div className="shrink-0 w-full xl:w-auto">
+            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 text-center">
+              Показатели за период
+            </p>
+            <div className="flex items-stretch gap-2 justify-end xl:justify-start">
+              <CohortMilestoneCard
+                monthLabel={formatRegistryMonthLabel(cohortMilestones.month1.monthKey)}
+                minLabel="от 10 млн ₸"
+                count={cohortMilestones.month1.count}
+              />
+              <CohortMilestoneCard
+                monthLabel={formatRegistryMonthLabel(cohortMilestones.month2.monthKey)}
+                minLabel="от 15 млн ₸"
+                count={cohortMilestones.month2.count}
+              />
+              <CohortMilestoneCard
+                monthLabel={formatRegistryMonthLabel(cohortMilestones.month3.monthKey)}
+                minLabel="от 15 млн ₸"
+                count={cohortMilestones.month3.count}
+              />
+            </div>
           </div>
         ) : null}
       </div>
