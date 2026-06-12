@@ -78,15 +78,15 @@ function CohortMilestoneCard({
   count: number;
 }) {
   return (
-    <div className="w-[108px] shrink-0 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5">
-      <p className="text-[8px] font-black text-gray-400 uppercase tracking-tight leading-tight truncate" title={`${title} · ${monthLabel}`}>
-        {title}
-      </p>
-      <p className="text-[8px] font-bold text-gray-500 truncate leading-tight">{monthLabel}</p>
-      <p className="text-base font-black text-gray-900 leading-none mt-1">{count}</p>
-      <p className="text-[8px] font-bold text-emerald-700 leading-tight mt-0.5 truncate" title={minLabel}>
-        {minLabel}
-      </p>
+    <div
+      className="w-[104px] shrink-0 bg-gray-50 border border-gray-200 rounded-xl px-2.5 py-2.5 flex flex-col justify-center"
+      title={`${title} · ${monthLabel} · ${minLabel}`}
+    >
+      <div className="flex items-center justify-between gap-1 leading-none">
+        <span className="text-[9px] font-black text-gray-500 uppercase truncate">{title}</span>
+        <span className="text-sm font-black text-gray-900 shrink-0">{count}</span>
+      </div>
+      <p className="text-[8px] font-bold text-gray-500 truncate leading-tight mt-1">{monthLabel}</p>
     </div>
   );
 }
@@ -558,7 +558,7 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
         </div>
       </div>
 
-      <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-200 flex flex-col sm:flex-row gap-3 flex-wrap">
+      <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-200 flex flex-col lg:flex-row lg:items-stretch gap-3">
         <select
           value={effectiveManagerFilter}
           onChange={(e) => setManagerFilter(e.target.value)}
@@ -581,18 +581,18 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
             </option>
           ))}
         </select>
-        <div className="relative w-full sm:w-52 md:w-56 shrink-0">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+        <div className="relative flex-1 min-w-0">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
           <input
             type="text"
             placeholder="Поиск..."
-            className="block w-full pl-9 pr-3 py-2 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none"
+            className="block w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm font-medium bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
         {viewMode === 'cohort' && cohortMilestones ? (
-          <>
+          <div className="flex items-stretch gap-2 shrink-0 self-end">
             <CohortMilestoneCard
               title="1 мес."
               monthLabel={formatRegistryMonthLabel(cohortMilestones.month1.monthKey)}
@@ -611,7 +611,7 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
               minLabel={`от ${formatMoneyKzt(COHORT_MONTH3_MIN_TURNOVER)} ₸`}
               count={cohortMilestones.month3.count}
             />
-          </>
+          </div>
         ) : null}
       </div>
 
