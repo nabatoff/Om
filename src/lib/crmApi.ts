@@ -47,6 +47,8 @@ export type UiConducted = {
   cpPaid: boolean;
 };
 export type UiOrder = {
+  /** id строки в crm_confirmed_orders (если загружено из БД). */
+  id?: string;
   entityName: string;
   bin: string;
   /** Юр. лицо, через которое оформлен заказ (из справочника контрагентов). */
@@ -169,6 +171,7 @@ function mapReport(r: ReportRow): FullReport {
       .map((o) => {
         const amts = (o.amounts as number[] | null) || [];
         return {
+          id: o.id,
           entityName: o.entity_name,
           bin: o.bin?.trim() || '',
           viaEntityName: (o.via_entity_name ?? '').trim(),
@@ -641,6 +644,34 @@ export type SaveReportPayload = {
 
 export async function saveReportToDb(payload: SaveReportPayload): Promise<void> {
   const { error } = await getSupabase().rpc('save_crm_report', { payload });
+  if (error) throw error;
+}
+
+export type AdminConfirmedOrderPatch = {
+  entityName: string;
+  bin: string;
+  viaEntityName: string;
+  viaBin: string;
+  orderCount: number;
+  amounts: number[];
+  totalAmount: number;
+};
+
+/** Админ: обновить одну запись подтверждённого заказа без смены менеджера отчёта. */
+export async function adminUpdateConfirmedOrder(orderId: string, patch: AdminConfirmedOrderPatch): Promise<void> {
+  const { error } = await getSupabase().rpc('admin_update_confirmed_order', {
+    p_order_id: orderId,
+    p_payload: patch,
+  });
+  if (error) throw error;
+}
+
+/** Админ: удалить запись подтверждённого заказа. */
+export async function adminDeleteConfirmedOrder(orderId: string): Promise<void> {
+  const { error } = await getSupabase().rpc('admin_update_confirmed_order', {
+    p_order_id: orderId,
+    p_payload: { delete: 'true' },
+  });
   if (error) throw error;
 }
 

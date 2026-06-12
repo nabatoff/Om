@@ -26,6 +26,7 @@ import {
   BarChart2,
   ClipboardCheck,
   BookOpen,
+  Edit2,
 } from 'lucide-react';
 import { adminDateFilterBounds, formatYmdLocal, reportDateMatchesAdminBounds } from './lib/periodBounds';
 import { PeriodFilterFields } from './components/PeriodFilterFields';
@@ -72,6 +73,8 @@ import { buildClientListRows, filterReportsForManager } from './lib/clientCpStat
 import { ClientDirectoryPanel } from './components/ClientDirectoryPanel';
 import { EnsTruCheckPanel } from './components/EnsTruCheckPanel';
 import { SupplierRegistryPanel } from './components/SupplierRegistryPanel';
+import { AdminOrderEditModal } from './components/AdminOrderEditModal';
+import type { OrderRow } from './lib/ordersGrouping';
 import { AdminSettingsPanel } from './components/AdminSettingsPanel';
 import { SalesComparisonDashboard } from './components/SalesComparisonDashboard';
 import {
@@ -236,7 +239,9 @@ const App = () => {
     isKtpApplied?: boolean | null;
     commissionAmount?: number | null;
     sourceOrders?: OrderCommissionFields[];
+    editableOrder?: OrderRow | null;
   }>({ isOpen: false, entity: '', bin: '', viaBin: '', amounts: [], totalAmount: 0 });
+  const [editingOrder, setEditingOrder] = useState<OrderRow | null>(null);
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
   const [newClientData, setNewClientData] = useState<NewClientFormData>(() => emptyNewClientForm());
   const [clientCategories, setClientCategories] = useState<ClientCategory[]>([]);
@@ -963,10 +968,10 @@ const App = () => {
   }, [isAdmin, allReports, ordersFilterManager, ordersFilterDateFrom, ordersFilterDateTo]);
 
   const allOrdersByDateAndManager = useMemo(() => {
-    const orders: (UiOrder & { manager: string; date: string })[] = [];
+    const orders: OrderRow[] = [];
     reportsForOrders.forEach((report) => {
       report.confirmedOrders.forEach((order) => {
-        orders.push({ ...order, manager: report.manager, date: report.date });
+        orders.push({ ...order, manager: report.manager, date: report.date, reportId: report.id });
       });
     });
     return orders;
@@ -1536,8 +1541,10 @@ const App = () => {
                     mrpKztApplied: order.mrpKztApplied,
                     isKtpApplied: order.isKtpApplied,
                     commissionAmount: order.commissionAmount,
+                    editableOrder: isAdmin ? order : null,
                   })
                 }
+                onEditOrder={isAdmin ? (order) => setEditingOrder(order) : undefined}
                 openGroupedOrderDetails={(group) =>
                   setOrderDetailModal({
                     isOpen: true,
@@ -1822,9 +1829,39 @@ const App = () => {
           modal={orderDetailModal}
           isAdmin={isAdmin}
           clientKtpByBin={clientKtpByBin}
+          onEdit={
+            isAdmin && orderDetailModal.editableOrder
+              ? () => {
+                  const row = orderDetailModal.editableOrder!;
+                  setOrderDetailModal({ ...orderDetailModal, isOpen: false });
+                  setEditingOrder(row);
+                }
+              : undefined
+          }
           onClose={() => setOrderDetailModal({ ...orderDetailModal, isOpen: false })}
         />
       )}
+
+      {editingOrder && isAdmin ? (
+        <AdminOrderEditModal
+          order={editingOrder}
+          clients={clients}
+          mrpKzt={mrpKzt}
+          onOpenAddClient={(inputValue, callback) => {
+            const isBin = /^\d{12}$/.test(inputValue.trim());
+            setEditingClientBin(null);
+            setNewClientData({
+              ...emptyNewClientForm(sessionUserId ?? ''),
+              name: isBin ? '' : inputValue,
+              bin: isBin ? inputValue : '',
+            });
+            setOnClientCreatedCallback(() => callback);
+            setIsClientModalOpen(true);
+          }}
+          onSaved={refresh}
+          onClose={() => setEditingOrder(null)}
+        />
+      ) : null}
 
       {clientHistoryFor && (() => {
         const row = visibleClientRows.find((r) => r.bin === clientHistoryFor.bin) ?? clientListRows.find((r) => r.bin === clientHistoryFor.bin);
@@ -3427,9 +3464,10 @@ const OrdersHistoryDashboard = ({
   managerOptions,
   openOrderDetails,
   openGroupedOrderDetails,
+  onEditOrder,
 }: {
   isAdmin: boolean;
-  orders: (UiOrder & { manager: string; date: string })[];
+  orders: OrderRow[];
   groupedOrders: GroupedCounterpartyOrder[];
   viewMode: 'records' | 'byCounterparty';
   setViewMode: SetState<'records' | 'byCounterparty'>;
@@ -3445,8 +3483,9 @@ const OrdersHistoryDashboard = ({
   setFilterCounterparty: SetState<string>;
   counterpartyOptions: string[];
   managerOptions: string[];
-  openOrderDetails: (order: UiOrder & { manager: string; date: string }) => void;
+  openOrderDetails: (order: OrderRow) => void;
   openGroupedOrderDetails: (group: GroupedCounterpartyOrder) => void;
+  onEditOrder?: (order: OrderRow) => void;
 }) => {
   const isGroupedView = isAdmin && viewMode === 'byCounterparty';
   const displayRowCount = isGroupedView ? groupedOrders.length : orders.length;
@@ -3631,6 +3670,7 @@ const OrdersHistoryDashboard = ({
               <th className="py-6 px-4">Заказ через (ЮЛ)</th>
               <th className="py-6 px-4 text-center">Кол-во</th>
               <th className="py-6 px-8 text-right">Сумма</th>
+              {isAdmin && onEditOrder && !isGroupedView ? <th className="py-6 px-4 text-center w-16" /> : null}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
@@ -3694,6 +3734,18 @@ const OrdersHistoryDashboard = ({
                       commission={resolveOrderCommissionTotal(order, clientKtpByBin)}
                       showCommission={isAdmin}
                     />
+                    {isAdmin && onEditOrder ? (
+                      <td className="py-5 px-4 text-center">
+                        <button
+                          type="button"
+                          onClick={() => onEditOrder(order)}
+                          className="inline-flex items-center justify-center w-9 h-9 rounded-xl border border-gray-200 text-gray-500 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50"
+                          title="Редактировать заказ"
+                        >
+                          <Edit2 size={15} />
+                        </button>
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
           </tbody>
@@ -3914,6 +3966,7 @@ const OrderItemsModal = ({
   modal,
   isAdmin,
   clientKtpByBin,
+  onEdit,
   onClose,
 }: {
   modal: {
@@ -3927,9 +3980,11 @@ const OrderItemsModal = ({
     isKtpApplied?: boolean | null;
     commissionAmount?: number | null;
     sourceOrders?: OrderCommissionFields[];
+    editableOrder?: OrderRow | null;
   };
   isAdmin: boolean;
   clientKtpByBin: Map<string, boolean>;
+  onEdit?: () => void;
   onClose: () => void;
 }) => {
   const lineAmounts = orderLineAmounts(modal.amounts, modal.totalAmount);
@@ -3979,9 +4034,21 @@ const OrderItemsModal = ({
               </p>
             ) : null}
           </div>
-          <button type="button" onClick={onClose} className="bg-gray-900 text-white px-8 py-3 rounded-2xl text-xs font-black uppercase shrink-0">
-            Ок
-          </button>
+          <div className="flex flex-wrap gap-2 justify-end">
+            {isAdmin && onEdit ? (
+              <button
+                type="button"
+                onClick={onEdit}
+                className="inline-flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-2xl text-xs font-black uppercase shrink-0 hover:bg-blue-500"
+              >
+                <Edit2 size={14} />
+                Редактировать
+              </button>
+            ) : null}
+            <button type="button" onClick={onClose} className="bg-gray-900 text-white px-8 py-3 rounded-2xl text-xs font-black uppercase shrink-0">
+              Ок
+            </button>
+          </div>
         </div>
       </div>
     </div>

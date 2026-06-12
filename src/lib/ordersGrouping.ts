@@ -1,7 +1,7 @@
 import type { UiOrder } from './crmApi';
 import { orderLineAmounts } from './commission';
 
-export type OrderRow = UiOrder & { manager: string; date: string };
+export type OrderRow = UiOrder & { manager: string; date: string; reportId: string };
 
 export type GroupedCounterpartyOrder = {
   bin: string;

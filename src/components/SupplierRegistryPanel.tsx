@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Building2,
   Calendar,
@@ -60,6 +61,96 @@ type Props = {
   clientKtpByBin: Map<string, boolean>;
   onOpenClient?: (client: UiClient) => void;
 };
+
+type DossierAnchor = {
+  supplier: SupplierRegistryRow;
+  left: number;
+  top: number;
+  above: boolean;
+};
+
+function SupplierDossierPopover({
+  anchor,
+  clientByBin,
+  onOpenClient,
+  onClose,
+  onCancelClose,
+}: {
+  anchor: DossierAnchor;
+  clientByBin: Map<string, UiClient>;
+  onOpenClient?: (client: UiClient) => void;
+  onClose: () => void;
+  onCancelClose: () => void;
+}) {
+  const { supplier, above } = anchor;
+  const left = Math.max(12, Math.min(anchor.left, window.innerWidth - 300));
+
+  return createPortal(
+    <div
+      className="fixed z-[500] w-72 bg-white rounded-2xl shadow-xl border border-gray-100 p-5"
+      style={
+        above
+          ? { left, top: anchor.top, transform: 'translateY(-100%)' }
+          : { left, top: anchor.top }
+      }
+      onMouseEnter={onCancelClose}
+      onMouseLeave={onClose}
+    >
+      <div
+        className={`absolute left-8 w-4 h-4 bg-white rotate-45 ${
+          above
+            ? '-bottom-2 border-b border-r border-gray-100'
+            : '-top-2 border-t border-l border-gray-100'
+        }`}
+      />
+      <div className="relative z-10">
+        <h4 className="font-bold text-gray-800 mb-3 flex items-center justify-between text-sm">
+          Досье
+          {onOpenClient && clientByBin.has(supplier.bin) && (
+            <button
+              type="button"
+              onClick={() => onOpenClient(clientByBin.get(supplier.bin)!)}
+              className="text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center gap-1"
+            >
+              <Edit2 size={12} />
+              Карточка
+            </button>
+          )}
+        </h4>
+        <div className="space-y-2">
+          <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
+            <div className="text-[10px] uppercase font-bold text-gray-400 mb-1 flex items-center gap-1">
+              <Building2 size={12} />
+              Категория
+            </div>
+            <div className="text-sm font-medium text-gray-700">{supplier.categoryName || '—'}</div>
+          </div>
+          <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
+            <div className="text-[10px] uppercase font-bold text-gray-400 mb-1 flex items-center gap-1">
+              <TrendingUp size={12} />
+              Обороты ГЗ (прошлый год)
+            </div>
+            <div className="text-sm font-bold text-emerald-600">
+              {supplier.gzTurnoverPrevYear != null
+                ? `${formatMoneyKzt(supplier.gzTurnoverPrevYear)} ₸`
+                : '—'}
+            </div>
+          </div>
+          <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
+            <div className="text-[10px] uppercase font-bold text-gray-400 mb-1 flex items-center gap-1">
+              <Calendar size={12} />
+              Месяц привлечения
+            </div>
+            <div className="text-sm font-medium text-gray-700">
+              {formatAttractionMonth(supplier.attractionMonth)}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
 
 function RegistryOrderModal({
   data,
@@ -162,6 +253,28 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
   const [cohortMonth, setCohortMonth] = useState(() => monthOptions[0] ?? currentYearMonth());
   const [selectedYear, setSelectedYear] = useState(() => yearOptions[0] ?? new Date().getFullYear());
   const [modalData, setModalData] = useState<RegistryMonthModalData | null>(null);
+  const [dossierAnchor, setDossierAnchor] = useState<DossierAnchor | null>(null);
+  const dossierHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const cancelHideDossier = () => {
+    if (dossierHideTimer.current) clearTimeout(dossierHideTimer.current);
+  };
+
+  const scheduleHideDossier = () => {
+    cancelHideDossier();
+    dossierHideTimer.current = setTimeout(() => setDossierAnchor(null), 120);
+  };
+
+  useEffect(() => {
+    if (!dossierAnchor) return;
+    const hide = () => setDossierAnchor(null);
+    window.addEventListener('scroll', hide, true);
+    window.addEventListener('resize', hide);
+    return () => {
+      window.removeEventListener('scroll', hide, true);
+      window.removeEventListener('resize', hide);
+    };
+  }, [dossierAnchor]);
 
   const effectiveCohortMonth = monthOptions.includes(cohortMonth) ? cohortMonth : (monthOptions[0] ?? currentYearMonth());
   const effectiveYear = yearOptions.includes(selectedYear) ? selectedYear : (yearOptions[0] ?? new Date().getFullYear());
@@ -360,8 +473,7 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden text-left">
-        <div className="overflow-x-auto overflow-y-clip">
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-x-auto text-left">
           <table className="w-full text-left border-collapse min-w-[1100px]">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
@@ -428,7 +540,23 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
 
                 return (
                   <tr key={supplier.bin} className="hover:bg-gray-50/80 transition-colors">
-                    <td className="p-4 relative group/company">
+                    <td
+                      className="p-4"
+                      onMouseEnter={(e) => {
+                        cancelHideDossier();
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        const spaceAbove = rect.top;
+                        const spaceBelow = window.innerHeight - rect.bottom;
+                        const above = spaceAbove >= 300 || spaceAbove >= spaceBelow;
+                        setDossierAnchor({
+                          supplier,
+                          left: rect.left + 56,
+                          top: above ? rect.top - 8 : rect.bottom + 8,
+                          above,
+                        });
+                      }}
+                      onMouseLeave={scheduleHideDossier}
+                    >
                       <div className="flex items-center">
                         <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold mr-3 shrink-0">
                           {supplier.name.charAt(0) || '?'}
@@ -439,54 +567,6 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
                           {supplier.categoryName && (
                             <div className="text-xs text-gray-500 mt-0.5">{supplier.categoryName}</div>
                           )}
-                        </div>
-                      </div>
-
-                      <div className="absolute left-14 bottom-full mb-2 z-50 w-72 bg-white rounded-2xl shadow-xl border border-gray-100 p-5 hidden group-hover/company:block pointer-events-none group-hover/company:pointer-events-auto">
-                        <div className="absolute -bottom-2 left-8 w-4 h-4 bg-white border-b border-r border-gray-100 rotate-45" />
-                        <div className="relative z-10">
-                          <h4 className="font-bold text-gray-800 mb-3 flex items-center justify-between text-sm">
-                            Досье
-                            {onOpenClient && clientByBin.has(supplier.bin) && (
-                              <button
-                                type="button"
-                                onClick={() => onOpenClient(clientByBin.get(supplier.bin)!)}
-                                className="text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 pointer-events-auto"
-                              >
-                                <Edit2 size={12} />
-                                Карточка
-                              </button>
-                            )}
-                          </h4>
-                          <div className="space-y-2">
-                            <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
-                              <div className="text-[10px] uppercase font-bold text-gray-400 mb-1 flex items-center gap-1">
-                                <Building2 size={12} />
-                                Категория
-                              </div>
-                              <div className="text-sm font-medium text-gray-700">{supplier.categoryName || '—'}</div>
-                            </div>
-                            <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
-                              <div className="text-[10px] uppercase font-bold text-gray-400 mb-1 flex items-center gap-1">
-                                <TrendingUp size={12} />
-                                Обороты ГЗ (прошлый год)
-                              </div>
-                              <div className="text-sm font-bold text-emerald-600">
-                                {supplier.gzTurnoverPrevYear != null
-                                  ? `${formatMoneyKzt(supplier.gzTurnoverPrevYear)} ₸`
-                                  : '—'}
-                              </div>
-                            </div>
-                            <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
-                              <div className="text-[10px] uppercase font-bold text-gray-400 mb-1 flex items-center gap-1">
-                                <Calendar size={12} />
-                                Месяц привлечения
-                              </div>
-                              <div className="text-sm font-medium text-gray-700">
-                                {formatAttractionMonth(supplier.attractionMonth)}
-                              </div>
-                            </div>
-                          </div>
                         </div>
                       </div>
                     </td>
@@ -564,8 +644,17 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
               )}
             </tbody>
           </table>
-        </div>
       </div>
+
+      {dossierAnchor ? (
+        <SupplierDossierPopover
+          anchor={dossierAnchor}
+          clientByBin={clientByBin}
+          onOpenClient={onOpenClient}
+          onClose={scheduleHideDossier}
+          onCancelClose={cancelHideDossier}
+        />
+      ) : null}
 
       <RegistryOrderModal data={modalData} clientKtpByBin={clientKtpByBin} onClose={() => setModalData(null)} />
     </div>
