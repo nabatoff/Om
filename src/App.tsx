@@ -25,6 +25,7 @@ import {
   Settings,
   BarChart2,
   ClipboardCheck,
+  BookOpen,
 } from 'lucide-react';
 import { adminDateFilterBounds, formatYmdLocal, reportDateMatchesAdminBounds } from './lib/periodBounds';
 import { PeriodFilterFields } from './components/PeriodFilterFields';
@@ -70,6 +71,7 @@ import { buildClientCrmHistory } from './lib/crmClientHistory';
 import { buildClientListRows, filterReportsForManager } from './lib/clientCpStats';
 import { ClientDirectoryPanel } from './components/ClientDirectoryPanel';
 import { EnsTruCheckPanel } from './components/EnsTruCheckPanel';
+import { SupplierRegistryPanel } from './components/SupplierRegistryPanel';
 import { AdminSettingsPanel } from './components/AdminSettingsPanel';
 import { SalesComparisonDashboard } from './components/SalesComparisonDashboard';
 import {
@@ -149,7 +151,7 @@ const LS_ADMIN_SUBVIEW = 'om.adminSubView';
 const LS_MANAGER_ORDERS_SECTION = 'om.managerOrdersSection';
 const LS_CLIENTS_ORDERS_SUBVIEW = 'om.clientsOrdersSubView';
 
-type CurrentView = 'manager' | 'admin' | 'orders' | 'clients' | 'clientsOrders' | 'ensTru';
+type CurrentView = 'manager' | 'admin' | 'orders' | 'clients' | 'clientsOrders' | 'registry' | 'ensTru';
 type ClientsOrdersSubView = 'clients' | 'orders';
 
 function getSavedCurrentView(): CurrentView {
@@ -159,6 +161,7 @@ function getSavedCurrentView(): CurrentView {
     raw === 'orders' ||
     raw === 'clients' ||
     raw === 'clientsOrders' ||
+    raw === 'registry' ||
     raw === 'ensTru'
   ) {
     return raw;
@@ -352,6 +355,9 @@ const App = () => {
     }
     if (!isAdmin && currentView === 'clientsOrders') {
       setCurrentView('clients');
+    }
+    if (!isAdmin && currentView === 'registry') {
+      setCurrentView('manager');
     }
     if (isAdmin && currentView === 'clients') {
       setCurrentView('clientsOrders');
@@ -1137,7 +1143,17 @@ const App = () => {
                   <Users size={14} />
                   <ShoppingBag size={14} /> КЛИЕНТЫ И ЗАКАЗЫ
                 </button>
-              ) : (
+              ) : null}
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={() => setCurrentView('registry')}
+                  className={`flex-1 md:flex-none min-w-[120px] sm:min-w-0 flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all ${currentView === 'registry' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  <BookOpen size={14} /> РЕЕСТР
+                </button>
+              )}
+              {!isAdmin && (
                 <>
                   <button
                     type="button"
@@ -1368,6 +1384,15 @@ const App = () => {
               />
             )}
           </div>
+        )}
+
+        {isAdmin && currentView === 'registry' && (
+          <SupplierRegistryPanel
+            clients={clients}
+            reports={allReports}
+            clientKtpByBin={clientKtpByBin}
+            onOpenClient={(c) => setClientHistoryFor(c)}
+          />
         )}
 
         {!isAdmin && currentView === 'ensTru' && <EnsTruCheckPanel />}
