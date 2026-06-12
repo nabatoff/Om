@@ -360,7 +360,8 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-x-auto text-left">
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden text-left">
+        <div className="overflow-x-auto overflow-y-clip">
           <table className="w-full text-left border-collapse min-w-[1100px]">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
@@ -441,8 +442,8 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
                         </div>
                       </div>
 
-                      <div className="absolute left-14 top-[75%] z-50 w-72 bg-white rounded-2xl shadow-xl border border-gray-100 p-5 opacity-0 invisible group-hover/company:opacity-100 group-hover/company:visible transition-all duration-200 pointer-events-none group-hover/company:pointer-events-auto">
-                        <div className="absolute -top-2 left-8 w-4 h-4 bg-white border-t border-l border-gray-100 rotate-45" />
+                      <div className="absolute left-14 bottom-full mb-2 z-50 w-72 bg-white rounded-2xl shadow-xl border border-gray-100 p-5 hidden group-hover/company:block pointer-events-none group-hover/company:pointer-events-auto">
+                        <div className="absolute -bottom-2 left-8 w-4 h-4 bg-white border-b border-r border-gray-100 rotate-45" />
                         <div className="relative z-10">
                           <h4 className="font-bold text-gray-800 mb-3 flex items-center justify-between text-sm">
                             Досье
@@ -563,6 +564,7 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
               )}
             </tbody>
           </table>
+        </div>
       </div>
 
       <RegistryOrderModal data={modalData} clientKtpByBin={clientKtpByBin} onClose={() => setModalData(null)} />
