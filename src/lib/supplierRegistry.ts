@@ -83,16 +83,14 @@ export function hasOrdersInYear(row: SupplierRegistryRow, year: number): boolean
   return monthsInYear(year).some((ym) => (row.ordersByMonth[ym]?.length ?? 0) > 0);
 }
 
+/** Месяцы для когорты «Старт»: только месяцы первого подтверждённого заказа. */
 export function collectRegistryMonthOptions(rows: SupplierRegistryRow[]): string[] {
   const set = new Set<string>();
   for (const row of rows) {
     if (row.firstOrderMonth) set.add(row.firstOrderMonth);
-    for (const ym of Object.keys(row.ordersByMonth)) {
-      if (row.ordersByMonth[ym]?.length) set.add(ym);
-    }
-    if (row.attractionMonth) set.add(row.attractionMonth.slice(0, 7));
   }
-  return Array.from(set).sort();
+  if (set.size === 0) return [currentYearMonth()];
+  return Array.from(set).sort((a, b) => b.localeCompare(a));
 }
 
 export function collectRegistryYears(rows: SupplierRegistryRow[]): number[] {
