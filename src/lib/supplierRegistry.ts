@@ -195,6 +195,52 @@ export function countOrderLinesInMonth(orders: RegistryOrderLine[]): number {
   return orders.reduce((sum, o) => sum + o.amounts.length, 0);
 }
 
+export const COHORT_MONTH1_MIN_TURNOVER = 10_000_000;
+export const COHORT_MONTH2_MIN_TURNOVER = 15_000_000;
+export const COHORT_MONTH3_MIN_TURNOVER = 15_000_000;
+
+export type CohortMilestoneCounts = {
+  month1: { count: number; monthKey: string; minTurnover: number };
+  month2: { count: number; monthKey: string; minTurnover: number };
+  month3: { count: number; monthKey: string; minTurnover: number };
+};
+
+export function countCohortSuppliersAboveTurnover(
+  rows: SupplierRegistryRow[],
+  cohortStartMonth: string,
+  monthOffset: 0 | 1 | 2,
+  minTurnover: number,
+): number {
+  const monthKey = addCalendarMonths(cohortStartMonth, monthOffset);
+  return rows.filter((row) => {
+    if (row.firstOrderMonth !== cohortStartMonth) return false;
+    return sumMonthAmount(row.ordersByMonth[monthKey] ?? []) >= minTurnover;
+  }).length;
+}
+
+export function buildCohortMilestoneCounts(
+  rows: SupplierRegistryRow[],
+  cohortStartMonth: string,
+): CohortMilestoneCounts {
+  return {
+    month1: {
+      count: countCohortSuppliersAboveTurnover(rows, cohortStartMonth, 0, COHORT_MONTH1_MIN_TURNOVER),
+      monthKey: cohortStartMonth,
+      minTurnover: COHORT_MONTH1_MIN_TURNOVER,
+    },
+    month2: {
+      count: countCohortSuppliersAboveTurnover(rows, cohortStartMonth, 1, COHORT_MONTH2_MIN_TURNOVER),
+      monthKey: addCalendarMonths(cohortStartMonth, 1),
+      minTurnover: COHORT_MONTH2_MIN_TURNOVER,
+    },
+    month3: {
+      count: countCohortSuppliersAboveTurnover(rows, cohortStartMonth, 2, COHORT_MONTH3_MIN_TURNOVER),
+      monthKey: addCalendarMonths(cohortStartMonth, 2),
+      minTurnover: COHORT_MONTH3_MIN_TURNOVER,
+    },
+  };
+}
+
 export function sumDisplayedMonthsAmount(row: SupplierRegistryRow, months: string[]): number {
   let total = 0;
   for (const month of months) {

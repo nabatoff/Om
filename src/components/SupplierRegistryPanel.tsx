@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Building2,
@@ -6,7 +6,6 @@ import {
   ChevronDown,
   ChevronUp,
   Download,
-  Edit2,
   List,
   Search,
   TrendingUp,
@@ -17,7 +16,11 @@ import type { FullReport, UiClient } from '../lib/crmApi';
 import { formatMoneyKzt } from '../lib/commission';
 import {
   addCalendarMonths,
+  buildCohortMilestoneCounts,
   buildSupplierRegistryRows,
+  COHORT_MONTH1_MIN_TURNOVER,
+  COHORT_MONTH2_MIN_TURNOVER,
+  COHORT_MONTH3_MIN_TURNOVER,
   collectRegistryMonthOptions,
   collectRegistryYears,
   countOrderLinesInMonth,
@@ -45,6 +48,28 @@ function normalizeSearchText(value: string): string {
     .replace(/[«»"'`]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function CohortMilestoneCard({
+  title,
+  monthLabel,
+  minLabel,
+  count,
+}: {
+  title: string;
+  monthLabel: string;
+  minLabel: string;
+  count: number;
+}) {
+  return (
+    <div className="flex-1 min-w-[140px] sm:min-w-[155px] bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5">
+      <p className="text-[10px] font-black text-gray-400 uppercase tracking-wide">
+        {title} · {monthLabel}
+      </p>
+      <p className="text-xl font-black text-gray-900 leading-tight mt-0.5">{count}</p>
+      <p className="text-[9px] font-bold text-emerald-700 mt-0.5">{minLabel}</p>
+    </div>
+  );
 }
 
 function matchesSupplierSearch(row: SupplierRegistryRow, rawQuery: string): boolean {
@@ -75,21 +100,7 @@ type DossierAnchor = {
 const DOSSIER_W = 288;
 const DOSSIER_H = 300;
 
-function SupplierDossierPopover({
-  anchor,
-  clientByBin,
-  onOpenClient,
-  onDismiss,
-  onPointerEnter,
-  onPointerLeave,
-}: {
-  anchor: DossierAnchor;
-  clientByBin: Map<string, UiClient>;
-  onOpenClient?: (client: UiClient) => void;
-  onDismiss: () => void;
-  onPointerEnter: () => void;
-  onPointerLeave: () => void;
-}) {
+function SupplierDossierPopover({ anchor }: { anchor: DossierAnchor }) {
   const { supplier, placement } = anchor;
   const left =
     placement === 'right'
@@ -105,10 +116,8 @@ function SupplierDossierPopover({
 
   return createPortal(
     <div
-      className="fixed z-[500] w-72 bg-white rounded-2xl shadow-xl border border-gray-100 p-5"
+      className="fixed z-[500] w-72 bg-white rounded-2xl shadow-xl border border-gray-100 p-5 pointer-events-none"
       style={style}
-      onMouseEnter={onPointerEnter}
-      onMouseLeave={onPointerLeave}
     >
       <div
         className={`absolute w-4 h-4 bg-white rotate-45 ${
@@ -120,22 +129,7 @@ function SupplierDossierPopover({
         }`}
       />
       <div className="relative z-10">
-        <h4 className="font-bold text-gray-800 mb-3 flex items-center justify-between text-sm">
-          Досье
-          {onOpenClient && clientByBin.has(supplier.bin) && (
-            <button
-              type="button"
-              onClick={() => {
-                onDismiss();
-                onOpenClient(clientByBin.get(supplier.bin)!);
-              }}
-              className="text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center gap-1"
-            >
-              <Edit2 size={12} />
-              Карточка
-            </button>
-          )}
-        </h4>
+        <h4 className="font-bold text-gray-800 mb-3 text-sm">Досье</h4>
         <div className="space-y-2">
           <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
             <div className="text-[10px] uppercase font-bold text-gray-400 mb-1 flex items-center gap-1">
@@ -274,51 +268,21 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
   const [selectedYear, setSelectedYear] = useState(() => yearOptions[0] ?? new Date().getFullYear());
   const [modalData, setModalData] = useState<RegistryMonthModalData | null>(null);
   const [dossierAnchor, setDossierAnchor] = useState<DossierAnchor | null>(null);
-  const dossierHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const dossierOverPopoverRef = useRef(false);
 
-  const dismissDossier = () => {
-    cancelHideDossier();
-    dossierOverPopoverRef.current = false;
-    setDossierAnchor(null);
-  };
-
-  const cancelHideDossier = () => {
-    if (dossierHideTimer.current) clearTimeout(dossierHideTimer.current);
-    dossierHideTimer.current = null;
-  };
-
-  const scheduleHideDossier = () => {
-    cancelHideDossier();
-    dossierHideTimer.current = setTimeout(() => {
-      if (!dossierOverPopoverRef.current) dismissDossier();
-    }, 250);
-  };
-
-  const showDossierFromCell = (supplier: SupplierRegistryRow, cell: HTMLElement) => {
-    cancelHideDossier();
-    if (dossierAnchor && dossierAnchor.supplier.bin !== supplier.bin) return;
-
-    const rect = cell.getBoundingClientRect();
-    const spaceRight = window.innerWidth - rect.right;
-    let placement: DossierPlacement = 'right';
-    let left = rect.right + 8;
-    let top = Math.max(12, Math.min(rect.top, window.innerHeight - DOSSIER_H - 12));
-
-    if (spaceRight < DOSSIER_W + 16) {
-      const spaceAbove = rect.top;
-      const spaceBelow = window.innerHeight - rect.bottom;
-      placement = spaceAbove >= DOSSIER_H || spaceAbove >= spaceBelow ? 'above' : 'below';
-      left = rect.left + 56;
-      top = placement === 'above' ? rect.top - 8 : rect.bottom + 8;
-    }
-
+  const showDossierFromName = (supplier: SupplierRegistryRow, nameEl: HTMLElement) => {
+    const rect = nameEl.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    const placement: DossierPlacement =
+      spaceBelow >= DOSSIER_H + 12 || spaceBelow >= spaceAbove ? 'below' : 'above';
+    const left = Math.max(12, Math.min(rect.left, window.innerWidth - DOSSIER_W - 12));
+    const top = placement === 'below' ? rect.bottom + 8 : rect.top - 8;
     setDossierAnchor({ supplier, left, top, placement });
   };
 
   useEffect(() => {
     if (!dossierAnchor) return;
-    const hide = () => dismissDossier();
+    const hide = () => setDossierAnchor(null);
     window.addEventListener('scroll', hide, true);
     window.addEventListener('resize', hide);
     return () => {
@@ -355,6 +319,32 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
   }, [rows]);
 
   const effectiveCategoryFilter = categoryOptions.includes(categoryFilter) ? categoryFilter : 'Все';
+
+  const cohortStatsRows = useMemo(() => {
+    return rows.filter((row) => {
+      if (row.firstOrderMonth !== effectiveCohortMonth) return false;
+      if (effectiveManagerFilter !== 'Все') {
+        if (effectiveManagerFilter === 'Не назначен') {
+          if (row.managerName) return false;
+        } else if (row.managerName !== effectiveManagerFilter) {
+          return false;
+        }
+      }
+      if (effectiveCategoryFilter !== 'Все') {
+        if (effectiveCategoryFilter === 'Без категории') {
+          if (row.categoryName) return false;
+        } else if (row.categoryName !== effectiveCategoryFilter) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [rows, effectiveCohortMonth, effectiveManagerFilter, effectiveCategoryFilter]);
+
+  const cohortMilestones = useMemo(() => {
+    if (viewMode !== 'cohort') return null;
+    return buildCohortMilestoneCounts(cohortStatsRows, effectiveCohortMonth);
+  }, [viewMode, cohortStatsRows, effectiveCohortMonth]);
 
   const displayedMonths = useMemo(() => {
     if (viewMode === 'cohort') {
@@ -564,16 +554,38 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
             </option>
           ))}
         </select>
-        <div className="relative flex-1 min-w-[220px]">
-          <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+        <div className="relative w-full sm:w-52 md:w-56 shrink-0">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
-            placeholder="Поиск по названию или БИН..."
-            className="block w-full pl-10 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none"
+            placeholder="Поиск..."
+            className="block w-full pl-9 pr-3 py-2 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
+        {viewMode === 'cohort' && cohortMilestones ? (
+          <>
+            <CohortMilestoneCard
+              title="1 мес."
+              monthLabel={formatRegistryMonthLabel(cohortMilestones.month1.monthKey)}
+              minLabel={`от ${formatMoneyKzt(COHORT_MONTH1_MIN_TURNOVER)} ₸`}
+              count={cohortMilestones.month1.count}
+            />
+            <CohortMilestoneCard
+              title="2 мес."
+              monthLabel={formatRegistryMonthLabel(cohortMilestones.month2.monthKey)}
+              minLabel={`от ${formatMoneyKzt(COHORT_MONTH2_MIN_TURNOVER)} ₸`}
+              count={cohortMilestones.month2.count}
+            />
+            <CohortMilestoneCard
+              title="3 мес."
+              monthLabel={formatRegistryMonthLabel(cohortMilestones.month3.monthKey)}
+              minLabel={`от ${formatMoneyKzt(COHORT_MONTH3_MIN_TURNOVER)} ₸`}
+              count={cohortMilestones.month3.count}
+            />
+          </>
+        ) : null}
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-x-auto text-left">
@@ -649,17 +661,35 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
 
                 return (
                   <tr key={supplier.bin} className="hover:bg-gray-50/80 transition-colors">
-                    <td
-                      className="p-4"
-                      onMouseEnter={(e) => showDossierFromCell(supplier, e.currentTarget)}
-                      onMouseLeave={scheduleHideDossier}
-                    >
+                    <td className="p-4">
                       <div className="flex items-center">
                         <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold mr-3 shrink-0">
                           {supplier.name.charAt(0) || '?'}
                         </div>
                         <div>
-                          <div className="font-bold text-gray-800 text-sm">{supplier.name}</div>
+                          <div
+                            className={`font-bold text-sm ${
+                              onOpenClient && clientByBin.has(supplier.bin)
+                                ? 'text-gray-800 hover:text-blue-600 cursor-pointer'
+                                : 'text-gray-800'
+                            }`}
+                            onMouseEnter={(e) => showDossierFromName(supplier, e.currentTarget)}
+                            onMouseLeave={() => setDossierAnchor(null)}
+                            onClick={() => {
+                              const client = clientByBin.get(supplier.bin);
+                              if (onOpenClient && client) {
+                                setDossierAnchor(null);
+                                onOpenClient(client);
+                              }
+                            }}
+                            title={
+                              onOpenClient && clientByBin.has(supplier.bin)
+                                ? 'Наведите для досье, клик — карточка'
+                                : undefined
+                            }
+                          >
+                            {supplier.name}
+                          </div>
                           <div className="text-[11px] text-gray-400 font-mono mt-0.5">БИН: {supplier.bin}</div>
                           {supplier.categoryName && (
                             <div className="text-xs text-gray-500 mt-0.5">{supplier.categoryName}</div>
@@ -743,22 +773,7 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
           </table>
       </div>
 
-      {dossierAnchor ? (
-        <SupplierDossierPopover
-          anchor={dossierAnchor}
-          clientByBin={clientByBin}
-          onOpenClient={onOpenClient}
-          onDismiss={dismissDossier}
-          onPointerEnter={() => {
-            dossierOverPopoverRef.current = true;
-            cancelHideDossier();
-          }}
-          onPointerLeave={() => {
-            dossierOverPopoverRef.current = false;
-            scheduleHideDossier();
-          }}
-        />
-      ) : null}
+      {dossierAnchor ? <SupplierDossierPopover anchor={dossierAnchor} /> : null}
 
       <RegistryOrderModal data={modalData} clientKtpByBin={clientKtpByBin} onClose={() => setModalData(null)} />
     </div>
