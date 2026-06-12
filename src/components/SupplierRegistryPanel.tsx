@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
   Building2,
+  Calendar,
   ChevronDown,
   ChevronUp,
   Download,
@@ -10,6 +11,7 @@ import {
   TrendingUp,
   X,
 } from 'lucide-react';
+import { formatAttractionMonth } from '../lib/clientProfile';
 import type { FullReport, UiClient } from '../lib/crmApi';
 import { formatMoneyKzt } from '../lib/commission';
 import {
@@ -23,6 +25,7 @@ import {
   exportSupplierRegistryCsv,
   formatRegistryMonthLabel,
   formatRegistryMoney,
+  hasOrdersInYear,
   monthsInYear,
   sumMonthAmount,
   sumMonthCommission,
@@ -32,6 +35,24 @@ import {
 
 type SortKey = 'name' | 'managerName' | 'monthsWithUs';
 type ViewMode = 'cohort' | 'year';
+
+function normalizeSearchText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/ё/g, 'е')
+    .replace(/[«»"'`]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function matchesSupplierSearch(row: SupplierRegistryRow, rawQuery: string): boolean {
+  const textQuery = normalizeSearchText(rawQuery);
+  const digitsQuery = rawQuery.replace(/\D/g, '');
+  if (!textQuery && !digitsQuery) return true;
+  const nameMatch = textQuery ? normalizeSearchText(row.name).includes(textQuery) : false;
+  const binMatch = digitsQuery ? row.bin.replace(/\D/g, '').includes(digitsQuery) : false;
+  return nameMatch || binMatch;
+}
 
 type Props = {
   clients: UiClient[];
@@ -132,6 +153,7 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
   const yearOptions = useMemo(() => collectRegistryYears(rows), [rows]);
 
   const [searchTerm, setSearchTerm] = useState('');
+  const [managerFilter, setManagerFilter] = useState('Все');
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' }>({
     key: 'name',
     direction: 'asc',
@@ -144,6 +166,19 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
   const effectiveCohortMonth = monthOptions.includes(cohortMonth) ? cohortMonth : (monthOptions[0] ?? currentYearMonth());
   const effectiveYear = yearOptions.includes(selectedYear) ? selectedYear : (yearOptions[0] ?? new Date().getFullYear());
 
+  const managerOptions = useMemo(() => {
+    const names = new Set<string>();
+    let hasUnassigned = false;
+    for (const row of rows) {
+      if (row.managerName) names.add(row.managerName);
+      else hasUnassigned = true;
+    }
+    const sorted = Array.from(names).sort((a, b) => a.localeCompare(b, 'ru'));
+    return ['Все', ...(hasUnassigned ? ['Не назначен'] : []), ...sorted];
+  }, [rows]);
+
+  const effectiveManagerFilter = managerOptions.includes(managerFilter) ? managerFilter : 'Все';
+
   const displayedMonths = useMemo(() => {
     if (viewMode === 'cohort') {
       return [effectiveCohortMonth, addCalendarMonths(effectiveCohortMonth, 1), addCalendarMonths(effectiveCohortMonth, 2)];
@@ -152,17 +187,24 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
   }, [viewMode, effectiveCohortMonth, effectiveYear]);
 
   const filteredRows = useMemo(() => {
-    const q = searchTerm.trim().toLowerCase();
-    const qDigits = q.replace(/\D/g, '');
+    const q = searchTerm.trim();
+    const hasSearch = Boolean(normalizeSearchText(q) || q.replace(/\D/g, ''));
 
     let list = rows.filter((row) => {
-      const matchesSearch =
-        !q ||
-        row.name.toLowerCase().includes(q) ||
-        row.bin.includes(qDigits) ||
-        (row.managerName ?? '').toLowerCase().includes(q);
-      if (!matchesSearch) return false;
-      if (viewMode === 'cohort') {
+      if (!matchesSupplierSearch(row, q)) return false;
+
+      if (effectiveManagerFilter !== 'Все') {
+        if (effectiveManagerFilter === 'Не назначен') {
+          if (row.managerName) return false;
+        } else if (row.managerName !== effectiveManagerFilter) {
+          return false;
+        }
+      }
+
+      if (viewMode === 'year') {
+        return hasOrdersInYear(row, effectiveYear);
+      }
+      if (!hasSearch) {
         return row.firstOrderMonth === effectiveCohortMonth;
       }
       return true;
@@ -185,7 +227,7 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
     });
 
     return list;
-  }, [rows, searchTerm, viewMode, effectiveCohortMonth, sortConfig]);
+  }, [rows, searchTerm, viewMode, effectiveCohortMonth, effectiveYear, effectiveManagerFilter, sortConfig]);
 
   const handleSort = (key: SortKey) => {
     setSortConfig((prev) => ({
@@ -294,12 +336,23 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
         </div>
       </div>
 
-      <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-200">
-        <div className="relative max-w-md">
+      <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-200 flex flex-col sm:flex-row gap-3">
+        <select
+          value={effectiveManagerFilter}
+          onChange={(e) => setManagerFilter(e.target.value)}
+          className="px-3 py-2.5 rounded-xl border border-gray-200 text-sm font-medium bg-gray-50 min-w-[180px] shrink-0"
+        >
+          {managerOptions.map((m) => (
+            <option key={m} value={m}>
+              {m === 'Все' ? 'Все менеджеры' : m}
+            </option>
+          ))}
+        </select>
+        <div className="relative flex-1 min-w-0">
           <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
-            placeholder="Поиск по названию, БИН или менеджеру..."
+            placeholder="Поиск по названию или БИН..."
             className="block w-full pl-10 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -307,8 +360,7 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 min-h-[60vh] overflow-hidden">
-        <div className="overflow-x-auto pb-8">
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-x-auto text-left">
           <table className="w-full text-left border-collapse min-w-[1100px]">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
@@ -424,6 +476,15 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
                                   : '—'}
                               </div>
                             </div>
+                            <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
+                              <div className="text-[10px] uppercase font-bold text-gray-400 mb-1 flex items-center gap-1">
+                                <Calendar size={12} />
+                                Месяц привлечения
+                              </div>
+                              <div className="text-sm font-medium text-gray-700">
+                                {formatAttractionMonth(supplier.attractionMonth)}
+                              </div>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -502,7 +563,6 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
               )}
             </tbody>
           </table>
-        </div>
       </div>
 
       <RegistryOrderModal data={modalData} clientKtpByBin={clientKtpByBin} onClose={() => setModalData(null)} />

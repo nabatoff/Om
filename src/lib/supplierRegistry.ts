@@ -79,6 +79,10 @@ export function monthsInYear(year: number): string[] {
   return Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`);
 }
 
+export function hasOrdersInYear(row: SupplierRegistryRow, year: number): boolean {
+  return monthsInYear(year).some((ym) => (row.ordersByMonth[ym]?.length ?? 0) > 0);
+}
+
 export function collectRegistryMonthOptions(rows: SupplierRegistryRow[]): string[] {
   const set = new Set<string>();
   for (const row of rows) {
@@ -93,12 +97,17 @@ export function collectRegistryMonthOptions(rows: SupplierRegistryRow[]): string
 
 export function collectRegistryYears(rows: SupplierRegistryRow[]): number[] {
   const set = new Set<number>();
-  for (const ym of collectRegistryMonthOptions(rows)) {
-    const y = parseYearMonth(ym)?.year;
-    if (y) set.add(y);
+  for (const row of rows) {
+    for (const [ym, orders] of Object.entries(row.ordersByMonth)) {
+      if (orders.length > 0) {
+        const y = parseYearMonth(ym)?.year;
+        if (y) set.add(y);
+      }
+    }
   }
-  const now = new Date().getFullYear();
-  set.add(now);
+  if (set.size === 0) {
+    set.add(new Date().getFullYear());
+  }
   return Array.from(set).sort((a, b) => b - a);
 }
 
