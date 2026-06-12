@@ -38,8 +38,24 @@ import {
   type SupplierRegistryRow,
 } from '../lib/supplierRegistry';
 
-type SortKey = 'name' | 'managerName' | 'monthsWithUs' | 'totalTurnover';
+type SortKey = 'name' | 'managerName' | 'monthsWithUs' | 'totalOrders' | 'totalTurnover' | `month:${string}`;
 type ViewMode = 'cohort' | 'year';
+
+function monthSortKey(monthKey: string): SortKey {
+  return `month:${monthKey}`;
+}
+
+function isMonthSortKey(key: SortKey): key is `month:${string}` {
+  return key.startsWith('month:');
+}
+
+function totalOrderLinesInMonths(row: SupplierRegistryRow, months: string[]): number {
+  let total = 0;
+  for (const month of months) {
+    total += countOrderLinesInMonth(row.ordersByMonth[month] ?? []);
+  }
+  return total;
+}
 
 function normalizeSearchText(value: string): string {
   return value
@@ -62,12 +78,15 @@ function CohortMilestoneCard({
   count: number;
 }) {
   return (
-    <div className="flex-1 min-w-[140px] sm:min-w-[155px] bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5">
-      <p className="text-[10px] font-black text-gray-400 uppercase tracking-wide">
-        {title} · {monthLabel}
+    <div className="w-[108px] shrink-0 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5">
+      <p className="text-[8px] font-black text-gray-400 uppercase tracking-tight leading-tight truncate" title={`${title} · ${monthLabel}`}>
+        {title}
       </p>
-      <p className="text-xl font-black text-gray-900 leading-tight mt-0.5">{count}</p>
-      <p className="text-[9px] font-bold text-emerald-700 mt-0.5">{minLabel}</p>
+      <p className="text-[8px] font-bold text-gray-500 truncate leading-tight">{monthLabel}</p>
+      <p className="text-base font-black text-gray-900 leading-none mt-1">{count}</p>
+      <p className="text-[8px] font-bold text-emerald-700 leading-tight mt-0.5 truncate" title={minLabel}>
+        {minLabel}
+      </p>
     </div>
   );
 }
@@ -390,9 +409,16 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
       let av: string | number | null;
       let bv: string | number | null;
 
-      if (key === 'totalTurnover') {
+      if (isMonthSortKey(key)) {
+        const monthKey = key.slice(6);
+        av = sumMonthAmount(a.ordersByMonth[monthKey] ?? []);
+        bv = sumMonthAmount(b.ordersByMonth[monthKey] ?? []);
+      } else if (key === 'totalTurnover') {
         av = sumDisplayedMonthsAmount(a, displayedMonths);
         bv = sumDisplayedMonthsAmount(b, displayedMonths);
+      } else if (key === 'totalOrders') {
+        av = totalOrderLinesInMonths(a, displayedMonths);
+        bv = totalOrderLinesInMonths(b, displayedMonths);
       } else if (key === 'managerName') {
         av = a.managerName ?? '';
         bv = b.managerName ?? '';
@@ -427,7 +453,8 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
       if (prev.key === key) {
         return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
       }
-      return { key, direction: key === 'totalTurnover' ? 'desc' : 'asc' };
+      const descFirst = key === 'totalTurnover' || key === 'totalOrders' || isMonthSortKey(key);
+      return { key, direction: descFirst ? 'desc' : 'asc' };
     });
   };
 
@@ -622,13 +649,23 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
                 {displayedMonths.map((month) => (
                   <th
                     key={month}
-                    className="p-4 text-xs font-black text-blue-800 text-right bg-blue-50/50 border-l border-gray-100 whitespace-nowrap pr-6"
+                    className="p-4 text-xs font-black text-blue-800 text-right bg-blue-50/50 border-l border-gray-100 whitespace-nowrap pr-6 cursor-pointer hover:bg-blue-100/50"
+                    onClick={() => handleSort(monthSortKey(month))}
                   >
-                    {formatRegistryMonthLabel(month)}
+                    <div className="flex items-center justify-end">
+                      {formatRegistryMonthLabel(month)}
+                      <SortIcon col={monthSortKey(month)} />
+                    </div>
                   </th>
                 ))}
-                <th className="p-4 text-xs font-black text-gray-500 uppercase text-center border-l border-gray-200 bg-gray-50">
-                  Всего заказов
+                <th
+                  className="p-4 text-xs font-black text-gray-500 uppercase text-center border-l border-gray-200 bg-gray-50 cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('totalOrders')}
+                >
+                  <div className="flex items-center justify-center">
+                    Всего заказов
+                    <SortIcon col="totalOrders" />
+                  </div>
                 </th>
                 <th
                   className="p-4 text-xs font-black text-gray-500 uppercase text-right bg-gray-50 cursor-pointer hover:bg-gray-100"

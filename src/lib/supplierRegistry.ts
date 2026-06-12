@@ -1,3 +1,4 @@
+import { parseAttractionMonth } from './clientProfile';
 import type { FullReport, UiClient } from './crmApi';
 import {
   formatMoneyKzt,
@@ -185,7 +186,11 @@ export function buildSupplierRegistryRows(
       .filter((ym) => (row.ordersByMonth[ym]?.length ?? 0) > 0)
       .sort();
     row.firstOrderMonth = months[0] ?? null;
-    row.monthsWithUs = row.firstOrderMonth ? calendarMonthsBetween(row.firstOrderMonth, nowYm) : null;
+    const attractionParsed = parseAttractionMonth(row.attractionMonth);
+    const attractionYm = attractionParsed
+      ? `${attractionParsed.year}-${String(attractionParsed.month).padStart(2, '0')}`
+      : null;
+    row.monthsWithUs = attractionYm ? calendarMonthsBetween(attractionYm, nowYm) : null;
   }
 
   return rows.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
