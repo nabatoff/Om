@@ -101,6 +101,7 @@ import {
   NEW_CATEGORY_VALUE,
   attractionMonthFromParts,
   attractionYearOptions,
+  currentAttractionParts,
   emptyNewClientForm,
   newClientFormFromClient,
   type ClientCategory,
@@ -379,11 +380,11 @@ const App = () => {
   }, [managerOrdersSection]);
 
   useEffect(() => {
-    if (!isClientModalOpen) return;
+    if (!isClientModalOpen || !isAdmin) return;
     void fetchClientCategoriesApi()
       .then(setClientCategories)
       .catch(() => setClientCategories([]));
-  }, [isClientModalOpen]);
+  }, [isClientModalOpen, isAdmin]);
 
   useEffect(() => {
     if (currentView === 'admin') {
@@ -560,9 +561,24 @@ const App = () => {
     }
     const openedFromInlinePicker = Boolean(onClientCreatedCallback);
     try {
-      const categoryId = await resolveClientCategoryId();
-      const { gzTurnoverPrevYear, attractionMonth } = buildClientProfileFields();
-      const profileFields = { categoryId, gzTurnoverPrevYear, attractionMonth };
+      let profileFields: {
+        categoryId: string | null;
+        gzTurnoverPrevYear: number | null;
+        attractionMonth: string | null;
+      };
+      if (isAdmin) {
+        const categoryId = await resolveClientCategoryId();
+        const { gzTurnoverPrevYear, attractionMonth } = buildClientProfileFields();
+        profileFields = { categoryId, gzTurnoverPrevYear, attractionMonth };
+      } else {
+        const { year, month } = currentAttractionParts();
+        profileFields = {
+          categoryId: null,
+          gzTurnoverPrevYear: null,
+          attractionMonth: attractionMonthFromParts(year, month),
+        };
+      }
+      const { categoryId } = profileFields;
       if (editingClientBin) {
         if (bin !== editingClientBin && clients.some((c) => c.bin === bin)) {
           alert('Контрагент с таким БИН уже существует');
@@ -1592,77 +1608,81 @@ const App = () => {
                   </select>
                 </div>
               )}
-              <div className="space-y-2 text-left">
-                <label className="text-[10px] font-black text-gray-400 uppercase ml-2 tracking-tighter">Категория</label>
-                <select
-                  className="w-full bg-gray-50 border-none p-4 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all outline-none"
-                  value={newClientData.categoryId}
-                  onChange={(e) => setNewClientData({ ...newClientData, categoryId: e.target.value })}
-                >
-                  <option value="">—</option>
-                  {clientCategories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                  <option value={NEW_CATEGORY_VALUE}>— Новая категория —</option>
-                </select>
-                {newClientData.categoryId === NEW_CATEGORY_VALUE && (
-                  <input
-                    type="text"
-                    className="w-full bg-gray-50 border-none p-4 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all outline-none"
-                    placeholder="Название категории"
-                    value={newClientData.newCategoryName}
-                    onChange={(e) => setNewClientData({ ...newClientData, newCategoryName: e.target.value })}
-                  />
-                )}
-              </div>
-              <div className="space-y-2 text-left">
-                <label className="text-[10px] font-black text-gray-400 uppercase ml-2 tracking-tighter">
-                  Обороты ГЗ (прошлый год), ₸
-                </label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  className="w-full bg-gray-50 border-none p-4 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all outline-none"
-                  placeholder="Необязательно"
-                  value={newClientData.gzTurnoverPrevYear}
-                  onChange={(e) =>
-                    setNewClientData({ ...newClientData, gzTurnoverPrevYear: e.target.value.replace(/[^\d]/g, '') })
-                  }
-                />
-              </div>
-              <div className="space-y-2 text-left">
-                <label className="text-[10px] font-black text-gray-400 uppercase ml-2 tracking-tighter">
-                  Месяц привлечения
-                </label>
-                <div className="flex gap-2">
-                  <select
-                    className="flex-1 bg-gray-50 border-none p-4 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all outline-none"
-                    value={newClientData.attractionMonth}
-                    onChange={(e) =>
-                      setNewClientData({ ...newClientData, attractionMonth: Number(e.target.value) })
-                    }
-                  >
-                    {ATTRACTION_MONTH_OPTIONS.map((m) => (
-                      <option key={m.value} value={m.value}>
-                        {m.label}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    className="w-28 bg-gray-50 border-none p-4 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all outline-none"
-                    value={newClientData.attractionYear}
-                    onChange={(e) => setNewClientData({ ...newClientData, attractionYear: Number(e.target.value) })}
-                  >
-                    {attractionYearOptions().map((y) => (
-                      <option key={y} value={y}>
-                        {y}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+              {isAdmin && (
+                <>
+                  <div className="space-y-2 text-left">
+                    <label className="text-[10px] font-black text-gray-400 uppercase ml-2 tracking-tighter">Категория</label>
+                    <select
+                      className="w-full bg-gray-50 border-none p-4 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all outline-none"
+                      value={newClientData.categoryId}
+                      onChange={(e) => setNewClientData({ ...newClientData, categoryId: e.target.value })}
+                    >
+                      <option value="">—</option>
+                      {clientCategories.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                      <option value={NEW_CATEGORY_VALUE}>— Новая категория —</option>
+                    </select>
+                    {newClientData.categoryId === NEW_CATEGORY_VALUE && (
+                      <input
+                        type="text"
+                        className="w-full bg-gray-50 border-none p-4 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all outline-none"
+                        placeholder="Название категории"
+                        value={newClientData.newCategoryName}
+                        onChange={(e) => setNewClientData({ ...newClientData, newCategoryName: e.target.value })}
+                      />
+                    )}
+                  </div>
+                  <div className="space-y-2 text-left">
+                    <label className="text-[10px] font-black text-gray-400 uppercase ml-2 tracking-tighter">
+                      Обороты ГЗ (прошлый год), ₸
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      className="w-full bg-gray-50 border-none p-4 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all outline-none"
+                      placeholder="Необязательно"
+                      value={newClientData.gzTurnoverPrevYear}
+                      onChange={(e) =>
+                        setNewClientData({ ...newClientData, gzTurnoverPrevYear: e.target.value.replace(/[^\d]/g, '') })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2 text-left">
+                    <label className="text-[10px] font-black text-gray-400 uppercase ml-2 tracking-tighter">
+                      Месяц привлечения
+                    </label>
+                    <div className="flex gap-2">
+                      <select
+                        className="flex-1 bg-gray-50 border-none p-4 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all outline-none"
+                        value={newClientData.attractionMonth}
+                        onChange={(e) =>
+                          setNewClientData({ ...newClientData, attractionMonth: Number(e.target.value) })
+                        }
+                      >
+                        {ATTRACTION_MONTH_OPTIONS.map((m) => (
+                          <option key={m.value} value={m.value}>
+                            {m.label}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        className="w-28 bg-gray-50 border-none p-4 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all outline-none"
+                        value={newClientData.attractionYear}
+                        onChange={(e) => setNewClientData({ ...newClientData, attractionYear: Number(e.target.value) })}
+                      >
+                        {attractionYearOptions().map((y) => (
+                          <option key={y} value={y}>
+                            {y}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
             <div className="p-8 bg-gray-50 flex gap-4">
               <button

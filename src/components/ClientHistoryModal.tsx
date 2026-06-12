@@ -9,7 +9,6 @@ import {
   NEW_CATEGORY_VALUE,
   attractionMonthFromParts,
   attractionYearOptions,
-  formatAttractionMonth,
   parseAttractionMonth,
 } from '../lib/clientProfile';
 import { formatMoneyKzt } from '../lib/commission';
@@ -123,9 +122,9 @@ export function ClientHistoryModal({
             <p className="text-lg font-bold text-gray-900 mt-1">{client.name}</p>
             <p className="text-xs font-mono text-gray-500">БИН {client.bin}</p>
 
-            <div className="mt-3 grid gap-2 text-xs text-gray-700 sm:grid-cols-3">
-              {isAdmin && onSaveProfile ? (
-                <>
+            {isAdmin && onSaveProfile && (
+              <>
+                <div className="mt-3 grid gap-2 text-xs text-gray-700 sm:grid-cols-3">
                   <div className="space-y-1">
                     <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Категория</span>
                     <select
@@ -193,40 +192,16 @@ export function ClientHistoryModal({
                       </select>
                     </div>
                   </div>
-                </>
-              ) : (
-                <>
-                  <div>
-                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Категория</span>
-                    <p className="font-bold text-gray-800 mt-0.5">{client.categoryName || '—'}</p>
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                      Обороты ГЗ (прошлый год)
-                    </span>
-                    <p className="font-bold text-gray-800 mt-0.5">
-                      {client.gzTurnoverPrevYear != null ? `${formatMoneyKzt(client.gzTurnoverPrevYear)} ₸` : '—'}
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                      Месяц привлечения
-                    </span>
-                    <p className="font-bold text-gray-800 mt-0.5">{formatAttractionMonth(client.attractionMonth)}</p>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {isAdmin && onSaveProfile && (
-              <button
-                type="button"
-                disabled={profileSaving}
-                onClick={() => void saveProfile()}
-                className="mt-3 px-4 py-2 rounded-xl bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest disabled:opacity-60"
-              >
-                {profileSaving ? 'Сохранение…' : 'Сохранить профиль'}
-              </button>
+                </div>
+                <button
+                  type="button"
+                  disabled={profileSaving}
+                  onClick={() => void saveProfile()}
+                  className="mt-3 px-4 py-2 rounded-xl bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest disabled:opacity-60"
+                >
+                  {profileSaving ? 'Сохранение…' : 'Сохранить профиль'}
+                </button>
+              </>
             )}
 
             <div className="mt-2 flex items-center gap-2 text-[11px] flex-wrap">
