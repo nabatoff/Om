@@ -27,6 +27,8 @@ import {
   ClipboardCheck,
   BookOpen,
   Edit2,
+  ChevronUp,
+  ChevronDown,
 } from 'lucide-react';
 import { adminDateFilterBounds, formatYmdLocal, reportDateMatchesAdminBounds } from './lib/periodBounds';
 import { PeriodFilterFields } from './components/PeriodFilterFields';
@@ -3487,8 +3489,56 @@ const OrdersHistoryDashboard = ({
   openGroupedOrderDetails: (group: GroupedCounterpartyOrder) => void;
   onEditOrder?: (order: OrderRow) => void;
 }) => {
+  type OrdersSortKey = 'orderCount' | 'totalAmount';
+
+  const [sortConfig, setSortConfig] = useState<{ key: OrdersSortKey; direction: 'asc' | 'desc' } | null>(null);
+
   const isGroupedView = isAdmin && viewMode === 'byCounterparty';
   const displayRowCount = isGroupedView ? groupedOrders.length : orders.length;
+
+  const handleSort = (key: OrdersSortKey) => {
+    setSortConfig((prev) => {
+      if (prev?.key === key) {
+        return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+      }
+      return { key, direction: 'desc' };
+    });
+  };
+
+  const SortIcon = ({ col }: { col: OrdersSortKey }) =>
+    sortConfig?.key === col ? (
+      sortConfig.direction === 'asc' ? (
+        <ChevronUp size={14} className="ml-1 text-blue-600" />
+      ) : (
+        <ChevronDown size={14} className="ml-1 text-blue-600" />
+      )
+    ) : null;
+
+  const sortedOrders = useMemo(() => {
+    if (!sortConfig) return orders;
+    const { key, direction } = sortConfig;
+    const mul = direction === 'asc' ? 1 : -1;
+    return [...orders].sort((a, b) => {
+      const av = key === 'orderCount' ? a.orderCount : a.totalAmount;
+      const bv = key === 'orderCount' ? b.orderCount : b.totalAmount;
+      if (av !== bv) return (av - bv) * mul;
+      const dateCmp = b.date.localeCompare(a.date);
+      if (dateCmp !== 0) return dateCmp;
+      return a.entityName.localeCompare(b.entityName, 'ru');
+    });
+  }, [orders, sortConfig]);
+
+  const sortedGroupedOrders = useMemo(() => {
+    if (!sortConfig) return groupedOrders;
+    const { key, direction } = sortConfig;
+    const mul = direction === 'asc' ? 1 : -1;
+    return [...groupedOrders].sort((a, b) => {
+      const av = key === 'orderCount' ? a.orderCount : a.totalAmount;
+      const bv = key === 'orderCount' ? b.orderCount : b.totalAmount;
+      if (av !== bv) return (av - bv) * mul;
+      return a.entityName.localeCompare(b.entityName, 'ru');
+    });
+  }, [groupedOrders, sortConfig]);
 
   const ordersTotalAmount = useMemo(
     () => orders.reduce((sum, o) => sum + o.totalAmount, 0),
@@ -3668,14 +3718,30 @@ const OrdersHistoryDashboard = ({
               <th className="py-6 px-4">БИН/ИИН</th>
               <th className="py-6 px-4">Контрагент</th>
               <th className="py-6 px-4">Заказ через (ЮЛ)</th>
-              <th className="py-6 px-4 text-center">Кол-во</th>
-              <th className="py-6 px-8 text-right">Сумма</th>
+              <th
+                className="py-6 px-4 text-center cursor-pointer hover:bg-gray-100/80 select-none"
+                onClick={() => handleSort('orderCount')}
+              >
+                <div className="flex items-center justify-center">
+                  Кол-во
+                  <SortIcon col="orderCount" />
+                </div>
+              </th>
+              <th
+                className="py-6 px-8 text-right cursor-pointer hover:bg-gray-100/80 select-none"
+                onClick={() => handleSort('totalAmount')}
+              >
+                <div className="flex items-center justify-end">
+                  Сумма
+                  <SortIcon col="totalAmount" />
+                </div>
+              </th>
               {isAdmin && onEditOrder && !isGroupedView ? <th className="py-6 px-4 text-center w-16" /> : null}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {isGroupedView
-              ? groupedOrders.map((group, idx) => (
+              ? sortedGroupedOrders.map((group, idx) => (
                   <tr key={idx} className="hover:bg-gray-50/50 text-sm">
                     <td className="py-5 px-8 text-gray-500 whitespace-nowrap">{formatDisplayDate(group.date)}</td>
                     {isAdmin && (
@@ -3700,7 +3766,7 @@ const OrdersHistoryDashboard = ({
                     />
                   </tr>
                 ))
-              : orders.map((order, idx) => (
+              : sortedOrders.map((order, idx) => (
                   <tr key={idx} className="hover:bg-gray-50/50 text-sm">
                     <td className="py-5 px-8 text-gray-500 whitespace-nowrap">{formatDisplayDate(order.date)}</td>
                     {isAdmin && (
