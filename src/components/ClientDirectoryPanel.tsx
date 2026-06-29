@@ -25,6 +25,7 @@ type Props = {
 };
 
 type CpSort = 'none' | 'desc' | 'asc';
+type PaidFilter = 'all' | 'paid' | 'unpaid';
 
 function normalizeText(value: string): string {
   return value
@@ -57,19 +58,26 @@ export function ClientDirectoryPanel({
 }: Props) {
   const [q, setQ] = useState('');
   const [cpSort, setCpSort] = useState<CpSort>('none');
+  const [paidFilter, setPaidFilter] = useState<PaidFilter>('all');
   const canMutate = Boolean(onAddClient && onEditClient && onDeleteClient);
 
   const filtered = useMemo(() => {
+    let list = rows;
+
+    if (isAdmin && paidFilter !== 'all') {
+      list = list.filter((c) => (paidFilter === 'paid' ? c.cpPaid : !c.cpPaid));
+    }
+
     const textQuery = normalizeText(q);
     const digitsQuery = q.replace(/\D/g, '');
-    if (!textQuery && !digitsQuery) return rows;
+    if (!textQuery && !digitsQuery) return list;
 
-    return rows.filter(
+    return list.filter(
       (c) =>
         (textQuery ? normalizeText(c.name).includes(textQuery) : false) ||
         (digitsQuery ? c.bin.replace(/\D/g, '').includes(digitsQuery) : false),
     );
-  }, [rows, q]);
+  }, [rows, q, isAdmin, paidFilter]);
 
   const displayed = useMemo(() => {
     if (!isAdmin || cpSort === 'none') return filtered;
@@ -107,6 +115,17 @@ export function ClientDirectoryPanel({
                   {m}
                 </option>
               ))}
+            </select>
+          ) : null}
+          {isAdmin ? (
+            <select
+              value={paidFilter}
+              onChange={(e) => setPaidFilter(e.target.value as PaidFilter)}
+              className="px-3 py-2.5 rounded-xl border border-gray-200 text-sm font-medium bg-white min-w-[180px]"
+            >
+              <option value="all">Все (оплата)</option>
+              <option value="paid">Оплаченные</option>
+              <option value="unpaid">Не оплаченные</option>
             </select>
           ) : null}
           <div className="relative flex-1 min-w-0 sm:min-w-[220px]">
