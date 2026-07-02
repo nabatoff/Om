@@ -125,10 +125,28 @@ export async function handleCronReport(req: Request): Promise<Response> {
     }
     const reportDateLabel = formatDateDisplay(reportDate);
 
-    const { data, error } = await supabase.rpc("telegram_daily_analytics_rows", { p_date: reportDate });
+    const [
+      { data, error },
+      { data: forecastData, error: forecastError },
+      { data: totalsData, error: totalsError },
+    ] = await Promise.all([
+      supabase.rpc("telegram_daily_analytics_rows", { p_date: reportDate }),
+      supabase.rpc("get_crm_telegram_weekly_forecast"),
+      supabase.rpc("telegram_confirmed_orders_totals", { p_tz: tz }),
+    ]);
     if (error) throw error;
+    if (forecastError) throw forecastError;
+    if (totalsError) throw totalsError;
 
     const rows = (data ?? []) as RpcRow[];
+
+    const weeklyForecast = Number(forecastData ?? 0);
+    const totalsRow = (Array.isArray(totalsData) ? totalsData[0] : totalsData) as
+      | { today_sum?: number; week_sum?: number }
+      | null
+      | undefined;
+    const todayOrdersSum = Number(totalsRow?.today_sum ?? 0);
+    const weekOrdersSum = Number(totalsRow?.week_sum ?? 0);
 
     const total = rows.reduce(
       (acc, r) => ({
@@ -143,6 +161,10 @@ export async function handleCronReport(req: Request): Promise<Response> {
     const lines: string[] = [];
     lines.push(`📊 <b>Сводка за ${escHtml(reportDateLabel)}</b>`);
     lines.push("━━━━━━━━━━━━━━━━━━━━");
+    lines.push("");
+    lines.push(`Прогноз на неделю: <b>${money(weeklyForecast)} ₸</b>`);
+    lines.push(`Сумма заказов на сегодняшний день: <b>${money(todayOrdersSum)} ₸</b>`);
+    lines.push(`Сумма заказов за неделю (в текущем месяце): <b>${money(weekOrdersSum)} ₸</b>`);
     lines.push("");
     lines.push("<b>Общая сводка</b>");
     lines.push(`• Назначено встреч: <b>${total.assigned}</b>`);
@@ -180,26 +202,6 @@ export async function handleCronReport(req: Request): Promise<Response> {
         }
       }
     }
-
-    const [{ data: forecastData, error: forecastError }, { data: totalsData, error: totalsError }] = await Promise.all([
-      supabase.rpc("get_crm_telegram_weekly_forecast"),
-      supabase.rpc("telegram_confirmed_orders_totals", { p_tz: tz }),
-    ]);
-    if (forecastError) throw forecastError;
-    if (totalsError) throw totalsError;
-
-    const weeklyForecast = Number(forecastData ?? 0);
-    const totalsRow = (Array.isArray(totalsData) ? totalsData[0] : totalsData) as
-      | { today_sum?: number; week_sum?: number }
-      | null
-      | undefined;
-    const todayOrdersSum = Number(totalsRow?.today_sum ?? 0);
-    const weekOrdersSum = Number(totalsRow?.week_sum ?? 0);
-
-    lines.push("");
-    lines.push(`Прогноз на неделю: <b>${money(weeklyForecast)} ₸</b>`);
-    lines.push(`Сумма заказов на сегодняшний день: <b>${money(todayOrdersSum)} ₸</b>`);
-    lines.push(`Сумма заказов за неделю: <b>${money(weekOrdersSum)} ₸</b>`);
 
     const tgRes = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       method: "POST",

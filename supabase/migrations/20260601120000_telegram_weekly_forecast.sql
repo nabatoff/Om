@@ -56,7 +56,15 @@ BEGIN
   week_bounds AS (
     SELECT
       b.today_d,
-      (b.today_d - ((extract(dow FROM b.today_d)::int + 6) % 7))::date AS monday_d
+      (b.today_d - ((extract(dow FROM b.today_d)::int + 6) % 7))::date AS monday_d,
+      greatest(
+        date_trunc('month', b.today_d)::date,
+        (b.today_d - ((extract(dow FROM b.today_d)::int + 6) % 7))::date
+      ) AS period_start_d,
+      least(
+        b.today_d,
+        (b.today_d - ((extract(dow FROM b.today_d)::int + 6) % 7))::date + 4
+      ) AS period_end_d
     FROM bounds b
   ),
   ranked AS (
@@ -75,8 +83,8 @@ BEGIN
       ) AS rn
     FROM public.crm_reports r
     CROSS JOIN week_bounds wb
-    WHERE r.report_date >= wb.monday_d
-      AND r.report_date <= wb.monday_d + 4
+    WHERE r.report_date >= wb.period_start_d
+      AND r.report_date <= wb.period_end_d
   ),
   chosen AS (
     SELECT id, report_date
