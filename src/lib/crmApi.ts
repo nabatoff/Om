@@ -489,6 +489,19 @@ export async function setAdminAnalyticsTabEnabledApi(enabled: boolean): Promise<
   if (error) throw error;
 }
 
+export async function fetchTelegramWeeklyForecastApi(): Promise<number> {
+  const { data, error } = await getSupabase().rpc('get_crm_telegram_weekly_forecast');
+  if (error) throw error;
+  return Math.max(0, Math.floor(Number(data) || 0));
+}
+
+export async function setTelegramWeeklyForecastApi(amount: number): Promise<void> {
+  const { error } = await getSupabase().rpc('set_crm_telegram_weekly_forecast', {
+    p_amount: Math.max(0, Math.floor(Number(amount) || 0)),
+  });
+  if (error) throw error;
+}
+
 export async function countOrdersWithoutCommissionApi(): Promise<number> {
   const { data, error } = await getSupabase().rpc('count_orders_without_commission');
   if (error) throw error;

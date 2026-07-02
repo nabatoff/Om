@@ -48,6 +48,7 @@ import {
   upsertClientCategoryApi,
   fetchAdminAnalyticsTabEnabledApi,
   fetchMrpApi,
+  fetchTelegramWeeklyForecastApi,
   setClientKtp,
   recalcOrderCommissionsForClientBinApi,
   fetchDeletedMeetingsApi,
@@ -69,6 +70,7 @@ import {
   setClientCpPaid,
   setClientManager,
   sendTelegramDailyReportNow,
+  setTelegramWeeklyForecastApi,
 } from './lib/crmApi';
 import { buildClientCrmHistory } from './lib/crmClientHistory';
 import { buildClientListRows, filterReportsForManager } from './lib/clientCpStats';
@@ -281,6 +283,8 @@ const App = () => {
   const [kpiSaving, setKpiSaving] = useState(false);
   const [telegramReportDate, setTelegramReportDate] = useState(() => formatYmdLocal(new Date()));
   const [telegramReportSending, setTelegramReportSending] = useState(false);
+  const [telegramWeeklyForecast, setTelegramWeeklyForecast] = useState(0);
+  const [telegramWeeklyForecastSaving, setTelegramWeeklyForecastSaving] = useState(false);
 
   const supabaseOk = isSupabaseConfigured();
 
@@ -303,6 +307,25 @@ const App = () => {
     }
   }, [telegramReportSending, telegramReportDate]);
 
+  const saveTelegramWeeklyForecast = useCallback(async (raw: string) => {
+    const amount = Math.max(0, Math.floor(Number(raw.replace(/\s/g, '').replace(',', '.')) || 0));
+    setTelegramWeeklyForecast(amount);
+    setTelegramWeeklyForecastSaving(true);
+    try {
+      await setTelegramWeeklyForecastApi(amount);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Не удалось сохранить прогноз');
+      try {
+        const restored = await fetchTelegramWeeklyForecastApi();
+        setTelegramWeeklyForecast(restored);
+      } catch {
+        /* ignore */
+      }
+    } finally {
+      setTelegramWeeklyForecastSaving(false);
+    }
+  }, []);
+
   const loadReports = useCallback(async (): Promise<FullReport[]> => {
     if (!supabaseOk) {
       setBooting(false);
@@ -314,7 +337,7 @@ const App = () => {
     }
     setLoadError(null);
     try {
-      const [c, r, basket, standalone, mrp, analyticsTabEnabled, cats] = await Promise.all([
+      const [c, r, basket, standalone, mrp, analyticsTabEnabled, cats, weeklyForecast] = await Promise.all([
         isAdmin ? fetchClientsAdminApi() : fetchClientsApi(),
         fetchReportsApi(),
         isAdmin ? fetchDeletedMeetingsApi() : Promise.resolve([]),
@@ -322,11 +345,13 @@ const App = () => {
         fetchMrpApi().catch(() => 4325),
         isAdmin ? fetchAdminAnalyticsTabEnabledApi().catch(() => true) : Promise.resolve(true),
         isAdmin ? fetchClientCategoriesApi().catch(() => [] as ClientCategory[]) : Promise.resolve([]),
+        isAdmin ? fetchTelegramWeeklyForecastApi().catch(() => 0) : Promise.resolve(0),
       ]);
       setMrpKzt(mrp);
       if (isAdmin) {
         setAdminAnalyticsTabEnabled(analyticsTabEnabled);
         setClientCategories(cats);
+        setTelegramWeeklyForecast(weeklyForecast);
       }
       const managers = isAdmin
         ? await fetchManagerProfilesApi().catch(() => [] as Array<{ id: string; fullName: string }>)
@@ -1297,6 +1322,28 @@ const App = () => {
             </div>
             <div className="flex flex-col sm:flex-row sm:items-end gap-2 w-full sm:w-auto">
               <div className="flex flex-wrap items-end gap-2">
+                <div className="space-y-1 flex-1 min-w-[140px] sm:flex-none">
+                  <label
+                    htmlFor="telegram-weekly-forecast"
+                    className="text-[10px] font-black text-gray-400 uppercase tracking-widest"
+                  >
+                    Прогноз на неделю
+                  </label>
+                  <input
+                    id="telegram-weekly-forecast"
+                    type="text"
+                    inputMode="numeric"
+                    value={telegramWeeklyForecast ? String(telegramWeeklyForecast) : ''}
+                    onChange={(e) => {
+                      const digits = e.target.value.replace(/[^\d]/g, '');
+                      setTelegramWeeklyForecast(digits ? Number(digits) : 0);
+                    }}
+                    onBlur={(e) => void saveTelegramWeeklyForecast(e.target.value)}
+                    disabled={telegramWeeklyForecastSaving || telegramReportSending}
+                    placeholder="0"
+                    className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-bold disabled:opacity-60"
+                  />
+                </div>
                 <div className="space-y-1 flex-1 min-w-[140px] sm:flex-none">
                   <label
                     htmlFor="telegram-report-date"
