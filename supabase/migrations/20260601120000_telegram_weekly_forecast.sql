@@ -105,6 +105,7 @@ $tg_totals$;
 
 REVOKE ALL ON FUNCTION public.get_crm_telegram_weekly_forecast() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.get_crm_telegram_weekly_forecast() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_crm_telegram_weekly_forecast() TO service_role;
 
 REVOKE ALL ON FUNCTION public.set_crm_telegram_weekly_forecast(numeric) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.set_crm_telegram_weekly_forecast(numeric) TO authenticated;
