@@ -10,22 +10,20 @@ LANGUAGE sql
 STABLE
 SECURITY DEFINER
 SET search_path = public
-AS $$
-  SELECT greatest(
-    coalesce(
-      (SELECT s.value_numeric FROM public.crm_settings s WHERE s.key = 'telegram_weekly_forecast_kzt' LIMIT 1),
-      0
-    ),
+RETURN greatest(
+  coalesce(
+    (SELECT s.value_numeric FROM public.crm_settings s WHERE s.key = 'telegram_weekly_forecast_kzt' LIMIT 1),
     0
-  );
-$$;
+  ),
+  0
+);
 
 CREATE OR REPLACE FUNCTION public.set_crm_telegram_weekly_forecast(p_amount numeric)
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
-AS $$
+AS $set_forecast$
 BEGIN
   IF auth.uid() IS NULL THEN
     RAISE EXCEPTION 'Unauthorized' USING ERRCODE = '28000';
@@ -42,22 +40,23 @@ BEGIN
   ON CONFLICT (key) DO UPDATE
   SET value_numeric = EXCLUDED.value_numeric, updated_at = now();
 END;
-$$;
+$set_forecast$;
 
 CREATE OR REPLACE FUNCTION public.telegram_confirmed_orders_totals(p_tz text DEFAULT 'Asia/Almaty')
 RETURNS TABLE(today_sum numeric, week_sum numeric)
-LANGUAGE sql
+LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
-AS $function$
+AS $tg_totals$
+BEGIN
+  RETURN QUERY
   WITH bounds AS (
     SELECT (timezone(coalesce(nullif(trim(p_tz), ''), 'Asia/Almaty'), now()))::date AS today_d
   ),
   week_bounds AS (
     SELECT
       b.today_d,
-      (b.today_d - ((extract(dow FROM b.today_d)::int + 6) % 7))::date AS monday_d,
-      ((b.today_d - ((extract(dow FROM b.today_d)::int + 6) % 7))::date) + 4) AS friday_d
+      (b.today_d - ((extract(dow FROM b.today_d)::int + 6) % 7))::date AS monday_d
     FROM bounds b
   ),
   ranked AS (
@@ -77,7 +76,7 @@ AS $function$
     FROM public.crm_reports r
     CROSS JOIN week_bounds wb
     WHERE r.report_date >= wb.monday_d
-      AND r.report_date <= wb.friday_d
+      AND r.report_date <= wb.monday_d + 4
   ),
   chosen AS (
     SELECT id, report_date
@@ -101,7 +100,8 @@ AS $function$
       0
     )::numeric AS today_sum,
     coalesce((SELECT sum(os.day_sum) FROM order_sums os), 0)::numeric AS week_sum;
-$function$;
+END;
+$tg_totals$;
 
 REVOKE ALL ON FUNCTION public.get_crm_telegram_weekly_forecast() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.get_crm_telegram_weekly_forecast() TO authenticated;
