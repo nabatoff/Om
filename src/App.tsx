@@ -29,6 +29,7 @@ import {
   Edit2,
   ChevronUp,
   ChevronDown,
+  Download,
 } from 'lucide-react';
 import { adminDateFilterBounds, formatYmdLocal, reportDateMatchesAdminBounds } from './lib/periodBounds';
 import { PeriodFilterFields } from './components/PeriodFilterFields';
@@ -105,6 +106,7 @@ import {
   type OrderCommissionFields,
 } from './lib/commission';
 import { groupOrdersByCounterparty, type GroupedCounterpartyOrder } from './lib/ordersGrouping';
+import { exportOrdersToExcel } from './lib/ordersExport';
 import {
   ATTRACTION_MONTH_OPTIONS,
   NEW_CATEGORY_VALUE,
@@ -283,7 +285,8 @@ const App = () => {
   const [kpiSaving, setKpiSaving] = useState(false);
   const [telegramReportDate, setTelegramReportDate] = useState(() => formatYmdLocal(new Date()));
   const [telegramReportSending, setTelegramReportSending] = useState(false);
-  const [telegramWeeklyForecast, setTelegramWeeklyForecast] = useState(0);
+  const [telegramWeeklyForecastSaved, setTelegramWeeklyForecastSaved] = useState(0);
+  const [telegramWeeklyForecastDraft, setTelegramWeeklyForecastDraft] = useState('');
   const [telegramWeeklyForecastSaving, setTelegramWeeklyForecastSaving] = useState(false);
 
   const supabaseOk = isSupabaseConfigured();
@@ -307,24 +310,25 @@ const App = () => {
     }
   }, [telegramReportSending, telegramReportDate]);
 
-  const saveTelegramWeeklyForecast = useCallback(async (raw: string) => {
-    const amount = Math.max(0, Math.floor(Number(raw.replace(/\s/g, '').replace(',', '.')) || 0));
-    setTelegramWeeklyForecast(amount);
+  const saveTelegramWeeklyForecast = useCallback(async () => {
+    const amount = Math.max(0, Math.floor(Number(telegramWeeklyForecastDraft.replace(/\s/g, '').replace(',', '.')) || 0));
     setTelegramWeeklyForecastSaving(true);
     try {
       await setTelegramWeeklyForecastApi(amount);
+      setTelegramWeeklyForecastSaved(amount);
+      setTelegramWeeklyForecastDraft(amount ? String(amount) : '');
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Не удалось сохранить прогноз');
-      try {
-        const restored = await fetchTelegramWeeklyForecastApi();
-        setTelegramWeeklyForecast(restored);
-      } catch {
-        /* ignore */
-      }
+      setTelegramWeeklyForecastDraft(telegramWeeklyForecastSaved ? String(telegramWeeklyForecastSaved) : '');
     } finally {
       setTelegramWeeklyForecastSaving(false);
     }
-  }, []);
+  }, [telegramWeeklyForecastDraft, telegramWeeklyForecastSaved]);
+
+  const forecastDirty = useMemo(() => {
+    const draft = Math.max(0, Math.floor(Number(telegramWeeklyForecastDraft.replace(/\s/g, '').replace(',', '.')) || 0));
+    return draft !== telegramWeeklyForecastSaved;
+  }, [telegramWeeklyForecastDraft, telegramWeeklyForecastSaved]);
 
   const loadReports = useCallback(async (): Promise<FullReport[]> => {
     if (!supabaseOk) {
@@ -351,7 +355,8 @@ const App = () => {
       if (isAdmin) {
         setAdminAnalyticsTabEnabled(analyticsTabEnabled);
         setClientCategories(cats);
-        setTelegramWeeklyForecast(weeklyForecast);
+        setTelegramWeeklyForecastSaved(weeklyForecast);
+        setTelegramWeeklyForecastDraft(weeklyForecast ? String(weeklyForecast) : '');
       }
       const managers = isAdmin
         ? await fetchManagerProfilesApi().catch(() => [] as Array<{ id: string; fullName: string }>)
@@ -1329,20 +1334,26 @@ const App = () => {
                   >
                     Прогноз на неделю
                   </label>
-                  <input
-                    id="telegram-weekly-forecast"
-                    type="text"
-                    inputMode="numeric"
-                    value={telegramWeeklyForecast ? String(telegramWeeklyForecast) : ''}
-                    onChange={(e) => {
-                      const digits = e.target.value.replace(/[^\d]/g, '');
-                      setTelegramWeeklyForecast(digits ? Number(digits) : 0);
-                    }}
-                    onBlur={(e) => void saveTelegramWeeklyForecast(e.target.value)}
-                    disabled={telegramWeeklyForecastSaving || telegramReportSending}
-                    placeholder="0"
-                    className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-bold disabled:opacity-60"
-                  />
+                  <div className="flex gap-2">
+                    <input
+                      id="telegram-weekly-forecast"
+                      type="text"
+                      inputMode="numeric"
+                      value={telegramWeeklyForecastDraft}
+                      onChange={(e) => setTelegramWeeklyForecastDraft(e.target.value.replace(/[^\d]/g, ''))}
+                      disabled={telegramWeeklyForecastSaving || telegramReportSending}
+                      placeholder="0"
+                      className="w-full min-w-0 px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-bold disabled:opacity-60"
+                    />
+                    <button
+                      type="button"
+                      disabled={telegramWeeklyForecastSaving || telegramReportSending || !forecastDirty}
+                      onClick={() => void saveTelegramWeeklyForecast()}
+                      className="shrink-0 px-3 py-2.5 rounded-xl border border-emerald-200 bg-emerald-50 text-[10px] font-black uppercase tracking-wider text-emerald-800 hover:bg-emerald-100 disabled:opacity-50 disabled:pointer-events-none"
+                    >
+                      {telegramWeeklyForecastSaving ? '…' : 'Сохранить'}
+                    </button>
+                  </div>
                 </div>
                 <div className="space-y-1 flex-1 min-w-[140px] sm:flex-none">
                   <label
@@ -3733,8 +3744,25 @@ const OrdersHistoryDashboard = ({
       </div>
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest">Подтверждённые заказы</h2>
-        {isAdmin ? (
-          <div className="inline-flex rounded-xl border border-gray-200 bg-gray-50 p-1">
+        <div className="flex flex-wrap items-center gap-2">
+          {isAdmin ? (
+            <button
+              type="button"
+              onClick={() =>
+                exportOrdersToExcel(orders, {
+                  clientKtpByBin,
+                  includeCommission: true,
+                })
+              }
+              disabled={orders.length === 0}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 bg-white text-[10px] font-black uppercase tracking-wider text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              <Download size={14} />
+              Выгрузить в Excel
+            </button>
+          ) : null}
+          {isAdmin ? (
+            <div className="inline-flex rounded-xl border border-gray-200 bg-gray-50 p-1">
             <button
               type="button"
               onClick={() => setViewMode('records')}
@@ -3754,7 +3782,8 @@ const OrdersHistoryDashboard = ({
               По контрагентам
             </button>
           </div>
-        ) : null}
+          ) : null}
+        </div>
       </div>
       <div className="bg-white border border-gray-200 rounded-3xl shadow-sm overflow-x-auto text-left">
         <table className="w-full text-left border-collapse min-w-[1120px]">
