@@ -16,6 +16,8 @@ type Props = {
   managerSelectOptions?: Array<{ id: string; fullName: string }>;
   currentManagerId?: string | null;
   isAdmin?: boolean;
+  /** Полный админ: КТП, менеджер, ЦП. Read-only админ — только просмотр. */
+  canAdminWrite?: boolean;
   managerFilter?: string;
   managerOptions?: string[];
   onManagerFilterChange?: (value: string) => void;
@@ -49,6 +51,7 @@ export function ClientDirectoryPanel({
   managerSelectOptions = [],
   currentManagerId,
   isAdmin,
+  canAdminWrite = true,
   managerFilter = 'Все',
   managerOptions = ['Все'],
   onManagerFilterChange,
@@ -60,6 +63,9 @@ export function ClientDirectoryPanel({
   const [cpSort, setCpSort] = useState<CpSort>('none');
   const [paidFilter, setPaidFilter] = useState<PaidFilter>('all');
   const canMutate = Boolean(onAddClient && onEditClient && onDeleteClient);
+  const cpEditable = !isAdmin || canAdminWrite;
+  const ktpEditable = Boolean(onToggleKtp);
+  const managerEditable = Boolean(onAssignManager);
 
   const filtered = useMemo(() => {
     let list = rows;
@@ -210,30 +216,43 @@ export function ClientDirectoryPanel({
                     </td>
                     {isAdmin ? (
                       <td className="p-4 text-center" onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={Boolean(c.isKtp)}
-                          onChange={(e) => void onToggleKtp?.(c.bin, e.target.checked)}
-                          className="w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
-                          title="КТП"
-                          aria-label={`КТП ${c.name}`}
-                        />
+                        {ktpEditable ? (
+                          <input
+                            type="checkbox"
+                            checked={Boolean(c.isKtp)}
+                            onChange={(e) => void onToggleKtp?.(c.bin, e.target.checked)}
+                            className="w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                            title="КТП"
+                            aria-label={`КТП ${c.name}`}
+                          />
+                        ) : (
+                          <span
+                            className={`inline-flex items-center justify-center w-4 h-4 text-[10px] font-black ${c.isKtp ? 'text-violet-700' : 'text-gray-300'}`}
+                            title={c.isKtp ? 'КТП' : 'Не КТП'}
+                          >
+                            {c.isKtp ? '✓' : '—'}
+                          </span>
+                        )}
                       </td>
                     ) : null}
                     {isAdmin ? (
                       <td className="p-4 text-xs text-gray-700" onClick={(e) => e.stopPropagation()}>
-                        <select
-                          value={c.managerId ?? ''}
-                          onChange={(e) => void onAssignManager?.(c.bin, e.target.value || null)}
-                          className="w-full min-w-[140px] bg-white border border-gray-200 rounded-lg px-2 py-1.5 text-xs font-bold"
-                        >
-                          <option value="">Не назначен</option>
-                          {managerSelectOptions.map((m) => (
-                            <option key={m.id} value={m.id}>
-                              {m.fullName}
-                            </option>
-                          ))}
-                        </select>
+                        {managerEditable ? (
+                          <select
+                            value={c.managerId ?? ''}
+                            onChange={(e) => void onAssignManager?.(c.bin, e.target.value || null)}
+                            className="w-full min-w-[140px] bg-white border border-gray-200 rounded-lg px-2 py-1.5 text-xs font-bold"
+                          >
+                            <option value="">Не назначен</option>
+                            {managerSelectOptions.map((m) => (
+                              <option key={m.id} value={m.id}>
+                                {m.fullName}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span className="font-bold text-gray-700">{c.managerName?.trim() || 'Не назначен'}</span>
+                        )}
                       </td>
                     ) : null}
                     <td className="p-4 text-center" onClick={(e) => e.stopPropagation()}>
@@ -248,6 +267,7 @@ export function ClientDirectoryPanel({
                         cpPaidAt={c.cpPaidAt}
                         currentManagerId={currentManagerId}
                         isAdmin={isAdmin}
+                        canEdit={cpEditable}
                         onToggleClientPaid={onToggleClientPaid}
                         onRefreshReports={onRefreshReports}
                         compact

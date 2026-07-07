@@ -1515,6 +1515,7 @@ const App = () => {
             onRefreshReports={refresh}
             currentManagerId={sessionUserId}
             isAdmin={isAdmin}
+            canAdminWrite={canAdminWrite}
             onToggleClientPaid={canAdminWrite ? toggleClientPaid : undefined}
             managerSelectOptions={managerProfiles}
             onAssignManager={canAdminWrite ? assignClientManager : undefined}
@@ -1961,6 +1962,7 @@ const App = () => {
             standaloneByManager={row?.standaloneByManager ?? []}
             currentManagerId={sessionUserId}
             isAdmin={isAdmin}
+            canAdminWrite={canAdminWrite}
             categories={clientCategories}
             profileSaving={clientProfileSaving}
             onSaveProfile={canAdminWrite ? saveClientProfile : undefined}

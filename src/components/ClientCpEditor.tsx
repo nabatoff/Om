@@ -63,6 +63,8 @@ type Props = {
   /** Свой manager_id — для сохранения «ЦП без встречи». */
   currentManagerId?: string | null;
   isAdmin?: boolean;
+  /** Редактирование ЦП (read-only админ — false). */
+  canEdit?: boolean;
   onToggleClientPaid?: (bin: string, paid: boolean, paidAt?: string | null) => Promise<void>;
   onRefreshReports?: () => Promise<void>;
   compact?: boolean;
@@ -79,6 +81,7 @@ export function ClientCpEditor({
   cpPaidAt,
   currentManagerId,
   isAdmin,
+  canEdit = true,
   onToggleClientPaid,
   onRefreshReports,
   compact,
@@ -90,7 +93,7 @@ export function ClientCpEditor({
   const [busy, setBusy] = useState(false);
   const [paidAtModal, setPaidAtModal] = useState<{ month: string; year: string } | null>(null);
 
-  const editable = Boolean(onRefreshReports);
+  const editable = Boolean(onRefreshReports && canEdit);
   const label = totalCp >= 1 ? `${totalCp} шт.` : '—';
   const ownStandaloneEntries = currentManagerId ? standaloneByManager.filter((s) => s.managerId === currentManagerId) : [];
 
@@ -182,7 +185,7 @@ export function ClientCpEditor({
         >
           Изменить
         </button>
-        {isAdmin ? (
+        {isAdmin && onToggleClientPaid ? (
           <button
             type="button"
             disabled={busy}

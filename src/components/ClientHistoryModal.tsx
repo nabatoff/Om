@@ -42,6 +42,7 @@ type Props = {
   standaloneByManager?: ClientStandaloneCpView[];
   currentManagerId?: string | null;
   isAdmin?: boolean;
+  canAdminWrite?: boolean;
   categories?: ClientCategory[];
   profileSaving?: boolean;
   onSaveProfile?: (bin: string, profile: ProfilePayload) => Promise<void>;
@@ -63,6 +64,7 @@ export function ClientHistoryModal({
   standaloneByManager = [],
   currentManagerId,
   isAdmin,
+  canAdminWrite = true,
   categories = [],
   profileSaving = false,
   onSaveProfile,
@@ -217,6 +219,7 @@ export function ClientHistoryModal({
                 cpPaidAt={cpPaidAt}
                 currentManagerId={currentManagerId}
                 isAdmin={isAdmin}
+                canEdit={!isAdmin || canAdminWrite}
                 onToggleClientPaid={onToggleClientPaid}
                 onRefreshReports={onRefreshReports}
               />
