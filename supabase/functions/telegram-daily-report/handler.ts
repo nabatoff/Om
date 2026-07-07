@@ -78,8 +78,8 @@ async function isRequestAuthorized(req: Request): Promise<boolean> {
   const { data: { user } } = await userClient.auth.getUser();
   if (!user) return false;
 
-  const { data: prof } = await userClient.from("profiles").select("role").eq("id", user.id).maybeSingle();
-  return prof?.role === "admin";
+  const { data: prof } = await userClient.from("profiles").select("role, admin_write").eq("id", user.id).maybeSingle();
+  return prof?.role === "admin" && prof?.admin_write !== false;
 }
 
 export async function handleCronReport(req: Request): Promise<Response> {

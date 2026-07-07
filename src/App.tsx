@@ -200,7 +200,7 @@ function getSavedManagerOrdersSection(): 'calendar' | 'meetings' | 'orders' {
 }
 
 const App = () => {
-  const { session, ready: authReady, managerName, signOut, isAdmin } = useAuth();
+  const { session, ready: authReady, managerName, signOut, isAdmin, canAdminWrite } = useAuth();
   const sessionUserId = session?.user?.id;
   const [currentView, setCurrentView] = useState<CurrentView>(() => getSavedCurrentView());
   const [clients, setClients] = useState<UiClient[]>([]);
@@ -388,7 +388,7 @@ const App = () => {
       setCurrentView('manager');
     }
     if (isAdmin && currentView === 'ensTru') {
-      setCurrentView('admin');
+      setCurrentView(canAdminWrite ? 'admin' : 'clientsOrders');
     }
     if (!isAdmin && currentView === 'clientsOrders') {
       setCurrentView('clients');
@@ -404,7 +404,17 @@ const App = () => {
       setCurrentView('clientsOrders');
       setClientsOrdersSubView('orders');
     }
-  }, [isAdmin, currentView]);
+    if (isAdmin && !canAdminWrite && currentView === 'manager') {
+      setCurrentView('admin');
+      setAdminSubView('kpi');
+    }
+    if (isAdmin && !canAdminWrite && currentView === 'admin') {
+      const allowed: typeof adminSubView[] = ['kpi'];
+      if (!allowed.includes(adminSubView)) {
+        setAdminSubView('kpi');
+      }
+    }
+  }, [isAdmin, canAdminWrite, currentView, adminSubView]);
 
   useEffect(() => {
     localStorage.setItem(LS_CURRENT_VIEW, currentView);
@@ -430,10 +440,9 @@ const App = () => {
   }, [isClientModalOpen, isAdmin]);
 
   useEffect(() => {
-    if (currentView === 'admin') {
-      setAdminSubView('salesDashboard');
-    }
-  }, [currentView]);
+    if (currentView !== 'admin' || !canAdminWrite) return;
+    setAdminSubView('salesDashboard');
+  }, [currentView, canAdminWrite]);
 
   useEffect(() => {
     if (!adminAnalyticsTabEnabled && adminSubView === 'dashboard') {
@@ -587,6 +596,7 @@ const App = () => {
   };
 
   const saveClientModal = async () => {
+    if (!canAdminWrite) return;
     if (newClientData.name.trim().length < 2 || newClientData.bin.length !== 12) {
       alert('Необходимо заполнить наименование и БИН (12 цифр)');
       return;
@@ -696,7 +706,7 @@ const App = () => {
         attractionMonth: string | null;
       },
     ) => {
-      if (!isAdmin) return;
+      if (!canAdminWrite) return;
       setClientProfileSaving(true);
       try {
         let categoryId = profile.categoryId;
@@ -727,12 +737,12 @@ const App = () => {
         setClientProfileSaving(false);
       }
     },
-    [isAdmin, clientCategories, refresh],
+    [canAdminWrite, clientCategories, refresh],
   );
 
   const assignClientManager = useCallback(
     async (bin: string, managerId: string | null) => {
-      if (!isAdmin) return;
+      if (!canAdminWrite) return;
       await setClientManager(bin, managerId);
       setClients((prev) =>
         prev.map((c) =>
@@ -746,7 +756,7 @@ const App = () => {
         ),
       );
     },
-    [isAdmin, managerProfiles],
+    [canAdminWrite, managerProfiles],
   );
 
   const toggleClientKtp = useCallback(
@@ -766,7 +776,7 @@ const App = () => {
 
   const toggleClientPaid = useCallback(
     async (bin: string, paid: boolean, paidAt?: string | null) => {
-      if (!isAdmin) return;
+      if (!canAdminWrite) return;
       await setClientCpPaid(bin, paid, paidAt);
       setClients((prev) =>
         prev.map((c) => (c.bin === bin ? { ...c, cpPaid: paid, cpPaidAt: paid ? (paidAt ?? null) : null } : c)),
@@ -776,7 +786,7 @@ const App = () => {
   );
 
   const removeClient = async (client: UiClient) => {
-    if (!isAdmin) return;
+    if (!canAdminWrite) return;
     const ok = window.confirm(
       `Удалить контрагента "${client.name}" (${client.bin})?\n\nЕсли он используется в отчётах, удаление может быть запрещено.`,
     );
@@ -791,7 +801,7 @@ const App = () => {
   };
 
   const removeReport = async (reportId: string) => {
-    if (!isAdmin) return;
+    if (!canAdminWrite) return;
     const ok = window.confirm(
       `Удалить отчёт ${reportId.slice(0, 8)}?\n\nБудут удалены связанные встречи и сделки (если настроено каскадное удаление).`,
     );
@@ -813,7 +823,7 @@ const App = () => {
     manager?: string;
     date: string;
   }) => {
-    if (!isAdmin) return;
+    if (!canAdminWrite) return;
     const normalizeText = (value: string) => value.trim().toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ');
     const normalizeBin = (value: string) => value.replace(/\D/g, '');
     const sameCounterparty = (aName: string, aBin: string, bName: string, bBin: string) => {
@@ -924,7 +934,7 @@ const App = () => {
   };
 
   const restoreAdminMeeting = async (row: DeletedMeeting) => {
-    if (!isAdmin) return;
+    if (!canAdminWrite) return;
     try {
       if (row.source === 'assigned') await restoreAssignedMeetingById(row.id);
       else await restoreConductedMeetingById(row.id);
@@ -935,7 +945,7 @@ const App = () => {
   };
 
   const hardDeleteAdminMeeting = async (row: DeletedMeeting) => {
-    if (!isAdmin) return;
+    if (!canAdminWrite) return;
     const ok = window.confirm(
       `Удалить навсегда "${row.entityName}" (${formatDisplayDate(row.date)})?\n\nЭто действие необратимо.`,
     );
@@ -1152,6 +1162,7 @@ const App = () => {
               Выйти
             </button>
             <div className="flex flex-wrap bg-gray-100 p-1 rounded-xl flex-1 md:flex-none min-w-0 w-full sm:w-auto">
+              {(!isAdmin || canAdminWrite) && (
               <button
                 type="button"
                 onClick={() => setCurrentView('manager')}
@@ -1159,12 +1170,13 @@ const App = () => {
               >
                 <FileText size={14} /> ОТЧЕТ
               </button>
+              )}
               {isAdmin && (
                 <button
                   type="button"
                   onClick={() => {
                     setCurrentView('admin');
-                    setAdminSubView('salesDashboard');
+                    setAdminSubView(canAdminWrite ? 'salesDashboard' : 'kpi');
                   }}
                   className={`flex-1 md:flex-none min-w-[120px] sm:min-w-0 flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all ${currentView === 'admin' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                 >
@@ -1262,6 +1274,7 @@ const App = () => {
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="flex flex-wrap gap-2 bg-white border border-gray-200 rounded-2xl p-2 w-full md:w-auto">
+              {canAdminWrite ? (
               <button
                 type="button"
                 onClick={() => setAdminSubView('salesDashboard')}
@@ -1272,7 +1285,8 @@ const App = () => {
                 <BarChart2 size={14} />
                 Дашборд
               </button>
-              {adminAnalyticsTabEnabled ? (
+              ) : null}
+              {canAdminWrite && adminAnalyticsTabEnabled ? (
                 <button
                   type="button"
                   onClick={() => setAdminSubView('dashboard')}
@@ -1294,6 +1308,7 @@ const App = () => {
                 <FileText size={14} />
                 KPI отчёт
               </button>
+              {canAdminWrite ? (
               <button
                 type="button"
                 onClick={() => setAdminSubView('meetings')}
@@ -1304,6 +1319,8 @@ const App = () => {
                 <List size={14} />
                 Все встречи
               </button>
+              ) : null}
+              {canAdminWrite ? (
               <button
                 type="button"
                 onClick={() => setAdminSubView('staff')}
@@ -1314,6 +1331,8 @@ const App = () => {
                 <UserCog size={14} />
                 Сотрудники
               </button>
+              ) : null}
+              {canAdminWrite ? (
               <button
                 type="button"
                 onClick={() => setAdminSubView('settings')}
@@ -1324,7 +1343,9 @@ const App = () => {
                 <Settings size={14} />
                 Настройки
               </button>
+              ) : null}
             </div>
+            {canAdminWrite ? (
             <div className="flex flex-col sm:flex-row sm:items-end gap-2 w-full sm:w-auto">
               <div className="flex flex-wrap items-end gap-2">
                 <div className="space-y-1 flex-1 min-w-[140px] sm:flex-none">
@@ -1391,8 +1412,9 @@ const App = () => {
                 {telegramReportSending ? 'Отправка…' : 'Отчёт в Telegram'}
               </button>
             </div>
+            ) : null}
             </div>
-            {adminSubView === 'salesDashboard' && (
+            {adminSubView === 'salesDashboard' && canAdminWrite && (
               <SalesComparisonDashboard
                 allReports={allReports}
                 filterManager={adminFilterManager}
@@ -1400,7 +1422,7 @@ const App = () => {
                 managerOptions={managerFilterOptions}
               />
             )}
-            {adminAnalyticsTabEnabled && adminSubView === 'dashboard' && (
+            {adminAnalyticsTabEnabled && adminSubView === 'dashboard' && canAdminWrite && (
               <AdminDashboard
                 reports={filteredReports}
                 filterManager={adminFilterManager}
@@ -1424,11 +1446,11 @@ const App = () => {
                 filterDateTo={kpiFilterDateTo}
                 setFilterDateTo={setKpiFilterDateTo}
                 managerOptions={managerFilterOptions}
-                onDeleteReport={removeReport}
+                onDeleteReport={canAdminWrite ? removeReport : undefined}
               />
             )}
-            {adminSubView === 'staff' && <StaffManager />}
-            {adminSubView === 'meetings' && (
+            {adminSubView === 'staff' && canAdminWrite && <StaffManager />}
+            {adminSubView === 'meetings' && canAdminWrite && (
               <ManagerMeetingsPanel
                 variant="admin"
                 allReports={allReports}
@@ -1441,7 +1463,7 @@ const App = () => {
                 onRefreshReports={refresh}
               />
             )}
-            {adminSubView === 'settings' && (
+            {adminSubView === 'settings' && canAdminWrite && (
               <AdminSettingsPanel
                 onRefreshReports={refresh}
                 onMrpUpdated={setMrpKzt}
@@ -1493,10 +1515,10 @@ const App = () => {
             onRefreshReports={refresh}
             currentManagerId={sessionUserId}
             isAdmin={isAdmin}
-            onToggleClientPaid={isAdmin ? toggleClientPaid : undefined}
+            onToggleClientPaid={canAdminWrite ? toggleClientPaid : undefined}
             managerSelectOptions={managerProfiles}
-            onAssignManager={isAdmin ? assignClientManager : undefined}
-            onToggleKtp={isAdmin ? toggleClientKtp : undefined}
+            onAssignManager={canAdminWrite ? assignClientManager : undefined}
+            onToggleKtp={canAdminWrite ? toggleClientKtp : undefined}
             managerFilter={adminClientsFilterManager}
             managerOptions={adminClientManagerOptions}
             onManagerFilterChange={setAdminClientsFilterManager}
@@ -1504,7 +1526,7 @@ const App = () => {
             subtitle={isAdmin ? 'База crm_clients · ЦП по всем отчётам' : 'Из ваших отчётов · сумма ЦП по проведённым встречам'}
             onSelectClient={(c) => setClientHistoryFor(c)}
             onAddClient={
-              isAdmin
+              canAdminWrite
                 ? () => {
                     setEditingClientBin(null);
                     setNewClientData(emptyNewClientForm());
@@ -1514,7 +1536,7 @@ const App = () => {
                 : undefined
             }
             onEditClient={
-              isAdmin
+              canAdminWrite
                 ? (c) => {
                     setEditingClientBin(c.bin);
                     setNewClientData(newClientFormFromClient(c));
@@ -1523,7 +1545,7 @@ const App = () => {
                   }
                 : undefined
             }
-            onDeleteClient={isAdmin ? removeClient : undefined}
+            onDeleteClient={canAdminWrite ? removeClient : undefined}
           />
         )}
 
@@ -1601,10 +1623,10 @@ const App = () => {
                     mrpKztApplied: order.mrpKztApplied,
                     isKtpApplied: order.isKtpApplied,
                     commissionAmount: order.commissionAmount,
-                    editableOrder: isAdmin ? order : null,
+                    editableOrder: canAdminWrite ? order : null,
                   })
                 }
-                onEditOrder={isAdmin ? (order) => setEditingOrder(order) : undefined}
+                onEditOrder={canAdminWrite ? (order) => setEditingOrder(order) : undefined}
                 openGroupedOrderDetails={(group) =>
                   setOrderDetailModal({
                     isOpen: true,
@@ -1622,7 +1644,7 @@ const App = () => {
         )}
       </div>
 
-      {isClientModalOpen && (
+      {isClientModalOpen && canAdminWrite && (
         <div
           className="fixed inset-0 bg-black/60 backdrop-blur-md z-[500] flex items-center justify-center p-4 animate-in fade-in duration-200"
           onClick={() => {
@@ -1902,7 +1924,7 @@ const App = () => {
         />
       )}
 
-      {editingOrder && isAdmin ? (
+      {editingOrder && canAdminWrite ? (
         <AdminOrderEditModal
           order={editingOrder}
           clients={clients}
@@ -1941,8 +1963,8 @@ const App = () => {
             isAdmin={isAdmin}
             categories={clientCategories}
             profileSaving={clientProfileSaving}
-            onSaveProfile={isAdmin ? saveClientProfile : undefined}
-            onToggleClientPaid={isAdmin ? toggleClientPaid : undefined}
+            onSaveProfile={canAdminWrite ? saveClientProfile : undefined}
+            onToggleClientPaid={canAdminWrite ? toggleClientPaid : undefined}
             onRefreshReports={refresh}
             onClose={() => setClientHistoryFor(null)}
           />
@@ -3227,7 +3249,7 @@ const KpiDashboard = ({
   filterDateTo: string;
   setFilterDateTo: SetState<string>;
   managerOptions: string[];
-  onDeleteReport: (reportId: string) => void;
+  onDeleteReport?: (reportId: string) => void;
 }) => {
   const kpiTablePeriod = useMemo(() => adminDateFilterBounds(filterDateFrom, filterDateTo), [filterDateFrom, filterDateTo]);
   const kpiTablePeriodLabel = `${formatDisplayDate(kpiTablePeriod.from)} — ${formatDisplayDate(kpiTablePeriod.to)}${
@@ -3432,7 +3454,7 @@ const KpiDashboard = ({
               <th className="py-4 px-4 text-center">Назначено новых</th>
               <th className="py-4 px-4 text-center">Проведено новых</th>
               <th className="py-4 px-4 text-center">Проведено повторных</th>
-              <th className="py-4 px-4 text-right">Действия</th>
+              {onDeleteReport ? <th className="py-4 px-4 text-right">Действия</th> : null}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
@@ -3448,6 +3470,7 @@ const KpiDashboard = ({
                 <td className="py-3.5 px-4 text-center font-black text-slate-800">{countAssignedNewMeetings(report)}</td>
                 <td className="py-3.5 px-4 text-center font-black text-teal-700">{countConductedNewMeetings(report, allReports)}</td>
                 <td className="py-3.5 px-4 text-center font-black text-violet-700">{countConductedRepeatMeetings(report)}</td>
+                {onDeleteReport ? (
                 <td className="py-3.5 px-4 text-right">
                   <button
                     type="button"
@@ -3458,6 +3481,7 @@ const KpiDashboard = ({
                     <Trash2 size={12} /> Удалить
                   </button>
                 </td>
+                ) : null}
               </tr>
             ))}
             {kpiRows.length > 0 && (

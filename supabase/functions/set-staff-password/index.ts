@@ -44,8 +44,8 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  const { data: prof } = await userClient.from("profiles").select("role").eq("id", user.id).maybeSingle();
-  if (prof?.role !== "admin") {
+  const { data: prof } = await userClient.from("profiles").select("role, admin_write").eq("id", user.id).maybeSingle();
+  if (prof?.role !== "admin" || prof?.admin_write === false) {
     return new Response(JSON.stringify({ error: "Только администратор" }), {
       status: 403,
       headers: { ...cors, "Content-Type": "application/json" },
