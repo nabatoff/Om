@@ -132,7 +132,7 @@ export async function handleCronReport(req: Request): Promise<Response> {
     ] = await Promise.all([
       supabase.rpc("telegram_daily_analytics_rows", { p_date: reportDate }),
       supabase.rpc("get_crm_telegram_weekly_forecast"),
-      supabase.rpc("telegram_confirmed_orders_totals", { p_tz: tz }),
+      supabase.rpc("telegram_confirmed_orders_totals", { p_tz: tz, p_date: reportDate }),
     ]);
     if (error) throw error;
     if (forecastError) throw forecastError;
@@ -163,7 +163,7 @@ export async function handleCronReport(req: Request): Promise<Response> {
     lines.push("━━━━━━━━━━━━━━━━━━━━");
     lines.push("");
     lines.push(`Прогноз на неделю: <b>${money(weeklyForecast)} ₸</b>`);
-    lines.push(`Сумма заказов на сегодняшний день: <b>${money(todayOrdersSum)} ₸</b>`);
+    lines.push(`Сумма заказов за день: <b>${money(todayOrdersSum)} ₸</b>`);
     lines.push(`Сумма заказов за неделю (в текущем месяце): <b>${money(weekOrdersSum)} ₸</b>`);
     lines.push("");
     lines.push("<b>Общая сводка</b>");
