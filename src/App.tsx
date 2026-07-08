@@ -201,6 +201,7 @@ function getSavedManagerOrdersSection(): 'calendar' | 'meetings' | 'orders' {
 
 const App = () => {
   const { session, ready: authReady, managerName, signOut, isAdmin, canAdminWrite } = useAuth();
+  const canManageClients = !isAdmin || canAdminWrite;
   const sessionUserId = session?.user?.id;
   const [currentView, setCurrentView] = useState<CurrentView>(() => getSavedCurrentView());
   const [clients, setClients] = useState<UiClient[]>([]);
@@ -596,7 +597,7 @@ const App = () => {
   };
 
   const saveClientModal = async () => {
-    if (!canAdminWrite) return;
+    if (!canManageClients) return;
     if (newClientData.name.trim().length < 2 || newClientData.bin.length !== 12) {
       alert('Необходимо заполнить наименование и БИН (12 цифр)');
       return;
@@ -1645,7 +1646,7 @@ const App = () => {
         )}
       </div>
 
-      {isClientModalOpen && canAdminWrite && (
+      {isClientModalOpen && canManageClients && (
         <div
           className="fixed inset-0 bg-black/60 backdrop-blur-md z-[500] flex items-center justify-center p-4 animate-in fade-in duration-200"
           onClick={() => {
