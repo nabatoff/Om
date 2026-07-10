@@ -12,8 +12,6 @@ const palette = {
   border: "#374151",
   text: "#f9fafb",
   muted: "#9ca3af",
-  accent: "#2563eb",
-  accentSoft: "#1d4ed8",
   success: "#10b981",
 };
 
@@ -49,78 +47,107 @@ function metric(label: string, value: string, accent = false): ReactElement {
 
 function rowMetric(label: string, value: string): ReactElement {
   return box(
-    { display: "flex", justifyContent: "space-between", marginBottom: 10 },
+    { display: "flex", flexDirection: "row", justifyContent: "space-between", marginBottom: 12, width: "100%" },
     text(label, { fontSize: 24, color: palette.muted }),
     text(value, { fontSize: 24, fontWeight: 700, color: palette.text }),
   );
 }
 
+/** Высота canvas для Satori — с запасом, иначе низ обрезается. */
 export function estimateReportHeight(payload: TelegramReportPayload): number {
   const sorted = [...payload.rows].sort((a, b) => (a.manager ?? "").localeCompare(b.manager ?? "", "ru"));
-  let height = 420;
-  for (const r of sorted) {
-    const br = parseBreakdown(r.confirmed_orders_breakdown);
-    height += 150 + (br.length === 0 ? 36 : 32 + br.length * 34);
+
+  // шапка + 3 метрики + общая сводка + заголовок секции менеджеров
+  let height = 620;
+
+  if (sorted.length === 0) {
+    height += 80;
+  } else {
+    for (const r of sorted) {
+      const br = parseBreakdown(r.confirmed_orders_breakdown);
+      // карточка менеджера: имя + 3 строки + padding + border
+      let card = 300;
+      if (br.length === 0) {
+        card += 44;
+      } else {
+        card += 52 + br.length * 38;
+      }
+      height += card + 24; // gap между карточками
+    }
   }
-  if (sorted.length === 0) height += 80;
-  return Math.max(900, Math.min(height + 80, 14000));
+
+  return Math.max(1100, Math.min(height + 160, 20000));
+}
+
+function buildManagerCard(r: TelegramReportPayload["rows"][number]): ReactElement {
+  const name = (r.manager ?? "").trim() || "Без имени";
+  const br = parseBreakdown(r.confirmed_orders_breakdown);
+  const orderLines = br.length === 0
+    ? [text("Заказы: нет", { fontSize: 22, color: palette.muted, marginTop: 12 })]
+    : [
+      text("Подтверждённые заказы:", {
+        fontSize: 22,
+        color: palette.muted,
+        marginTop: 16,
+        marginBottom: 10,
+      }),
+      ...br.map((o) => {
+        const rawName = (o?.name ?? "").trim();
+        const label = rawName || `БИН ${(o?.bin ?? "").trim() || "—"}`;
+        const cnt = Number(o?.order_count ?? 0);
+        return text(`— ${label}: ${money(Number(o?.total ?? 0))} ₸ · ${cnt} зак.`, {
+          fontSize: 21,
+          color: palette.text,
+          marginBottom: 8,
+          paddingLeft: 12,
+        });
+      }),
+    ];
+
+  return box(
+    {
+      display: "flex",
+      flexDirection: "column",
+      width: "100%",
+      backgroundColor: palette.surface,
+      borderRadius: 20,
+      border: `1px solid ${palette.border}`,
+      padding: "24px 28px",
+    },
+    text(name, { fontSize: 30, fontWeight: 700, color: palette.text, marginBottom: 18 }),
+    rowMetric("Назначено встреч", String(r.assigned_meetings ?? 0)),
+    rowMetric("Факт проведено", String(r.conducted_fact ?? 0)),
+    rowMetric(
+      "Подтверждённых заказов",
+      `${Number(r.confirmed_orders_count ?? 0)} на ${money(Number(r.confirmed_orders_sum ?? 0))} ₸`,
+    ),
+    ...orderLines,
+  );
 }
 
 export function buildTelegramReportElement(payload: TelegramReportPayload): ReactElement {
   const { reportDateLabel, weeklyForecast, todayOrdersSum, weekOrdersSum, total, rows } = payload;
   const sorted = [...rows].sort((a, b) => (a.manager ?? "").localeCompare(b.manager ?? "", "ru"));
 
-  const managerBlocks = sorted.length === 0
-    ? [text("Нет отчётов за день", { fontSize: 26, color: palette.muted, padding: "12px 0" })]
-    : sorted.map((r) => {
-      const name = (r.manager ?? "").trim() || "Без имени";
-      const br = parseBreakdown(r.confirmed_orders_breakdown);
-      const orderLines = br.length === 0
-        ? [text("Заказы: нет", { fontSize: 22, color: palette.muted, marginTop: 8 })]
-        : [
-          text("Подтверждённые заказы:", { fontSize: 22, color: palette.muted, marginTop: 12, marginBottom: 8 }),
-          ...br.map((o) => {
-            const rawName = (o?.name ?? "").trim();
-            const label = rawName || `БИН ${(o?.bin ?? "").trim() || "—"}`;
-            const cnt = Number(o?.order_count ?? 0);
-            return text(`— ${label}: ${money(Number(o?.total ?? 0))} ₸ · ${cnt} зак.`, {
-              fontSize: 21,
-              color: palette.text,
-              marginBottom: 6,
-              paddingLeft: 12,
-            });
-          }),
-        ];
-
-      return box(
-        {
-          display: "flex",
-          flexDirection: "column",
-          backgroundColor: palette.surface,
-          borderRadius: 20,
-          border: `1px solid ${palette.border}`,
-          padding: "24px 28px",
-          marginBottom: 20,
-        },
-        text(name, { fontSize: 30, fontWeight: 700, color: palette.text, marginBottom: 16 }),
-        rowMetric("Назначено встреч", String(r.assigned_meetings ?? 0)),
-        rowMetric("Факт проведено", String(r.conducted_fact ?? 0)),
-        rowMetric(
-          "Подтверждённых заказов",
-          `${Number(r.confirmed_orders_count ?? 0)} на ${money(Number(r.confirmed_orders_sum ?? 0))} ₸`,
-        ),
-        ...orderLines,
-      );
-    });
+  const managerSection = sorted.length === 0
+    ? text("Нет отчётов за день", { fontSize: 26, color: palette.muted, paddingTop: 12 })
+    : box(
+      {
+        display: "flex",
+        flexDirection: "column",
+        width: "100%",
+        gap: 24,
+      },
+      ...sorted.map((r) => buildManagerCard(r)),
+    );
 
   return box(
     {
       display: "flex",
       flexDirection: "column",
       width: WIDTH,
-      height: estimateReportHeight(payload),
       backgroundColor: palette.bg,
-      padding: "40px 48px",
+      padding: "40px 48px 56px",
       fontFamily: "Noto Sans",
       color: palette.text,
     },
@@ -141,6 +168,7 @@ export function buildTelegramReportElement(payload: TelegramReportPayload): Reac
         flexDirection: "row",
         gap: 16,
         marginBottom: 28,
+        width: "100%",
       },
       metric("Прогноз на неделю", `${money(weeklyForecast)} ₸`, true),
       metric("Заказы за день", `${money(todayOrdersSum)} ₸`),
@@ -150,11 +178,12 @@ export function buildTelegramReportElement(payload: TelegramReportPayload): Reac
       {
         display: "flex",
         flexDirection: "column",
+        width: "100%",
         backgroundColor: palette.surface,
         borderRadius: 20,
         border: `1px solid ${palette.border}`,
         padding: "24px 28px",
-        marginBottom: 28,
+        marginBottom: 36,
       },
       text("Общая сводка", { fontSize: 28, fontWeight: 700, marginBottom: 16 }),
       rowMetric("Назначено встреч", String(total.assigned)),
@@ -164,8 +193,22 @@ export function buildTelegramReportElement(payload: TelegramReportPayload): Reac
         `${total.ordersCount} на ${money(total.ordersSum)} ₸`,
       ),
     ),
-    text("По менеджерам", { fontSize: 28, fontWeight: 700, marginBottom: 16 }),
-    ...managerBlocks,
+    box(
+      {
+        display: "flex",
+        flexDirection: "column",
+        width: "100%",
+        marginBottom: 28,
+      },
+      text("По менеджерам", {
+        fontSize: 28,
+        fontWeight: 700,
+        color: palette.text,
+        marginBottom: 24,
+        lineHeight: 1.3,
+      }),
+      managerSection,
+    ),
   );
 }
 
