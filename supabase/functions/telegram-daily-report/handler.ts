@@ -210,13 +210,15 @@ export async function handleCronReport(req: Request): Promise<Response> {
     }
 
     let delivery: "photo" | "text" = "text";
+    let imageError: string | undefined;
     if (reportAsImageEnabled()) {
       try {
         const png = await renderTelegramReportPng(payload);
         await sendTelegramPhoto(botToken, chatId, png, caption);
         delivery = "photo";
       } catch (imgErr) {
-        console.error("[telegram-daily-report] image failed, fallback to text:", errText(imgErr));
+        imageError = errText(imgErr);
+        console.error("[telegram-daily-report] image failed, fallback to text:", imageError);
         await sendTelegramMessage(botToken, chatId, text);
         delivery = "text";
       }
@@ -232,6 +234,7 @@ export async function handleCronReport(req: Request): Promise<Response> {
         chatId,
         managers: payload.rows.length,
         delivery,
+        imageError,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );

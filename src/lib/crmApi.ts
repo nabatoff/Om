@@ -707,6 +707,7 @@ export type TelegramDailyReportResult = {
   reportDateLabel?: string;
   managers?: number;
   delivery?: 'photo' | 'text';
+  imageError?: string;
   error?: string;
 };
 

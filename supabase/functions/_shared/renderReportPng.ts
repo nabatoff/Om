@@ -8,9 +8,9 @@ import {
 } from "./telegramReportCard.ts";
 
 const FONT_REGULAR_URL =
-  "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/notosans/NotoSans-Regular.ttf";
+  "https://raw.githubusercontent.com/notofonts/noto-fonts/main/hinted/ttf/NotoSans/NotoSans-Regular.ttf";
 const FONT_BOLD_URL =
-  "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/notosans/NotoSans-Bold.ttf";
+  "https://raw.githubusercontent.com/notofonts/noto-fonts/main/hinted/ttf/NotoSans/NotoSans-Bold.ttf";
 
 let wasmReady: Promise<void> | null = null;
 let fontsReady: Promise<Array<{ name: string; data: ArrayBuffer; weight: number; style: "normal" }>> | null =

@@ -303,7 +303,13 @@ const App = () => {
     try {
       const res = await sendTelegramDailyReportNow(ymd);
       const label = res.reportDateLabel ?? res.reportDate ?? ymd;
-      alert(`Отчёт за ${label} отправлен в Telegram.`);
+      if (res.delivery === 'photo') {
+        alert(`Отчёт за ${label} отправлен в Telegram картинкой.`);
+      } else if (res.imageError) {
+        alert(`Отчёт за ${label} отправлен текстом (картинка не собралась: ${res.imageError}).`);
+      } else {
+        alert(`Отчёт за ${label} отправлен в Telegram.`);
+      }
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Не удалось отправить отчёт в Telegram');
     } finally {
