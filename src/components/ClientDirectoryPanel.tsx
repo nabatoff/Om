@@ -90,6 +90,11 @@ export function ClientDirectoryPanel({
     return [...filtered].sort((a, b) => (cpSort === 'desc' ? b.totalCp - a.totalCp : a.totalCp - b.totalCp));
   }, [filtered, cpSort, isAdmin]);
 
+  const ktpCount = useMemo(
+    () => (isAdmin ? filtered.filter((c) => Boolean(c.isKtp)).length : 0),
+    [filtered, isAdmin],
+  );
+
   const cycleCpSort = () => {
     setCpSort((prev) => (prev === 'none' ? 'desc' : prev === 'desc' ? 'asc' : 'none'));
   };
@@ -144,6 +149,16 @@ export function ClientDirectoryPanel({
               className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500/30"
             />
           </div>
+          {isAdmin ? (
+            <div
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-violet-200 bg-violet-50 text-violet-800 text-sm font-bold whitespace-nowrap"
+              title="Контрагентов с галочкой КТП среди отфильтрованных"
+            >
+              <span className="text-[10px] font-black uppercase tracking-widest text-violet-500">КТП</span>
+              <span>{ktpCount}</span>
+              <span className="text-violet-400 font-medium">/ {filtered.length}</span>
+            </div>
+          ) : null}
           {canMutate && onAddClient ? (
             <button
               type="button"
