@@ -209,19 +209,20 @@ export async function handleCronReport(req: Request): Promise<Response> {
       });
     }
 
-    let delivery: "photo" | "text" = "text";
+    let delivery: "both" | "photo" | "text" = "text";
     let imageError: string | undefined;
     if (reportAsImageEnabled()) {
+      let photoSent = false;
       try {
         const png = await renderTelegramReportPng(payload);
         await sendTelegramPhoto(botToken, chatId, png, caption);
-        delivery = "photo";
+        photoSent = true;
       } catch (imgErr) {
         imageError = errText(imgErr);
-        console.error("[telegram-daily-report] image failed, fallback to text:", imageError);
-        await sendTelegramMessage(botToken, chatId, text);
-        delivery = "text";
+        console.error("[telegram-daily-report] image failed:", imageError);
       }
+      await sendTelegramMessage(botToken, chatId, text);
+      delivery = photoSent ? "both" : "text";
     } else {
       await sendTelegramMessage(botToken, chatId, text);
     }

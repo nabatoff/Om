@@ -303,7 +303,9 @@ const App = () => {
     try {
       const res = await sendTelegramDailyReportNow(ymd);
       const label = res.reportDateLabel ?? res.reportDate ?? ymd;
-      if (res.delivery === 'photo') {
+      if (res.delivery === 'both') {
+        alert(`Отчёт за ${label} отправлен в Telegram: картинка и текст.`);
+      } else if (res.delivery === 'photo') {
         alert(`Отчёт за ${label} отправлен в Telegram картинкой.`);
       } else if (res.imageError) {
         alert(`Отчёт за ${label} отправлен текстом (картинка не собралась: ${res.imageError}).`);
