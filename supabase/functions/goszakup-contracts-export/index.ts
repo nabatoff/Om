@@ -4,10 +4,8 @@ const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
 const LIST_URL = "https://goszakup.gov.kz/ru/registry/contract";
 const SHOW_URL = "https://goszakup.gov.kz/ru/egzcontract/cpublic/show";
-/** 546 = CPU/memory isolate kill; держим батч крошечным */
-const MAX_ENRICH = 2;
-const FETCH_TIMEOUT_MS = 12_000;
-const ENRICH_DEADLINE_MS = 20_000;
+const MAX_ENRICH = 1;
+const FETCH_TIMEOUT_MS = 15_000;
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -30,6 +28,13 @@ export type GoszakupContractRow = {
 
 type ListRow = Omit<GoszakupContractRow, "planSum" | "finalSum">;
 
+function json(data: unknown, status = 200): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
 function errText(e: unknown): string {
   if (e instanceof Error) return `${e.name}: ${e.message}`;
   try {
@@ -51,28 +56,38 @@ function sleep(ms: number): Promise<void> {
 }
 
 function sliceAround(hay: string, needle: string, before = 0, after = 400): string {
-  const i = hay.toLowerCase().indexOf(needle.toLowerCase());
-  if (i < 0) return "";
+  const i = hay.indexOf(needle);
+  if (i < 0) {
+    const i2 = hay.toLowerCase().indexOf(needle.toLowerCase());
+    if (i2 < 0) return "";
+    return hay.slice(Math.max(0, i2 - before), Math.min(hay.length, i2 + needle.length + after));
+  }
   return hay.slice(Math.max(0, i - before), Math.min(hay.length, i + needle.length + after));
 }
 
 async function fetchText(url: string, attempts = 2): Promise<string> {
   let lastErr: unknown;
   for (let a = 1; a <= attempts; a++) {
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), FETCH_TIMEOUT_MS);
     try {
       const res = await fetch(url, {
         headers: {
           "User-Agent": UA,
           Accept: "text/html,application/xhtml+xml",
           "Accept-Language": "ru-RU,ru;q=0.9",
+          Connection: "close",
         },
-        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        signal: ac.signal,
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
-      return await res.text();
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const text = await res.text();
+      return text;
     } catch (e) {
       lastErr = e;
-      if (a < attempts) await sleep(250 * a);
+      if (a < attempts) await sleep(400 * a);
+    } finally {
+      clearTimeout(timer);
     }
   }
   throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
@@ -128,7 +143,7 @@ function parseListRows(html: string): ListRow[] {
 }
 
 function parseListRange(html: string): { from: number; to: number; total: number } | null {
-  const chunk = sliceAround(html, "Показано", 0, 80) || html.slice(0, 80_000);
+  const chunk = sliceAround(html, "Показано", 0, 100) || html.slice(0, 50_000);
   const m =
     chunk.match(/Показано\s+c\s+(\d+)\s+по\s+(\d+)\s+из\s+(\d+)/i) ??
     chunk.match(/Показано\s+с\s+(\d+)\s+по\s+(\d+)\s+из\s+(\d+)/i);
@@ -137,7 +152,6 @@ function parseListRange(html: string): { from: number; to: number; total: number
 }
 
 function parseDetailSums(html: string): { planSum: number | null; finalSum: number | null } {
-  // Карточка большая — ищем только окна вокруг нужных лейблов (CPU/memory)
   const planChunk = sliceAround(html, "Общая плановая сумма договора", 0, 250);
   const finalChunk = sliceAround(html, "Общая итоговая сумма договора", 0, 250);
   const planM = planChunk.match(
@@ -179,46 +193,47 @@ function buildListUrl(bin: string, page: number): string {
 }
 
 async function handleList(bin: string, page: number): Promise<Response> {
-  const listHtml = await fetchText(buildListUrl(bin, page));
+  let listHtml: string;
+  try {
+    listHtml = await fetchText(buildListUrl(bin, page), 2);
+  } catch (e) {
+    return json({
+      ok: false,
+      action: "list",
+      error: `goszakup list fetch failed: ${errText(e)}`,
+    });
+  }
+
   const rows = parseListRows(listHtml);
   const range = parseListRange(listHtml);
   if (rows.length === 0 && page === 1) {
     const hasTable = /id=["']search-result["']/i.test(listHtml);
-    throw new Error(
-      `Пустой список договоров (page=${page}, table=${hasTable}, html=${listHtml.length} байт)`,
-    );
-  }
-  const hasMore = range ? range.to < range.total : rows.length >= 50;
-  return new Response(
-    JSON.stringify({
-      ok: true,
+    return json({
+      ok: false,
       action: "list",
-      supplierBin: bin,
-      page,
-      hasMore,
-      total: range?.total ?? null,
-      from: range?.from ?? null,
-      to: range?.to ?? null,
-      rows,
-    }),
-    { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-  );
+      error: `Пустой список (table=${hasTable}, html=${listHtml.length}). Сайт мог отдать капчу/блок.`,
+    });
+  }
+
+  const hasMore = range ? range.to < range.total : rows.length >= 50;
+  return json({
+    ok: true,
+    action: "list",
+    supplierBin: bin,
+    page,
+    hasMore,
+    total: range?.total ?? null,
+    from: range?.from ?? null,
+    to: range?.to ?? null,
+    rows,
+  });
 }
 
 async function handleEnrich(items: ListRow[]): Promise<Response> {
   const slice = items.slice(0, MAX_ENRICH);
   const rows: GoszakupContractRow[] = [];
-  const started = Date.now();
 
-  for (let i = 0; i < slice.length; i++) {
-    if (Date.now() - started > ENRICH_DEADLINE_MS) {
-      // Не дотягиваем isolate до hard kill — клиент добьёт остаток
-      for (let j = i; j < slice.length; j++) {
-        rows.push({ ...slice[j], planSum: null, finalSum: null });
-      }
-      break;
-    }
-    const row = slice[i];
+  for (const row of slice) {
     try {
       const detailHtml = await fetchText(`${SHOW_URL}/${row.id}`, 2);
       const sums = parseDetailSums(detailHtml);
@@ -229,14 +244,7 @@ async function handleEnrich(items: ListRow[]): Promise<Response> {
     }
   }
 
-  return new Response(
-    JSON.stringify({
-      ok: true,
-      action: "enrich",
-      rows,
-    }),
-    { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-  );
+  return json({ ok: true, action: "enrich", rows });
 }
 
 Deno.serve(async (req: Request) => {
@@ -246,10 +254,7 @@ Deno.serve(async (req: Request) => {
 
   try {
     if (!(await isAdminWrite(req))) {
-      return new Response(JSON.stringify({ ok: false, error: "forbidden" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json({ ok: false, error: "forbidden" }, 403);
     }
 
     const body = (await req.json().catch(() => ({}))) as {
@@ -263,28 +268,18 @@ Deno.serve(async (req: Request) => {
 
     if (action === "enrich") {
       const items = Array.isArray(body.items) ? body.items : [];
-      if (items.length === 0) {
-        return new Response(JSON.stringify({ ok: false, error: "items пустой" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+      if (items.length === 0) return json({ ok: false, error: "items пустой" });
       return await handleEnrich(items);
     }
 
     const bin = String(body.supplierBin ?? "").replace(/\D/g, "");
     if (bin.length !== 12) {
-      return new Response(JSON.stringify({ ok: false, error: "БИН должен состоять из 12 цифр" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json({ ok: false, error: "БИН должен состоять из 12 цифр" });
     }
     const page = Math.max(1, Math.floor(Number(body.page) || 1));
     return await handleList(bin, page);
   } catch (e) {
-    return new Response(JSON.stringify({ ok: false, error: errText(e) }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    // Всегда 200 + ok:false — иначе supabase-js часто глотает body при 500
+    return json({ ok: false, error: errText(e) });
   }
 });

@@ -33,8 +33,8 @@ type EnrichResult = {
   error?: string;
 };
 
-/** Совпадает с MAX_ENRICH на edge — больше → 546 WORKER_RESOURCE_LIMIT */
-const ENRICH_CHUNK = 2;
+/** Совпадает с MAX_ENRICH на edge */
+const ENRICH_CHUNK = 1;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
@@ -125,18 +125,36 @@ function isTransientInvokeError(msg: string): boolean {
     m.includes('resource limit') ||
     m.includes('failed to send') ||
     m.includes('network') ||
-    m.includes('fetch') ||
+    m.includes('fetch failed') ||
     m.includes('gateway') ||
     m.includes('timeout') ||
+    m.includes('abort') ||
+    m.includes('goszakup list fetch failed') ||
     m.includes('503') ||
     m.includes('502') ||
-    m.includes('504')
+    m.includes('504') ||
+    m.includes('500')
   );
+}
+
+async function readInvokeErrorBody(error: { message?: string; context?: Response }): Promise<string> {
+  const ctx = error.context;
+  if (ctx) {
+    try {
+      const j = (await ctx.clone().json()) as { error?: string; message?: string; code?: string };
+      if (j?.error) return String(j.error);
+      if (j?.message) return `${j.code ? `${j.code}: ` : ''}${j.message}`;
+    } catch {
+      /* ignore */
+    }
+    if (ctx.status) return `${error.message || 'Ошибка edge function'} HTTP ${ctx.status}`;
+  }
+  return error.message || 'Ошибка edge function';
 }
 
 async function invokeJson<T extends { ok?: boolean; error?: string }>(
   body: Record<string, unknown>,
-  attempts = 4,
+  attempts = 5,
 ): Promise<T> {
   let lastErr: Error | null = null;
   for (let a = 1; a <= attempts; a++) {
@@ -148,17 +166,14 @@ async function invokeJson<T extends { ok?: boolean; error?: string }>(
       if (payload?.error) throw new Error(payload.error);
       if (payload && payload.ok === false) throw new Error(payload.error ?? 'Ошибка выгрузки');
       if (error) {
-        const ctx = (error as { context?: Response }).context;
-        const status = ctx?.status;
-        const statusHint = status ? ` HTTP ${status}` : '';
-        throw new Error(`${payload?.error || error.message || 'Ошибка edge function'}${statusHint}`);
+        throw new Error(await readInvokeErrorBody(error as { message?: string; context?: Response }));
       }
       if (!payload?.ok) throw new Error('Ошибка выгрузки договоров');
       return payload;
     } catch (e) {
       lastErr = e instanceof Error ? e : new Error(String(e));
       if (a < attempts && isTransientInvokeError(lastErr.message)) {
-        await sleep(600 * a);
+        await sleep(800 * a);
         continue;
       }
       throw lastErr;
