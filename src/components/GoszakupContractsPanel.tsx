@@ -8,9 +8,12 @@ import {
 export function GoszakupContractsPanel() {
   const [bin, setBin] = useState('');
   const [running, setRunning] = useState(false);
-  const [progress, setProgress] = useState<{ page: number; loaded: number; total: number | null } | null>(
-    null,
-  );
+  const [progress, setProgress] = useState<{
+    page: number;
+    loaded: number;
+    total: number | null;
+    phase: 'list' | 'enrich';
+  } | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -30,7 +33,7 @@ export function GoszakupContractsPanel() {
     }
     setError(null);
     setStatus(null);
-    setProgress({ page: 0, loaded: 0, total: null });
+      setProgress({ page: 0, loaded: 0, total: null, phase: 'list' });
     setRunning(true);
     const ac = new AbortController();
     abortRef.current = ac;
@@ -109,16 +112,18 @@ export function GoszakupContractsPanel() {
 
         {running && progress ? (
           <p className="text-sm text-gray-600">
-            Страница <span className="font-bold">{progress.page || 1}</span>
+            {progress.phase === 'list' ? 'Список' : 'Суммы с карточек'}
             {' · '}
-            договоров <span className="font-bold">{progress.loaded}</span>
+            страница <span className="font-bold">{Math.max(1, progress.page)}</span>
+            {' · '}
+            <span className="font-bold">{progress.loaded}</span>
             {progress.total != null ? (
               <>
                 {' '}
                 / <span className="font-bold">{progress.total}</span>
               </>
             ) : null}
-            <span className="text-gray-400"> — загрузка карточек, это может занять несколько минут</span>
+            <span className="text-gray-400"> — может занять несколько минут</span>
           </p>
         ) : null}
 

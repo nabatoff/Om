@@ -4,6 +4,7 @@ const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
 const LIST_URL = "https://goszakup.gov.kz/ru/registry/contract";
 const SHOW_URL = "https://goszakup.gov.kz/ru/egzcontract/cpublic/show";
+const MAX_ENRICH = 8;
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -23,6 +24,8 @@ export type GoszakupContractRow = {
   supplier: string;
   tradeMethod: string;
 };
+
+type ListRow = Omit<GoszakupContractRow, "planSum" | "finalSum">;
 
 function errText(e: unknown): string {
   if (e instanceof Error) return `${e.name}: ${e.message}`;
@@ -59,16 +62,25 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-async function fetchText(url: string): Promise<string> {
-  const res = await fetch(url, {
-    headers: {
-      "User-Agent": UA,
-      Accept: "text/html,application/xhtml+xml",
-      "Accept-Language": "ru-RU,ru;q=0.9",
-    },
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
-  return await res.text();
+async function fetchText(url: string, attempts = 3): Promise<string> {
+  let lastErr: unknown;
+  for (let a = 1; a <= attempts; a++) {
+    try {
+      const res = await fetch(url, {
+        headers: {
+          "User-Agent": UA,
+          Accept: "text/html,application/xhtml+xml",
+          "Accept-Language": "ru-RU,ru;q=0.9",
+        },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
+      return await res.text();
+    } catch (e) {
+      lastErr = e;
+      if (a < attempts) await sleep(400 * a);
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
 }
 
 function extractTableBody(html: string): string | null {
@@ -76,11 +88,11 @@ function extractTableBody(html: string): string | null {
   return m?.[1] ?? null;
 }
 
-function parseListRows(html: string): Array<Omit<GoszakupContractRow, "planSum" | "finalSum">> {
+function parseListRows(html: string): ListRow[] {
   const body = extractTableBody(html);
   if (!body) return [];
   const trs = body.match(/<tr[^>]*>[\s\S]*?<\/tr>/gi) ?? [];
-  const out: Array<Omit<GoszakupContractRow, "planSum" | "finalSum">> = [];
+  const out: ListRow[] = [];
 
   for (const tr of trs) {
     const tds = tr.match(/<td[^>]*>[\s\S]*?<\/td>/gi) ?? [];
@@ -105,7 +117,8 @@ function parseListRows(html: string): Array<Omit<GoszakupContractRow, "planSum" 
 }
 
 function parseListRange(html: string): { from: number; to: number; total: number } | null {
-  const m = html.match(/Показано\s+c\s+(\d+)\s+по\s+(\d+)\s+из\s+(\d+)/i) ??
+  const m =
+    html.match(/Показано\s+c\s+(\d+)\s+по\s+(\d+)\s+из\s+(\d+)/i) ??
     html.match(/Показано\s+с\s+(\d+)\s+по\s+(\d+)\s+из\s+(\d+)/i);
   if (!m) return null;
   return { from: Number(m[1]), to: Number(m[2]), total: Number(m[3]) };
@@ -122,24 +135,6 @@ function parseDetailSums(html: string): { planSum: number | null; finalSum: numb
     planSum: planM ? parseMoney(planM[1]) : null,
     finalSum: finalM ? parseMoney(finalM[1]) : null,
   };
-}
-
-async function mapPool<T, R>(
-  items: T[],
-  concurrency: number,
-  fn: (item: T, index: number) => Promise<R>,
-): Promise<R[]> {
-  const results: R[] = new Array(items.length);
-  let i = 0;
-  async function worker() {
-    while (i < items.length) {
-      const idx = i++;
-      results[idx] = await fn(items[idx], idx);
-    }
-  }
-  const n = Math.max(1, Math.min(concurrency, items.length || 1));
-  await Promise.all(Array.from({ length: n }, () => worker()));
-  return results;
 }
 
 async function isAdminWrite(req: Request): Promise<boolean> {
@@ -162,10 +157,63 @@ async function isAdminWrite(req: Request): Promise<boolean> {
 }
 
 function buildListUrl(bin: string, page: number): string {
-  const u = new URL(LIST_URL);
-  u.searchParams.set("filter[supplier]", bin);
-  if (page > 1) u.searchParams.set("page", String(page));
-  return u.toString();
+  const params = new URLSearchParams();
+  params.set("filter[supplier]", bin);
+  if (page > 1) params.set("page", String(page));
+  return `${LIST_URL}?${params.toString()}`;
+}
+
+async function handleList(bin: string, page: number): Promise<Response> {
+  const listHtml = await fetchText(buildListUrl(bin, page));
+  const rows = parseListRows(listHtml);
+  const range = parseListRange(listHtml);
+  if (rows.length === 0 && page === 1) {
+    // возможно капча/пустая выдача — отдаём кусок HTML для отладки длины
+    const hasTable = /id=["']search-result["']/i.test(listHtml);
+    throw new Error(
+      `Пустой список договоров (page=${page}, table=${hasTable}, html=${listHtml.length} байт)`,
+    );
+  }
+  const hasMore = range ? range.to < range.total : rows.length >= 50;
+  return new Response(
+    JSON.stringify({
+      ok: true,
+      action: "list",
+      supplierBin: bin,
+      page,
+      hasMore,
+      total: range?.total ?? null,
+      from: range?.from ?? null,
+      to: range?.to ?? null,
+      rows,
+    }),
+    { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+  );
+}
+
+async function handleEnrich(items: ListRow[]): Promise<Response> {
+  const slice = items.slice(0, MAX_ENRICH);
+  const rows: GoszakupContractRow[] = [];
+  for (let i = 0; i < slice.length; i++) {
+    const row = slice[i];
+    if (i > 0) await sleep(180);
+    try {
+      const detailHtml = await fetchText(`${SHOW_URL}/${row.id}`);
+      const sums = parseDetailSums(detailHtml);
+      rows.push({ ...row, ...sums });
+    } catch (e) {
+      console.error(`[goszakup] detail ${row.id}:`, errText(e));
+      rows.push({ ...row, planSum: null, finalSum: null });
+    }
+  }
+  return new Response(
+    JSON.stringify({
+      ok: true,
+      action: "enrich",
+      rows,
+    }),
+    { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+  );
 }
 
 Deno.serve(async (req: Request) => {
@@ -182,9 +230,25 @@ Deno.serve(async (req: Request) => {
     }
 
     const body = (await req.json().catch(() => ({}))) as {
+      action?: string;
       supplierBin?: string;
       page?: number;
+      items?: ListRow[];
     };
+
+    const action = (body.action ?? "list").trim().toLowerCase();
+
+    if (action === "enrich") {
+      const items = Array.isArray(body.items) ? body.items : [];
+      if (items.length === 0) {
+        return new Response(JSON.stringify({ ok: false, error: "items пустой" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      return await handleEnrich(items);
+    }
+
     const bin = String(body.supplierBin ?? "").replace(/\D/g, "");
     if (bin.length !== 12) {
       return new Response(JSON.stringify({ ok: false, error: "БИН должен состоять из 12 цифр" }), {
@@ -193,37 +257,7 @@ Deno.serve(async (req: Request) => {
       });
     }
     const page = Math.max(1, Math.floor(Number(body.page) || 1));
-
-    const listHtml = await fetchText(buildListUrl(bin, page));
-    const baseRows = parseListRows(listHtml);
-    const range = parseListRange(listHtml);
-    const hasMore = range ? range.to < range.total : baseRows.length >= 50;
-
-    const enriched = await mapPool(baseRows, 3, async (row, idx) => {
-      if (idx > 0) await sleep(120);
-      try {
-        const detailHtml = await fetchText(`${SHOW_URL}/${row.id}`);
-        const sums = parseDetailSums(detailHtml);
-        return { ...row, ...sums } satisfies GoszakupContractRow;
-      } catch (e) {
-        console.error(`[goszakup] detail ${row.id}:`, errText(e));
-        return { ...row, planSum: null, finalSum: null } satisfies GoszakupContractRow;
-      }
-    });
-
-    return new Response(
-      JSON.stringify({
-        ok: true,
-        supplierBin: bin,
-        page,
-        hasMore,
-        total: range?.total ?? null,
-        from: range?.from ?? null,
-        to: range?.to ?? null,
-        rows: enriched,
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    return await handleList(bin, page);
   } catch (e) {
     return new Response(JSON.stringify({ ok: false, error: errText(e) }), {
       status: 500,

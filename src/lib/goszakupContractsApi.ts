@@ -14,17 +14,26 @@ export type GoszakupContractRow = {
   tradeMethod: string;
 };
 
-export type GoszakupContractsPage = {
+type ListRow = Omit<GoszakupContractRow, 'planSum' | 'finalSum'>;
+
+type ListPageResult = {
   ok?: boolean;
-  supplierBin?: string;
+  action?: string;
   page?: number;
   hasMore?: boolean;
   total?: number | null;
-  from?: number | null;
-  to?: number | null;
+  rows?: ListRow[];
+  error?: string;
+};
+
+type EnrichResult = {
+  ok?: boolean;
+  action?: string;
   rows?: GoszakupContractRow[];
   error?: string;
 };
+
+const ENRICH_CHUNK = 8;
 
 function xmlEscape(value: string): string {
   return value
@@ -103,51 +112,77 @@ export function exportGoszakupContractsToExcel(rows: GoszakupContractRow[], supp
   URL.revokeObjectURL(a.href);
 }
 
-export async function fetchGoszakupContractsPage(
-  supplierBin: string,
-  page: number,
-): Promise<GoszakupContractsPage> {
-  const { data, error } = await getSupabase().functions.invoke<GoszakupContractsPage>(
-    'goszakup-contracts-export',
-    {
-      body: { supplierBin, page },
-    },
-  );
-  if (data?.error) throw new Error(data.error);
-  if (data && data.ok === false) throw new Error(data.error ?? 'Ошибка выгрузки');
-  if (error) throw new Error((data as GoszakupContractsPage | null)?.error || error.message);
-  if (!data?.ok) throw new Error('Ошибка выгрузки договоров');
-  return data;
+async function invokeJson<T extends { ok?: boolean; error?: string }>(
+  body: Record<string, unknown>,
+): Promise<T> {
+  const { data, error } = await getSupabase().functions.invoke<T>('goszakup-contracts-export', { body });
+  const payload = data as T | null;
+  if (payload?.error) throw new Error(payload.error);
+  if (payload && payload.ok === false) throw new Error(payload.error ?? 'Ошибка выгрузки');
+  if (error) {
+    const msg = payload?.error || error.message || 'Ошибка edge function';
+    throw new Error(msg);
+  }
+  if (!payload?.ok) throw new Error('Ошибка выгрузки договоров');
+  return payload;
+}
+
+async function fetchListPage(supplierBin: string, page: number): Promise<ListPageResult> {
+  return invokeJson<ListPageResult>({ action: 'list', supplierBin, page });
+}
+
+async function enrichChunk(items: ListRow[]): Promise<GoszakupContractRow[]> {
+  const res = await invokeJson<EnrichResult>({ action: 'enrich', items });
+  return res.rows ?? [];
 }
 
 export async function exportAllGoszakupContractsByBin(
   supplierBin: string,
   options: {
     signal?: AbortSignal;
-    onProgress?: (p: { page: number; loaded: number; total: number | null }) => void;
+    onProgress?: (p: {
+      page: number;
+      loaded: number;
+      total: number | null;
+      phase: 'list' | 'enrich';
+    }) => void;
   } = {},
 ): Promise<{ rows: GoszakupContractRow[]; total: number | null }> {
   const bin = supplierBin.replace(/\D/g, '');
   if (bin.length !== 12) throw new Error('БИН должен состоять из 12 цифр');
 
-  const all: GoszakupContractRow[] = [];
+  const listed: ListRow[] = [];
   let page = 1;
   let total: number | null = null;
   let hasMore = true;
 
   while (hasMore) {
     if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-    const res = await fetchGoszakupContractsPage(bin, page);
+    const res = await fetchListPage(bin, page);
     if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
     const rows = res.rows ?? [];
-    all.push(...rows);
+    listed.push(...rows);
     total = res.total ?? total;
     hasMore = Boolean(res.hasMore);
-    options.onProgress?.({ page, loaded: all.length, total });
+    options.onProgress?.({ page, loaded: listed.length, total, phase: 'list' });
     if (!hasMore || rows.length === 0) break;
     page += 1;
     if (page > 500) break;
   }
 
-  return { rows: all, total };
+  const enriched: GoszakupContractRow[] = [];
+  for (let i = 0; i < listed.length; i += ENRICH_CHUNK) {
+    if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+    const chunk = listed.slice(i, i + ENRICH_CHUNK);
+    const part = await enrichChunk(chunk);
+    enriched.push(...part);
+    options.onProgress?.({
+      page,
+      loaded: enriched.length,
+      total: total ?? listed.length,
+      phase: 'enrich',
+    });
+  }
+
+  return { rows: enriched, total };
 }
