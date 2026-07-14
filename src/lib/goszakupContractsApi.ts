@@ -33,7 +33,12 @@ type EnrichResult = {
   error?: string;
 };
 
-const ENRICH_CHUNK = 8;
+/** Совпадает с MAX_ENRICH на edge — больше → 546 WORKER_RESOURCE_LIMIT */
+const ENRICH_CHUNK = 2;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
 
 function xmlEscape(value: string): string {
   return value
@@ -112,19 +117,54 @@ export function exportGoszakupContractsToExcel(rows: GoszakupContractRow[], supp
   URL.revokeObjectURL(a.href);
 }
 
+function isTransientInvokeError(msg: string): boolean {
+  const m = msg.toLowerCase();
+  return (
+    m.includes('546') ||
+    m.includes('worker_resource_limit') ||
+    m.includes('resource limit') ||
+    m.includes('failed to send') ||
+    m.includes('network') ||
+    m.includes('fetch') ||
+    m.includes('gateway') ||
+    m.includes('timeout') ||
+    m.includes('503') ||
+    m.includes('502') ||
+    m.includes('504')
+  );
+}
+
 async function invokeJson<T extends { ok?: boolean; error?: string }>(
   body: Record<string, unknown>,
+  attempts = 4,
 ): Promise<T> {
-  const { data, error } = await getSupabase().functions.invoke<T>('goszakup-contracts-export', { body });
-  const payload = data as T | null;
-  if (payload?.error) throw new Error(payload.error);
-  if (payload && payload.ok === false) throw new Error(payload.error ?? 'Ошибка выгрузки');
-  if (error) {
-    const msg = payload?.error || error.message || 'Ошибка edge function';
-    throw new Error(msg);
+  let lastErr: Error | null = null;
+  for (let a = 1; a <= attempts; a++) {
+    try {
+      const { data, error } = await getSupabase().functions.invoke<T>('goszakup-contracts-export', {
+        body,
+      });
+      const payload = data as T | null;
+      if (payload?.error) throw new Error(payload.error);
+      if (payload && payload.ok === false) throw new Error(payload.error ?? 'Ошибка выгрузки');
+      if (error) {
+        const ctx = (error as { context?: Response }).context;
+        const status = ctx?.status;
+        const statusHint = status ? ` HTTP ${status}` : '';
+        throw new Error(`${payload?.error || error.message || 'Ошибка edge function'}${statusHint}`);
+      }
+      if (!payload?.ok) throw new Error('Ошибка выгрузки договоров');
+      return payload;
+    } catch (e) {
+      lastErr = e instanceof Error ? e : new Error(String(e));
+      if (a < attempts && isTransientInvokeError(lastErr.message)) {
+        await sleep(600 * a);
+        continue;
+      }
+      throw lastErr;
+    }
   }
-  if (!payload?.ok) throw new Error('Ошибка выгрузки договоров');
-  return payload;
+  throw lastErr ?? new Error('Ошибка edge function');
 }
 
 async function fetchListPage(supplierBin: string, page: number): Promise<ListPageResult> {
@@ -174,7 +214,19 @@ export async function exportAllGoszakupContractsByBin(
   for (let i = 0; i < listed.length; i += ENRICH_CHUNK) {
     if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
     const chunk = listed.slice(i, i + ENRICH_CHUNK);
-    const part = await enrichChunk(chunk);
+    let part: GoszakupContractRow[];
+    try {
+      part = await enrichChunk(chunk);
+    } catch (e) {
+      // Последний шанс: по одной карточке (меньше шанс 546)
+      if (chunk.length === 1) throw e;
+      part = [];
+      for (const item of chunk) {
+        if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+        part.push(...(await enrichChunk([item])));
+        await sleep(120);
+      }
+    }
     enriched.push(...part);
     options.onProgress?.({
       page,
@@ -182,6 +234,7 @@ export async function exportAllGoszakupContractsByBin(
       total: total ?? listed.length,
       phase: 'enrich',
     });
+    if (i + ENRICH_CHUNK < listed.length) await sleep(80);
   }
 
   return { rows: enriched, total };

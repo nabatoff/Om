@@ -4,7 +4,10 @@ const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
 const LIST_URL = "https://goszakup.gov.kz/ru/registry/contract";
 const SHOW_URL = "https://goszakup.gov.kz/ru/egzcontract/cpublic/show";
-const MAX_ENRICH = 8;
+/** 546 = CPU/memory isolate kill; держим батч крошечным */
+const MAX_ENRICH = 2;
+const FETCH_TIMEOUT_MS = 12_000;
+const ENRICH_DEADLINE_MS = 20_000;
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -36,21 +39,6 @@ function errText(e: unknown): string {
   }
 }
 
-function stripTags(html: string): string {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<style[\s\S]*?<\/style>/gi, "")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 function parseMoney(raw: string): number | null {
   const cleaned = raw.replace(/\s/g, "").replace(/,/g, ".").replace(/[^\d.-]/g, "");
   if (!cleaned) return null;
@@ -62,7 +50,13 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-async function fetchText(url: string, attempts = 3): Promise<string> {
+function sliceAround(hay: string, needle: string, before = 0, after = 400): string {
+  const i = hay.toLowerCase().indexOf(needle.toLowerCase());
+  if (i < 0) return "";
+  return hay.slice(Math.max(0, i - before), Math.min(hay.length, i + needle.length + after));
+}
+
+async function fetchText(url: string, attempts = 2): Promise<string> {
   let lastErr: unknown;
   for (let a = 1; a <= attempts; a++) {
     try {
@@ -72,32 +66,49 @@ async function fetchText(url: string, attempts = 3): Promise<string> {
           Accept: "text/html,application/xhtml+xml",
           "Accept-Language": "ru-RU,ru;q=0.9",
         },
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
       return await res.text();
     } catch (e) {
       lastErr = e;
-      if (a < attempts) await sleep(400 * a);
+      if (a < attempts) await sleep(250 * a);
     }
   }
   throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
 }
 
 function extractTableBody(html: string): string | null {
-  const m = html.match(/id=["']search-result["'][\s\S]*?<tbody>([\s\S]*?)<\/tbody>/i);
-  return m?.[1] ?? null;
+  const idIdx = html.search(/id=["']search-result["']/i);
+  if (idIdx < 0) return null;
+  const from = html.indexOf("<tbody", idIdx);
+  if (from < 0) return null;
+  const openEnd = html.indexOf(">", from);
+  if (openEnd < 0) return null;
+  const close = html.indexOf("</tbody>", openEnd);
+  if (close < 0) return null;
+  return html.slice(openEnd + 1, close);
+}
+
+function stripCell(td: string): string {
+  return td
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function parseListRows(html: string): ListRow[] {
   const body = extractTableBody(html);
   if (!body) return [];
-  const trs = body.match(/<tr[^>]*>[\s\S]*?<\/tr>/gi) ?? [];
+  const trs = body.match(/<tr[\s\S]*?<\/tr>/gi) ?? [];
   const out: ListRow[] = [];
 
   for (const tr of trs) {
-    const tds = tr.match(/<td[^>]*>[\s\S]*?<\/td>/gi) ?? [];
+    const tds = tr.match(/<td[\s\S]*?<\/td>/gi) ?? [];
     if (tds.length < 10) continue;
-    const cells = tds.map((td) => stripTags(td));
+    const cells = tds.map(stripCell);
     const href = tds[1]?.match(/\/show\/(\d+)/)?.[1] ?? "";
     const id = cells[0] || href;
     if (!id) continue;
@@ -117,18 +128,22 @@ function parseListRows(html: string): ListRow[] {
 }
 
 function parseListRange(html: string): { from: number; to: number; total: number } | null {
+  const chunk = sliceAround(html, "Показано", 0, 80) || html.slice(0, 80_000);
   const m =
-    html.match(/Показано\s+c\s+(\d+)\s+по\s+(\d+)\s+из\s+(\d+)/i) ??
-    html.match(/Показано\s+с\s+(\d+)\s+по\s+(\d+)\s+из\s+(\d+)/i);
+    chunk.match(/Показано\s+c\s+(\d+)\s+по\s+(\d+)\s+из\s+(\d+)/i) ??
+    chunk.match(/Показано\s+с\s+(\d+)\s+по\s+(\d+)\s+из\s+(\d+)/i);
   if (!m) return null;
   return { from: Number(m[1]), to: Number(m[2]), total: Number(m[3]) };
 }
 
 function parseDetailSums(html: string): { planSum: number | null; finalSum: number | null } {
-  const planM = html.match(
+  // Карточка большая — ищем только окна вокруг нужных лейблов (CPU/memory)
+  const planChunk = sliceAround(html, "Общая плановая сумма договора", 0, 250);
+  const finalChunk = sliceAround(html, "Общая итоговая сумма договора", 0, 250);
+  const planM = planChunk.match(
     /Общая\s+плановая\s+сумма\s+договора\s*<\/td>\s*<td[^>]*>\s*([^<]+)\s*<\/td>/i,
   );
-  const finalM = html.match(
+  const finalM = finalChunk.match(
     /Общая\s+итоговая\s+сумма\s+договора\s*<\/td>\s*<td[^>]*>\s*([^<]+)\s*<\/td>/i,
   );
   return {
@@ -168,7 +183,6 @@ async function handleList(bin: string, page: number): Promise<Response> {
   const rows = parseListRows(listHtml);
   const range = parseListRange(listHtml);
   if (rows.length === 0 && page === 1) {
-    // возможно капча/пустая выдача — отдаём кусок HTML для отладки длины
     const hasTable = /id=["']search-result["']/i.test(listHtml);
     throw new Error(
       `Пустой список договоров (page=${page}, table=${hasTable}, html=${listHtml.length} байт)`,
@@ -194,11 +208,19 @@ async function handleList(bin: string, page: number): Promise<Response> {
 async function handleEnrich(items: ListRow[]): Promise<Response> {
   const slice = items.slice(0, MAX_ENRICH);
   const rows: GoszakupContractRow[] = [];
+  const started = Date.now();
+
   for (let i = 0; i < slice.length; i++) {
+    if (Date.now() - started > ENRICH_DEADLINE_MS) {
+      // Не дотягиваем isolate до hard kill — клиент добьёт остаток
+      for (let j = i; j < slice.length; j++) {
+        rows.push({ ...slice[j], planSum: null, finalSum: null });
+      }
+      break;
+    }
     const row = slice[i];
-    if (i > 0) await sleep(180);
     try {
-      const detailHtml = await fetchText(`${SHOW_URL}/${row.id}`);
+      const detailHtml = await fetchText(`${SHOW_URL}/${row.id}`, 2);
       const sums = parseDetailSums(detailHtml);
       rows.push({ ...row, ...sums });
     } catch (e) {
@@ -206,6 +228,7 @@ async function handleEnrich(items: ListRow[]): Promise<Response> {
       rows.push({ ...row, planSum: null, finalSum: null });
     }
   }
+
   return new Response(
     JSON.stringify({
       ok: true,
