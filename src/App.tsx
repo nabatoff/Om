@@ -26,6 +26,7 @@ import {
   BarChart2,
   ClipboardCheck,
   BookOpen,
+  FileSpreadsheet,
   Edit2,
   ChevronUp,
   ChevronDown,
@@ -78,6 +79,7 @@ import { buildClientListRows, filterReportsForManager } from './lib/clientCpStat
 import { ClientDirectoryPanel } from './components/ClientDirectoryPanel';
 import { EnsTruCheckPanel } from './components/EnsTruCheckPanel';
 import { SupplierRegistryPanel } from './components/SupplierRegistryPanel';
+import { GoszakupContractsPanel } from './components/GoszakupContractsPanel';
 import { AdminOrderEditModal } from './components/AdminOrderEditModal';
 import type { OrderRow } from './lib/ordersGrouping';
 import { AdminSettingsPanel } from './components/AdminSettingsPanel';
@@ -160,7 +162,7 @@ const LS_ADMIN_SUBVIEW = 'om.adminSubView';
 const LS_MANAGER_ORDERS_SECTION = 'om.managerOrdersSection';
 const LS_CLIENTS_ORDERS_SUBVIEW = 'om.clientsOrdersSubView';
 
-type CurrentView = 'manager' | 'admin' | 'orders' | 'clients' | 'clientsOrders' | 'registry' | 'ensTru';
+type CurrentView = 'manager' | 'admin' | 'orders' | 'clients' | 'clientsOrders' | 'registry' | 'goszakupContracts' | 'ensTru';
 type ClientsOrdersSubView = 'clients' | 'orders';
 
 function getSavedCurrentView(): CurrentView {
@@ -171,6 +173,7 @@ function getSavedCurrentView(): CurrentView {
     raw === 'clients' ||
     raw === 'clientsOrders' ||
     raw === 'registry' ||
+    raw === 'goszakupContracts' ||
     raw === 'ensTru'
   ) {
     return raw;
@@ -404,6 +407,12 @@ const App = () => {
     }
     if (!isAdmin && currentView === 'registry') {
       setCurrentView('manager');
+    }
+    if (!isAdmin && currentView === 'goszakupContracts') {
+      setCurrentView('manager');
+    }
+    if (isAdmin && !canAdminWrite && currentView === 'goszakupContracts') {
+      setCurrentView('clientsOrders');
     }
     if (isAdmin && currentView === 'clients') {
       setCurrentView('clientsOrders');
@@ -1211,6 +1220,15 @@ const App = () => {
                   <BookOpen size={14} /> РЕЕСТР
                 </button>
               )}
+              {isAdmin && canAdminWrite && (
+                <button
+                  type="button"
+                  onClick={() => setCurrentView('goszakupContracts')}
+                  className={`flex-1 md:flex-none min-w-[120px] sm:min-w-0 flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all ${currentView === 'goszakupContracts' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  <FileSpreadsheet size={14} /> ГОСЗАКУП
+                </button>
+              )}
               {!isAdmin && (
                 <>
                   <button
@@ -1490,6 +1508,8 @@ const App = () => {
             onOpenClient={(c) => setClientHistoryFor(c)}
           />
         )}
+
+        {isAdmin && canAdminWrite && currentView === 'goszakupContracts' && <GoszakupContractsPanel />}
 
         {!isAdmin && currentView === 'ensTru' && <EnsTruCheckPanel />}
 
