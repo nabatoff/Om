@@ -4,8 +4,8 @@ const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
 const LIST_URL = "https://goszakup.gov.kz/ru/registry/contract";
 const SHOW_URL = "https://goszakup.gov.kz/ru/egzcontract/cpublic/show";
-const MAX_ENRICH = 1;
-const FETCH_TIMEOUT_MS = 15_000;
+const MAX_ENRICH = 4;
+const FETCH_TIMEOUT_MS = 10_000;
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -231,19 +231,19 @@ async function handleList(bin: string, page: number): Promise<Response> {
 
 async function handleEnrich(items: ListRow[]): Promise<Response> {
   const slice = items.slice(0, MAX_ENRICH);
-  const rows: GoszakupContractRow[] = [];
-
-  for (const row of slice) {
-    try {
-      const detailHtml = await fetchText(`${SHOW_URL}/${row.id}`, 2);
-      const sums = parseDetailSums(detailHtml);
-      rows.push({ ...row, ...sums });
-    } catch (e) {
-      console.error(`[goszakup] detail ${row.id}:`, errText(e));
-      rows.push({ ...row, planSum: null, finalSum: null });
-    }
-  }
-
+  const rows = await Promise.all(
+    slice.map(async (row) => {
+      try {
+        // 1 попытка — быстрее; null лучше, чем ждать ретраи по 15с
+        const detailHtml = await fetchText(`${SHOW_URL}/${row.id}`, 1);
+        const sums = parseDetailSums(detailHtml);
+        return { ...row, ...sums };
+      } catch (e) {
+        console.error(`[goszakup] detail ${row.id}:`, errText(e));
+        return { ...row, planSum: null, finalSum: null };
+      }
+    }),
+  );
   return json({ ok: true, action: "enrich", rows });
 }
 

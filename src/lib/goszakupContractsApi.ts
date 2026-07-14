@@ -33,11 +33,34 @@ type EnrichResult = {
   error?: string;
 };
 
-/** Совпадает с MAX_ENRICH на edge */
-const ENRICH_CHUNK = 1;
+/** Батч на edge (MAX_ENRICH=4) × параллельные invoke */
+const ENRICH_CHUNK = 4;
+const ENRICH_CONCURRENCY = 4;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+async function mapPool<T, R>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T) => Promise<R>,
+  onItemDone?: () => void,
+  signal?: AbortSignal,
+): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (true) {
+      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+      const i = next++;
+      if (i >= items.length) return;
+      out[i] = await fn(items[i]);
+      onItemDone?.();
+    }
+  });
+  await Promise.all(workers);
+  return out;
 }
 
 function xmlEscape(value: string): string {
@@ -154,7 +177,7 @@ async function readInvokeErrorBody(error: { message?: string; context?: Response
 
 async function invokeJson<T extends { ok?: boolean; error?: string }>(
   body: Record<string, unknown>,
-  attempts = 5,
+  attempts = 3,
 ): Promise<T> {
   let lastErr: Error | null = null;
   for (let a = 1; a <= attempts; a++) {
@@ -173,7 +196,7 @@ async function invokeJson<T extends { ok?: boolean; error?: string }>(
     } catch (e) {
       lastErr = e instanceof Error ? e : new Error(String(e));
       if (a < attempts && isTransientInvokeError(lastErr.message)) {
-        await sleep(800 * a);
+        await sleep(400 * a);
         continue;
       }
       throw lastErr;
@@ -225,32 +248,57 @@ export async function exportAllGoszakupContractsByBin(
     if (page > 500) break;
   }
 
-  const enriched: GoszakupContractRow[] = [];
+  const chunks: ListRow[][] = [];
   for (let i = 0; i < listed.length; i += ENRICH_CHUNK) {
-    if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-    const chunk = listed.slice(i, i + ENRICH_CHUNK);
-    let part: GoszakupContractRow[];
-    try {
-      part = await enrichChunk(chunk);
-    } catch (e) {
-      // Последний шанс: по одной карточке (меньше шанс 546)
-      if (chunk.length === 1) throw e;
-      part = [];
-      for (const item of chunk) {
-        if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-        part.push(...(await enrichChunk([item])));
-        await sleep(120);
-      }
-    }
-    enriched.push(...part);
+    chunks.push(listed.slice(i, i + ENRICH_CHUNK));
+  }
+
+  let enrichedCount = 0;
+  const bump = (n: number) => {
+    enrichedCount += n;
     options.onProgress?.({
       page,
-      loaded: enriched.length,
+      loaded: Math.min(enrichedCount, listed.length),
       total: total ?? listed.length,
       phase: 'enrich',
     });
-    if (i + ENRICH_CHUNK < listed.length) await sleep(80);
-  }
+  };
+
+  const chunkResults = await mapPool(
+    chunks,
+    ENRICH_CONCURRENCY,
+    async (chunk) => {
+      try {
+        const rows = await enrichChunk(chunk);
+        bump(rows.length);
+        return rows;
+      } catch {
+        const singles: GoszakupContractRow[] = [];
+        for (const item of chunk) {
+          if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+          try {
+            const rows = await enrichChunk([item]);
+            singles.push(...rows);
+            bump(rows.length);
+          } catch {
+            singles.push({ ...item, planSum: null, finalSum: null });
+            bump(1);
+          }
+        }
+        return singles;
+      }
+    },
+    undefined,
+    options.signal,
+  );
+
+  const enriched = chunkResults.flat();
+  options.onProgress?.({
+    page,
+    loaded: enriched.length,
+    total: total ?? listed.length,
+    phase: 'enrich',
+  });
 
   return { rows: enriched, total };
 }
