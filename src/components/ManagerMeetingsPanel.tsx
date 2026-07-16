@@ -1,6 +1,14 @@
 import { useMemo, useState } from 'react';
-import { Calendar, CalendarDays, ChevronLeft, ChevronRight, Clock, RotateCcw, Trash2 } from 'lucide-react';
-import { type DeletedMeeting, type FullReport, type UiAssigned, type UiConducted, updateConductedMeetingCpById } from '../lib/crmApi';
+import { Calendar, CalendarDays, ChevronLeft, ChevronRight, Clock, Pencil, RotateCcw, Trash2, X } from 'lucide-react';
+import {
+  type DeletedMeeting,
+  type FullReport,
+  type UiAssigned,
+  type UiConducted,
+  updateAssignedMeetingById,
+  updateConductedMeetingById,
+  updateConductedMeetingCpById,
+} from '../lib/crmApi';
 import { ALL_TIME_FROM, ALL_TIME_TO, adminDateFilterBounds } from '../lib/periodBounds';
 import { PeriodFilterFields } from './PeriodFilterFields';
 
@@ -344,6 +352,87 @@ function meetingRowUniqueKey(a: UiMeetingWithReport): string {
   ].join('|');
 }
 
+type AdminMeetingEditState = {
+  assignedId: string | null;
+  conductedId: string | null;
+  entityName: string;
+  bin: string;
+  type: 'Новая' | 'Повторная';
+  assignedDate: string;
+  conductedDate: string;
+  result: string;
+};
+
+function resolveLinkedMeetingIds(
+  row: UiMeetingWithReport,
+  allReports: FullReport[],
+): { assignedId: string | null; conductedId: string | null; conducted: UiConducted | null; assigned: UiAssigned | null } {
+  let linkedAssigned: UiAssigned | null = null;
+  let linkedConducted: UiConducted | null = null;
+  const manager = row.manager || '';
+
+  if (row.source === 'assigned') {
+    for (const report of allReports) {
+      if ((report.manager || '') !== manager) continue;
+      const candidates = report.conductedMeetings
+        .filter(
+          (m) =>
+            matchesSameCounterparty(m.entityName, m.bin, row.entityName, row.bin) &&
+            normalizeMeetingType(m.type) === normalizeMeetingType(row.type) &&
+            meetingDateSortKey(m.date) >= meetingDateSortKey(row.date),
+        )
+        .sort((a, b) => meetingDateSortKey(a.date).localeCompare(meetingDateSortKey(b.date)));
+      if (candidates.length > 0) {
+        linkedConducted = candidates[0]!;
+        break;
+      }
+    }
+  } else {
+    for (const report of allReports) {
+      if ((report.manager || '') !== manager) continue;
+      const candidates = report.assignedMeetings
+        .filter(
+          (m) =>
+            matchesSameCounterparty(m.entityName, m.bin, row.entityName, row.bin) &&
+            normalizeMeetingType(m.type) === normalizeMeetingType(row.type) &&
+            meetingDateSortKey(m.date) <= meetingDateSortKey(row.date),
+        )
+        .sort((a, b) => meetingDateSortKey(b.date).localeCompare(meetingDateSortKey(a.date)));
+      if (candidates.length > 0) {
+        linkedAssigned = candidates[0]!;
+        break;
+      }
+    }
+  }
+
+  const assignedId = (row.source === 'assigned' ? row.id : linkedAssigned?.id)?.trim() || null;
+  const conductedId = (row.source === 'conducted' ? row.id : linkedConducted?.id)?.trim() || null;
+  const assigned =
+    row.source === 'assigned'
+      ? (row as UiAssigned)
+      : linkedAssigned;
+  const conducted =
+    row.source === 'conducted'
+      ? ({
+          id: row.id,
+          entityName: row.entityName,
+          bin: row.bin,
+          date: row.date,
+          type: row.type,
+          result: row.result ?? '',
+          cpSent: Boolean(row.cpSent),
+          cpQuantity: row.cpQuantity ?? 0,
+          cpPaid: false,
+        } satisfies UiConducted)
+      : linkedConducted;
+
+  return { assignedId, conductedId, assigned, conducted };
+}
+
+function meetingTypeSelectValue(raw: string): 'Новая' | 'Повторная' {
+  return normalizeMeetingType(raw).startsWith('повтор') ? 'Повторная' : 'Новая';
+}
+
 export function ManagerMeetingsPanel({
   allReports,
   findEvidence,
@@ -389,6 +478,8 @@ export function ManagerMeetingsPanel({
   const [adminMeetingsManager, setAdminMeetingsManager] = useState('Все');
   const [basketQuery, setBasketQuery] = useState('');
   const [resultPreviewText, setResultPreviewText] = useState<string | null>(null);
+  const [editMeeting, setEditMeeting] = useState<AdminMeetingEditState | null>(null);
+  const [editBusy, setEditBusy] = useState(false);
 
   const rows: UiMeetingWithReport[] = useMemo(() => {
     const out: UiMeetingWithReport[] = [];
@@ -548,6 +639,83 @@ export function ManagerMeetingsPanel({
       );
     });
   }, [variant, deletedMeetings, adminMeetingsManager, basketQuery]);
+
+  const openAdminEditMeeting = (row: UiMeetingWithReport) => {
+    const linked = resolveLinkedMeetingIds(row, allReports);
+    if (!linked.assignedId && !linked.conductedId) {
+      alert('Нельзя редактировать: у встречи нет id в БД (сначала сохраните отчёт).');
+      return;
+    }
+    const assignedYmd = linked.assigned ? toYmd(linked.assigned.date) || '' : '';
+    const conductedYmd = linked.conducted ? toYmd(linked.conducted.date) || '' : '';
+    setEditMeeting({
+      assignedId: linked.assignedId,
+      conductedId: linked.conductedId,
+      entityName: row.entityName,
+      bin: row.bin.replace(/\D/g, '').slice(0, 12),
+      type: meetingTypeSelectValue(row.type),
+      assignedDate: assignedYmd,
+      conductedDate: conductedYmd,
+      result: linked.conducted?.result ?? row.result ?? '',
+    });
+  };
+
+  const saveAdminEditMeeting = async () => {
+    if (!editMeeting || !onRefreshReports) return;
+    const name = editMeeting.entityName.trim();
+    const bin = editMeeting.bin.replace(/\D/g, '');
+    if (!name) {
+      alert('Укажите наименование контрагента');
+      return;
+    }
+    if (bin.length !== 12) {
+      alert('БИН должен состоять из 12 цифр');
+      return;
+    }
+    if (editMeeting.assignedId && !/^\d{4}-\d{2}-\d{2}$/.test(editMeeting.assignedDate)) {
+      alert('Укажите дату назначения');
+      return;
+    }
+    if (editMeeting.conductedId && !/^\d{4}-\d{2}-\d{2}$/.test(editMeeting.conductedDate)) {
+      alert('Укажите дату проведения');
+      return;
+    }
+    if (
+      editMeeting.assignedId &&
+      editMeeting.conductedId &&
+      editMeeting.conductedDate < editMeeting.assignedDate
+    ) {
+      alert('Дата проведения не может быть раньше даты назначения');
+      return;
+    }
+
+    setEditBusy(true);
+    try {
+      if (editMeeting.assignedId) {
+        await updateAssignedMeetingById(editMeeting.assignedId, {
+          entityName: name,
+          bin,
+          date: editMeeting.assignedDate,
+          type: editMeeting.type,
+        });
+      }
+      if (editMeeting.conductedId) {
+        await updateConductedMeetingById(editMeeting.conductedId, {
+          entityName: name,
+          bin,
+          date: editMeeting.conductedDate,
+          type: editMeeting.type,
+          result: editMeeting.result,
+        });
+      }
+      await onRefreshReports();
+      setEditMeeting(null);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Не удалось сохранить встречу');
+    } finally {
+      setEditBusy(false);
+    }
+  };
 
   if (variant === 'admin') {
     const opts = managerOptions?.length ? managerOptions : ['Все'];
@@ -724,14 +892,24 @@ export function ManagerMeetingsPanel({
                         )}
                       </td>
                       <td className="py-3 text-right">
-                        <button
-                          type="button"
-                          onClick={() => onAdminDeleteMeeting?.(a)}
-                          className="inline-flex items-center justify-center p-2 rounded-lg text-red-500 border border-red-100 hover:bg-red-50"
-                          title="Удалить встречу"
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                        <div className="inline-flex items-center gap-1.5 justify-end">
+                          <button
+                            type="button"
+                            onClick={() => openAdminEditMeeting(a)}
+                            className="inline-flex items-center justify-center p-2 rounded-lg text-blue-600 border border-blue-100 hover:bg-blue-50"
+                            title="Редактировать встречу"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onAdminDeleteMeeting?.(a)}
+                            className="inline-flex items-center justify-center p-2 rounded-lg text-red-500 border border-red-100 hover:bg-red-50"
+                            title="Удалить встречу"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -837,6 +1015,130 @@ export function ManagerMeetingsPanel({
               </div>
               <div className="max-h-[60vh] overflow-y-auto text-sm text-gray-800 whitespace-pre-wrap break-words leading-relaxed">
                 {resultPreviewText}
+              </div>
+            </div>
+          </div>
+        )}
+        {editMeeting && (
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[610] flex items-center justify-center p-4"
+            onClick={() => {
+              if (!editBusy) setEditMeeting(null);
+            }}
+          >
+            <div
+              className="w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-gray-100 overflow-hidden text-left"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-5 sm:p-6 border-b border-gray-100 flex items-center justify-between bg-gray-50/60">
+                <div className="flex items-center gap-2 text-blue-600">
+                  <Pencil size={18} />
+                  <h4 className="text-xs font-black text-gray-800 uppercase tracking-widest">Редактировать встречу</h4>
+                </div>
+                <button
+                  type="button"
+                  disabled={editBusy}
+                  onClick={() => setEditMeeting(null)}
+                  className="p-2 rounded-full text-gray-400 hover:bg-gray-100 disabled:opacity-50"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="p-5 sm:p-6 space-y-4">
+                <label className="block space-y-1.5">
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Контрагент</span>
+                  <input
+                    type="text"
+                    disabled={editBusy}
+                    value={editMeeting.entityName}
+                    onChange={(e) => setEditMeeting((m) => (m ? { ...m, entityName: e.target.value } : m))}
+                    className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500/30 disabled:opacity-60"
+                  />
+                </label>
+                <label className="block space-y-1.5">
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">БИН</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={12}
+                    disabled={editBusy}
+                    value={editMeeting.bin}
+                    onChange={(e) =>
+                      setEditMeeting((m) => (m ? { ...m, bin: e.target.value.replace(/\D/g, '').slice(0, 12) } : m))
+                    }
+                    className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-mono font-bold outline-none focus:ring-2 focus:ring-blue-500/30 disabled:opacity-60"
+                  />
+                </label>
+                <label className="block space-y-1.5">
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Тип</span>
+                  <select
+                    disabled={editBusy}
+                    value={editMeeting.type}
+                    onChange={(e) =>
+                      setEditMeeting((m) =>
+                        m ? { ...m, type: e.target.value as 'Новая' | 'Повторная' } : m,
+                      )
+                    }
+                    className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500/30 disabled:opacity-60"
+                  >
+                    <option value="Новая">Новая</option>
+                    <option value="Повторная">Повторная</option>
+                  </select>
+                </label>
+                {editMeeting.assignedId ? (
+                  <label className="block space-y-1.5">
+                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Дата назначения</span>
+                    <input
+                      type="date"
+                      disabled={editBusy}
+                      value={editMeeting.assignedDate}
+                      onChange={(e) => setEditMeeting((m) => (m ? { ...m, assignedDate: e.target.value } : m))}
+                      className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500/30 disabled:opacity-60"
+                    />
+                  </label>
+                ) : null}
+                {editMeeting.conductedId ? (
+                  <>
+                    <label className="block space-y-1.5">
+                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Дата проведения</span>
+                      <input
+                        type="date"
+                        disabled={editBusy}
+                        value={editMeeting.conductedDate}
+                        onChange={(e) => setEditMeeting((m) => (m ? { ...m, conductedDate: e.target.value } : m))}
+                        className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500/30 disabled:opacity-60"
+                      />
+                    </label>
+                    <label className="block space-y-1.5">
+                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Итог</span>
+                      <textarea
+                        disabled={editBusy}
+                        rows={4}
+                        value={editMeeting.result}
+                        onChange={(e) => setEditMeeting((m) => (m ? { ...m, result: e.target.value } : m))}
+                        className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500/30 disabled:opacity-60 resize-y"
+                      />
+                    </label>
+                  </>
+                ) : null}
+              </div>
+              <div className="p-5 sm:p-6 bg-gray-50 flex gap-3">
+                <button
+                  type="button"
+                  disabled={editBusy}
+                  onClick={() => setEditMeeting(null)}
+                  className="flex-1 px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest text-gray-500 border border-gray-200 hover:bg-white disabled:opacity-50"
+                >
+                  Отмена
+                </button>
+                <button
+                  type="button"
+                  disabled={editBusy}
+                  onClick={() => void saveAdminEditMeeting()}
+                  className="flex-1 px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-50"
+                >
+                  {editBusy ? 'Сохранение…' : 'Сохранить'}
+                </button>
               </div>
             </div>
           </div>

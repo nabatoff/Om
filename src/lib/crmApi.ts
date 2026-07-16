@@ -542,6 +542,41 @@ export async function deleteConductedMeetingById(meetingId: string): Promise<voi
   if (error) throw error;
 }
 
+/** Админ: правка назначенной встречи по id. */
+export async function updateAssignedMeetingById(
+  meetingId: string,
+  patch: { entityName: string; bin: string; date: string; type: string },
+): Promise<void> {
+  const { error } = await getSupabase()
+    .from('crm_assigned_meetings')
+    .update({
+      entity_name: patch.entityName.trim(),
+      bin: patch.bin.replace(/\D/g, ''),
+      meeting_date: patch.date,
+      meeting_type: patch.type,
+    })
+    .eq('id', meetingId);
+  if (error) throw error;
+}
+
+/** Админ: правка проведённой встречи по id. */
+export async function updateConductedMeetingById(
+  meetingId: string,
+  patch: { entityName: string; bin: string; date: string; type: string; result: string },
+): Promise<void> {
+  const { error } = await getSupabase()
+    .from('crm_conducted_meetings')
+    .update({
+      entity_name: patch.entityName.trim(),
+      bin: patch.bin.replace(/\D/g, ''),
+      meeting_date: patch.date,
+      meeting_type: patch.type,
+      result: patch.result.trim(),
+    })
+    .eq('id', meetingId);
+  if (error) throw error;
+}
+
 export async function restoreAssignedMeetingById(meetingId: string): Promise<void> {
   const { error } = await getSupabase().from('crm_assigned_meetings').update({ deleted_at: null }).eq('id', meetingId);
   if (error) throw error;
