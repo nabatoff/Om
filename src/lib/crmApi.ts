@@ -559,6 +559,36 @@ export async function updateAssignedMeetingById(
   if (error) throw error;
 }
 
+/** Админ: создать назначенную встречу в отчёте (если раньше не было даты назначения). */
+export async function createAssignedMeetingForReport(
+  reportId: string,
+  patch: { entityName: string; bin: string; date: string; type: string },
+): Promise<string> {
+  const { data: maxRow, error: maxErr } = await getSupabase()
+    .from('crm_assigned_meetings')
+    .select('sort_order')
+    .eq('report_id', reportId)
+    .order('sort_order', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (maxErr) throw maxErr;
+  const sortOrder = (maxRow?.sort_order ?? -1) + 1;
+  const { data, error } = await getSupabase()
+    .from('crm_assigned_meetings')
+    .insert({
+      report_id: reportId,
+      entity_name: patch.entityName.trim(),
+      bin: patch.bin.replace(/\D/g, ''),
+      meeting_date: patch.date,
+      meeting_type: patch.type,
+      sort_order: sortOrder,
+    })
+    .select('id')
+    .single();
+  if (error) throw error;
+  return data.id as string;
+}
+
 /** Админ: правка проведённой встречи по id. */
 export async function updateConductedMeetingById(
   meetingId: string,

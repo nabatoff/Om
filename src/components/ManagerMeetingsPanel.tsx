@@ -5,6 +5,7 @@ import {
   type FullReport,
   type UiAssigned,
   type UiConducted,
+  createAssignedMeetingForReport,
   updateAssignedMeetingById,
   updateConductedMeetingById,
   updateConductedMeetingCpById,
@@ -353,6 +354,7 @@ function meetingRowUniqueKey(a: UiMeetingWithReport): string {
 }
 
 type AdminMeetingEditState = {
+  reportId: string | null;
   assignedId: string | null;
   conductedId: string | null;
   entityName: string;
@@ -366,15 +368,23 @@ type AdminMeetingEditState = {
 function resolveLinkedMeetingIds(
   row: UiMeetingWithReport,
   allReports: FullReport[],
-): { assignedId: string | null; conductedId: string | null; conducted: UiConducted | null; assigned: UiAssigned | null } {
+): {
+  reportId: string | null;
+  assignedId: string | null;
+  conductedId: string | null;
+  conducted: UiConducted | null;
+  assigned: UiAssigned | null;
+} {
   let linkedAssigned: UiAssigned | null = null;
   let linkedConducted: UiConducted | null = null;
   const manager = row.manager || '';
+  const report =
+    allReports.find((r) => r.date === row.reportDate && (r.manager || '') === manager) ?? null;
 
   if (row.source === 'assigned') {
-    for (const report of allReports) {
-      if ((report.manager || '') !== manager) continue;
-      const candidates = report.conductedMeetings
+    for (const r of allReports) {
+      if ((r.manager || '') !== manager) continue;
+      const candidates = r.conductedMeetings
         .filter(
           (m) =>
             matchesSameCounterparty(m.entityName, m.bin, row.entityName, row.bin) &&
@@ -388,9 +398,9 @@ function resolveLinkedMeetingIds(
       }
     }
   } else {
-    for (const report of allReports) {
-      if ((report.manager || '') !== manager) continue;
-      const candidates = report.assignedMeetings
+    for (const r of allReports) {
+      if ((r.manager || '') !== manager) continue;
+      const candidates = r.assignedMeetings
         .filter(
           (m) =>
             matchesSameCounterparty(m.entityName, m.bin, row.entityName, row.bin) &&
@@ -407,10 +417,7 @@ function resolveLinkedMeetingIds(
 
   const assignedId = (row.source === 'assigned' ? row.id : linkedAssigned?.id)?.trim() || null;
   const conductedId = (row.source === 'conducted' ? row.id : linkedConducted?.id)?.trim() || null;
-  const assigned =
-    row.source === 'assigned'
-      ? (row as UiAssigned)
-      : linkedAssigned;
+  const assigned = row.source === 'assigned' ? (row as UiAssigned) : linkedAssigned;
   const conducted =
     row.source === 'conducted'
       ? ({
@@ -426,7 +433,7 @@ function resolveLinkedMeetingIds(
         } satisfies UiConducted)
       : linkedConducted;
 
-  return { assignedId, conductedId, assigned, conducted };
+  return { reportId: report?.id ?? null, assignedId, conductedId, assigned, conducted };
 }
 
 function meetingTypeSelectValue(raw: string): 'Новая' | 'Повторная' {
@@ -649,6 +656,7 @@ export function ManagerMeetingsPanel({
     const assignedYmd = linked.assigned ? toYmd(linked.assigned.date) || '' : '';
     const conductedYmd = linked.conducted ? toYmd(linked.conducted.date) || '' : '';
     setEditMeeting({
+      reportId: linked.reportId,
       assignedId: linked.assignedId,
       conductedId: linked.conductedId,
       entityName: row.entityName,
@@ -672,7 +680,12 @@ export function ManagerMeetingsPanel({
       alert('БИН должен состоять из 12 цифр');
       return;
     }
-    if (editMeeting.assignedId && !/^\d{4}-\d{2}-\d{2}$/.test(editMeeting.assignedDate)) {
+
+    const assignedDate = editMeeting.assignedDate.trim();
+    const hasAssignedDate = /^\d{4}-\d{2}-\d{2}$/.test(assignedDate);
+    const needAssigned = Boolean(editMeeting.assignedId) || hasAssignedDate;
+
+    if (needAssigned && !hasAssignedDate) {
       alert('Укажите дату назначения');
       return;
     }
@@ -681,24 +694,36 @@ export function ManagerMeetingsPanel({
       return;
     }
     if (
-      editMeeting.assignedId &&
+      hasAssignedDate &&
       editMeeting.conductedId &&
-      editMeeting.conductedDate < editMeeting.assignedDate
+      editMeeting.conductedDate < assignedDate
     ) {
       alert('Дата проведения не может быть раньше даты назначения');
+      return;
+    }
+    if (!editMeeting.assignedId && hasAssignedDate && !editMeeting.reportId) {
+      alert('Не найден отчёт для создания даты назначения');
       return;
     }
 
     setEditBusy(true);
     try {
-      if (editMeeting.assignedId) {
+      if (editMeeting.assignedId && hasAssignedDate) {
         await updateAssignedMeetingById(editMeeting.assignedId, {
           entityName: name,
           bin,
-          date: editMeeting.assignedDate,
+          date: assignedDate,
+          type: editMeeting.type,
+        });
+      } else if (!editMeeting.assignedId && hasAssignedDate && editMeeting.reportId) {
+        await createAssignedMeetingForReport(editMeeting.reportId, {
+          entityName: name,
+          bin,
+          date: assignedDate,
           type: editMeeting.type,
         });
       }
+
       if (editMeeting.conductedId) {
         await updateConductedMeetingById(editMeeting.conductedId, {
           entityName: name,
@@ -1085,18 +1110,21 @@ export function ManagerMeetingsPanel({
                     <option value="Повторная">Повторная</option>
                   </select>
                 </label>
-                {editMeeting.assignedId ? (
-                  <label className="block space-y-1.5">
-                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Дата назначения</span>
-                    <input
-                      type="date"
-                      disabled={editBusy}
-                      value={editMeeting.assignedDate}
-                      onChange={(e) => setEditMeeting((m) => (m ? { ...m, assignedDate: e.target.value } : m))}
-                      className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500/30 disabled:opacity-60"
-                    />
-                  </label>
-                ) : null}
+                <label className="block space-y-1.5">
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">
+                    Дата назначения
+                    {!editMeeting.assignedId ? (
+                      <span className="normal-case font-bold text-amber-600"> · не была указана</span>
+                    ) : null}
+                  </span>
+                  <input
+                    type="date"
+                    disabled={editBusy}
+                    value={editMeeting.assignedDate}
+                    onChange={(e) => setEditMeeting((m) => (m ? { ...m, assignedDate: e.target.value } : m))}
+                    className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500/30 disabled:opacity-60"
+                  />
+                </label>
                 {editMeeting.conductedId ? (
                   <>
                     <label className="block space-y-1.5">
@@ -1113,10 +1141,10 @@ export function ManagerMeetingsPanel({
                       <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Итог</span>
                       <textarea
                         disabled={editBusy}
-                        rows={4}
+                        rows={12}
                         value={editMeeting.result}
                         onChange={(e) => setEditMeeting((m) => (m ? { ...m, result: e.target.value } : m))}
-                        className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500/30 disabled:opacity-60 resize-y"
+                        className="w-full min-h-[220px] px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500/30 disabled:opacity-60 resize-y"
                       />
                     </label>
                   </>
