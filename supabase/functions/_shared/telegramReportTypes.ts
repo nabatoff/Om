@@ -27,6 +27,7 @@ export type TelegramReportPayload = {
   weeklyForecast: number;
   todayOrdersSum: number;
   weekOrdersSum: number;
+  monthOrdersSum: number;
   total: TelegramReportTotals;
   rows: ReportManagerRow[];
 };

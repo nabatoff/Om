@@ -234,7 +234,7 @@ export function estimateReportHeight(payload: TelegramReportPayload): number {
 }
 
 export function buildTelegramReportElement(payload: TelegramReportPayload): ReactElement {
-  const { reportDateLabel, weeklyForecast, todayOrdersSum, weekOrdersSum, total, rows } = payload;
+  const { reportDateLabel, weeklyForecast, todayOrdersSum, weekOrdersSum, monthOrdersSum, total, rows } = payload;
   const sorted = [...rows].sort((a, b) => (a.manager ?? "").localeCompare(b.manager ?? "", "ru"));
 
   const managersBlock = sorted.length === 0
@@ -294,6 +294,7 @@ export function buildTelegramReportElement(payload: TelegramReportPayload): Reac
       kpiCard("Прогноз на неделю", `${money(weeklyForecast)} ₸`, c.blue),
       kpiCard("Заказы за день", `${money(todayOrdersSum)} ₸`, c.textDark),
       kpiCard("Заказы за неделю", `${money(weekOrdersSum)} ₸`, c.textDark),
+      kpiCard("Заказы за месяц", `${money(monthOrdersSum)} ₸`, c.textDark),
     ),
     // General summary
     box(

@@ -121,11 +121,12 @@ async function loadReportPayload(
   const rows = (data ?? []) as ReportManagerRow[];
   const weeklyForecast = Number(forecastData ?? 0);
   const totalsRow = (Array.isArray(totalsData) ? totalsData[0] : totalsData) as
-    | { today_sum?: number; week_sum?: number }
+    | { today_sum?: number; week_sum?: number; month_sum?: number }
     | null
     | undefined;
   const todayOrdersSum = Number(totalsRow?.today_sum ?? 0);
   const weekOrdersSum = Number(totalsRow?.week_sum ?? 0);
+  const monthOrdersSum = Number(totalsRow?.month_sum ?? 0);
 
   const total = rows.reduce(
     (acc, r) => ({
@@ -142,6 +143,7 @@ async function loadReportPayload(
     weeklyForecast,
     todayOrdersSum,
     weekOrdersSum,
+    monthOrdersSum,
     total,
     rows,
   };

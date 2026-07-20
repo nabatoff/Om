@@ -15,7 +15,7 @@ export function parseBreakdown(raw: unknown): ReportManagerRow["confirmed_orders
 }
 
 export function buildTelegramReportText(payload: TelegramReportPayload): string {
-  const { reportDateLabel, weeklyForecast, todayOrdersSum, weekOrdersSum, total, rows } = payload;
+  const { reportDateLabel, weeklyForecast, todayOrdersSum, weekOrdersSum, monthOrdersSum, total, rows } = payload;
   const lines: string[] = [];
 
   lines.push(`📊 <b>Сводка за ${escHtml(reportDateLabel)}</b>`);
@@ -23,7 +23,8 @@ export function buildTelegramReportText(payload: TelegramReportPayload): string 
   lines.push("");
   lines.push(`Прогноз на неделю: <b>${money(weeklyForecast)} ₸</b>`);
   lines.push(`Сумма заказов за день: <b>${money(todayOrdersSum)} ₸</b>`);
-  lines.push(`Сумма заказов за неделю (в текущем месяце): <b>${money(weekOrdersSum)} ₸</b>`);
+  lines.push(`Сумма заказов за неделю: <b>${money(weekOrdersSum)} ₸</b>`);
+  lines.push(`Сумма заказов за месяц: <b>${money(monthOrdersSum)} ₸</b>`);
   lines.push("");
   lines.push("<b>Общая сводка</b>");
   lines.push(`• Назначено встреч: <b>${total.assigned}</b>`);
