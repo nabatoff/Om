@@ -1,43 +1,27 @@
 import { getSupabase } from './supabase';
+import {
+  isEmptyDetailShell,
+  parseDetailSums,
+  parseListRange,
+  parseListRows,
+  type GoszakupListRow,
+} from './goszakupParse';
 
-export type GoszakupContractRow = {
-  id: string;
-  contractNumber: string;
-  buyNumber: string;
-  contractType: string;
-  status: string;
-  createdAt: string;
+export type GoszakupContractRow = GoszakupListRow & {
   planSum: number | null;
   finalSum: number | null;
-  customer: string;
-  supplier: string;
-  tradeMethod: string;
 };
 
-type ListRow = Omit<GoszakupContractRow, 'planSum' | 'finalSum'>;
+type ListRow = GoszakupListRow;
 
-type ListPageResult = {
-  ok?: boolean;
-  action?: string;
-  page?: number;
-  hasMore?: boolean;
-  total?: number | null;
-  rows?: ListRow[];
-  error?: string;
-};
+type EnrichStatus = 'ok' | 'empty' | 'timeout' | 'error';
 
-type EnrichResult = {
-  ok?: boolean;
-  action?: string;
-  rows?: GoszakupContractRow[];
-  error?: string;
-};
+type Enriched = GoszakupContractRow & { _status?: EnrichStatus };
 
-/** 1 карточка / invoke; низкий concurrency — иначе EU→goszakup abort'ит ~18% */
-const ENRICH_CHUNK = 1;
-const ENRICH_CONCURRENCY = 2;
+/** Через Vite/Vercel proxy (не EU Supabase edge) — иначе ~18% abort */
+const ENRICH_CONCURRENCY = 3;
 const REFILL_PASSES = 2;
-const REFILL_CONCURRENCY = 1;
+const CARD_TIMEOUT_MS = 25_000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
@@ -47,7 +31,6 @@ async function mapPool<T, R>(
   items: T[],
   concurrency: number,
   fn: (item: T) => Promise<R>,
-  onItemDone?: () => void,
   signal?: AbortSignal,
 ): Promise<R[]> {
   const out = new Array<R>(items.length);
@@ -58,7 +41,6 @@ async function mapPool<T, R>(
       const i = next++;
       if (i >= items.length) return;
       out[i] = await fn(items[i]);
-      onItemDone?.();
     }
   });
   await Promise.all(workers);
@@ -125,6 +107,87 @@ export async function exportGoszakupContractsToExcel(
   URL.revokeObjectURL(a.href);
 }
 
+/** Dev: Vite proxy с твоего IP. Prod: Vercel edge proxy. */
+async function fetchGoszakupHtml(pathAndQuery: string, signal?: AbortSignal): Promise<string> {
+  const url = import.meta.env.DEV
+    ? `/goszakup-origin${pathAndQuery}`
+    : `/api/goszakup-proxy?path=${encodeURIComponent(pathAndQuery)}`;
+
+  const ac = new AbortController();
+  const onAbort = () => ac.abort();
+  signal?.addEventListener('abort', onAbort);
+  const timer = setTimeout(() => ac.abort(), CARD_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      signal: ac.signal,
+      headers: { Accept: 'text/html' },
+    });
+    if (!res.ok) throw new Error(`goszakup HTTP ${res.status}`);
+    const html = await res.text();
+    // SPA fallback (старый деплой без api) — не парсить
+    if (html.includes('id="root"') && html.length < 5_000) {
+      throw new Error('proxy unavailable (SPA fallback)');
+    }
+    return html;
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', onAbort);
+  }
+}
+
+function buildListPath(bin: string, page: number): string {
+  const params = new URLSearchParams();
+  params.set('filter[supplier]', bin);
+  if (page > 1) params.set('page', String(page));
+  return `/ru/registry/contract?${params.toString()}`;
+}
+
+async function fetchListPageViaProxy(
+  bin: string,
+  page: number,
+  signal?: AbortSignal,
+): Promise<{ rows: ListRow[]; hasMore: boolean; total: number | null }> {
+  const html = await fetchGoszakupHtml(buildListPath(bin, page), signal);
+  const rows = parseListRows(html);
+  const range = parseListRange(html);
+  if (rows.length === 0 && page === 1) {
+    const hasTable = /id=["']search-result["']/i.test(html);
+    throw new Error(`Пустой список (table=${hasTable}, html=${html.length}). Сайт мог отдать капчу/блок.`);
+  }
+  return {
+    rows,
+    hasMore: range ? range.to < range.total : rows.length >= 50,
+    total: range?.total ?? null,
+  };
+}
+
+async function enrichOneViaProxy(row: ListRow, signal?: AbortSignal): Promise<Enriched> {
+  try {
+    const html = await fetchGoszakupHtml(`/ru/egzcontract/cpublic/show/${row.id}`, signal);
+    if (isEmptyDetailShell(html)) {
+      return { ...row, planSum: null, finalSum: null, _status: 'empty' };
+    }
+    const sums = parseDetailSums(html);
+    if (sums.planSum != null || sums.finalSum != null) {
+      return { ...row, ...sums, _status: 'ok' };
+    }
+    return { ...row, planSum: null, finalSum: null, _status: 'empty' };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const aborted =
+      (e instanceof DOMException && e.name === 'AbortError') ||
+      msg.toLowerCase().includes('abort');
+    return {
+      ...row,
+      planSum: null,
+      finalSum: null,
+      _status: aborted ? 'timeout' : 'error',
+    };
+  }
+}
+
+/* ——— fallback: старый edge (если proxy недоступен) ——— */
+
 function isTransientInvokeError(msg: string): boolean {
   const m = msg.toLowerCase();
   return (
@@ -190,13 +253,54 @@ async function invokeJson<T extends { ok?: boolean; error?: string }>(
   throw lastErr ?? new Error('Ошибка edge function');
 }
 
-async function fetchListPage(supplierBin: string, page: number): Promise<ListPageResult> {
-  return invokeJson<ListPageResult>({ action: 'list', supplierBin, page });
+async function fetchListPageViaEdge(
+  bin: string,
+  page: number,
+): Promise<{ rows: ListRow[]; hasMore: boolean; total: number | null }> {
+  const res = await invokeJson<{
+    ok?: boolean;
+    error?: string;
+    rows?: ListRow[];
+    hasMore?: boolean;
+    total?: number | null;
+  }>({ action: 'list', supplierBin: bin, page });
+  return {
+    rows: res.rows ?? [],
+    hasMore: Boolean(res.hasMore),
+    total: res.total ?? null,
+  };
 }
 
-async function enrichChunk(items: ListRow[]): Promise<GoszakupContractRow[]> {
-  const res = await invokeJson<EnrichResult>({ action: 'enrich', items });
-  return res.rows ?? [];
+async function enrichOneViaEdge(row: ListRow): Promise<Enriched> {
+  try {
+    const res = await invokeJson<{
+      ok?: boolean;
+      error?: string;
+      rows?: GoszakupContractRow[];
+    }>({
+      action: 'enrich',
+      items: [row],
+    });
+    const fixed = res.rows?.[0];
+    if (fixed && (fixed.planSum != null || fixed.finalSum != null)) {
+      return { ...fixed, _status: 'ok' };
+    }
+    return { ...row, planSum: null, finalSum: null, _status: 'empty' };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const aborted = msg.toLowerCase().includes('abort') || msg.toLowerCase().includes('timeout');
+    return {
+      ...row,
+      planSum: null,
+      finalSum: null,
+      _status: aborted ? 'timeout' : 'error',
+    };
+  }
+}
+
+function stripStatus(row: Enriched): GoszakupContractRow {
+  const { _status: _, ...rest } = row;
+  return rest;
 }
 
 export async function exportAllGoszakupContractsByBin(
@@ -210,10 +314,11 @@ export async function exportAllGoszakupContractsByBin(
       phase: 'list' | 'enrich';
     }) => void;
   } = {},
-): Promise<{ rows: GoszakupContractRow[]; total: number | null }> {
+): Promise<{ rows: GoszakupContractRow[]; total: number | null; missingSums: number }> {
   const bin = supplierBin.replace(/\D/g, '');
   if (bin.length !== 12) throw new Error('БИН должен состоять из 12 цифр');
 
+  let useProxy = true;
   const listed: ListRow[] = [];
   let page = 1;
   let total: number | null = null;
@@ -221,90 +326,85 @@ export async function exportAllGoszakupContractsByBin(
 
   while (hasMore) {
     if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-    const res = await fetchListPage(bin, page);
-    if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-    const rows = res.rows ?? [];
-    listed.push(...rows);
-    total = res.total ?? total;
-    hasMore = Boolean(res.hasMore);
+    let pageRes: { rows: ListRow[]; hasMore: boolean; total: number | null };
+    try {
+      if (useProxy) {
+        pageRes = await fetchListPageViaProxy(bin, page, options.signal);
+      } else {
+        pageRes = await fetchListPageViaEdge(bin, page);
+      }
+    } catch (e) {
+      if (useProxy && page === 1) {
+        useProxy = false;
+        pageRes = await fetchListPageViaEdge(bin, page);
+      } else {
+        throw e;
+      }
+    }
+    listed.push(...pageRes.rows);
+    total = pageRes.total ?? total;
+    hasMore = pageRes.hasMore;
     options.onProgress?.({ page, loaded: listed.length, total, phase: 'list' });
-    if (!hasMore || rows.length === 0) break;
+    if (!hasMore || pageRes.rows.length === 0) break;
     page += 1;
     if (page > 500) break;
   }
 
-  const chunks: ListRow[][] = [];
-  for (let i = 0; i < listed.length; i += ENRICH_CHUNK) {
-    chunks.push(listed.slice(i, i + ENRICH_CHUNK));
-  }
-
+  const enrichOne = useProxy ? enrichOneViaProxy : enrichOneViaEdge;
   let enrichedCount = 0;
-  const bump = (n: number) => {
-    enrichedCount += n;
-    options.onProgress?.({
-      page,
-      loaded: Math.min(enrichedCount, listed.length),
-      total: total ?? listed.length,
-      phase: 'enrich',
-    });
-  };
 
-  const chunkResults = await mapPool(
-    chunks,
-    ENRICH_CONCURRENCY,
-    async (chunk) => {
-      try {
-        const rows = await enrichChunk(chunk);
-        bump(rows.length);
-        return rows;
-      } catch {
-        const singles: GoszakupContractRow[] = [];
-        for (const item of chunk) {
-          if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-          try {
-            const rows = await enrichChunk([item]);
-            singles.push(...rows);
-            bump(rows.length);
-          } catch {
-            singles.push({ ...item, planSum: null, finalSum: null });
-            bump(1);
-          }
-        }
-        return singles;
-      }
+  const enriched = await mapPool(
+    listed,
+    useProxy ? ENRICH_CONCURRENCY : 1,
+    async (row) => {
+      const out = await enrichOne(row, options.signal);
+      enrichedCount += 1;
+      options.onProgress?.({
+        page,
+        loaded: enrichedCount,
+        total: total ?? listed.length,
+        phase: 'enrich',
+      });
+      return out;
     },
-    undefined,
     options.signal,
   );
 
-  const enriched = chunkResults.flat();
-  options.onProgress?.({
-    page,
-    loaded: enriched.length,
-    total: total ?? listed.length,
-    phase: 'enrich',
-  });
-
-  // Добор пустых сумм: последовательно, 2 прохода (таймауты edge, не «пустые» shell)
+  // Добор только timeout/error — empty (shell) бесполезен
   for (let pass = 0; pass < REFILL_PASSES; pass++) {
     const missingIdx = enriched
-      .map((r, i) => (r.planSum == null && r.finalSum == null ? i : -1))
+      .map((r, i) =>
+        (r._status === 'timeout' || r._status === 'error') &&
+        r.planSum == null &&
+        r.finalSum == null
+          ? i
+          : -1,
+      )
       .filter((i) => i >= 0);
     if (missingIdx.length === 0) break;
+
     await mapPool(
       missingIdx,
-      REFILL_CONCURRENCY,
+      1,
       async (idx) => {
         if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
         const row = enriched[idx]!;
-        const { planSum: _p, finalSum: _f, ...base } = row;
-        try {
-          const [fixed] = await enrichChunk([base]);
-          if (fixed && (fixed.planSum != null || fixed.finalSum != null)) {
-            enriched[idx] = fixed;
-          }
-        } catch {
-          /* leave null */
+        const fixed = await enrichOne(
+          {
+            id: row.id,
+            contractNumber: row.contractNumber,
+            buyNumber: row.buyNumber,
+            contractType: row.contractType,
+            status: row.status,
+            createdAt: row.createdAt,
+            customer: row.customer,
+            supplier: row.supplier,
+            tradeMethod: row.tradeMethod,
+          },
+          options.signal,
+        );
+        if (fixed.planSum != null || fixed.finalSum != null || fixed._status === 'empty') {
+          enriched[idx] = fixed;
         }
         options.onProgress?.({
           page,
@@ -312,20 +412,22 @@ export async function exportAllGoszakupContractsByBin(
           total: total ?? listed.length,
           phase: 'enrich',
         });
-        await sleep(350 + pass * 150);
+        await sleep(200 + pass * 100);
         return null;
       },
-      undefined,
       options.signal,
     );
   }
 
+  const rows = enriched.map(stripStatus);
+  const missingSums = rows.filter((r) => r.planSum == null && r.finalSum == null).length;
+
   options.onProgress?.({
     page,
-    loaded: enriched.length,
+    loaded: rows.length,
     total: total ?? listed.length,
     phase: 'enrich',
   });
 
-  return { rows: enriched, total };
+  return { rows, total, missingSums };
 }

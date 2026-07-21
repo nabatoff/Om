@@ -38,7 +38,7 @@ export function GoszakupContractsPanel() {
     const ac = new AbortController();
     abortRef.current = ac;
     try {
-      const { rows, total } = await exportAllGoszakupContractsByBin(digits, {
+      const { rows, total, missingSums } = await exportAllGoszakupContractsByBin(digits, {
         signal: ac.signal,
         onProgress: setProgress,
       });
@@ -47,7 +47,12 @@ export function GoszakupContractsPanel() {
         return;
       }
       await exportGoszakupContractsToExcel(rows, digits);
-      setStatus(`Готово: ${rows.length} договоров${total != null ? ` (из ${total})` : ''}. Excel скачан.`);
+      const withSums = rows.length - missingSums;
+      setStatus(
+        `Готово: ${rows.length} договоров${total != null ? ` (из ${total})` : ''}, сумм: ${withSums}/${rows.length}${
+          missingSums > 0 ? ` (без публичной карточки: ${missingSums})` : ''
+        }. Excel скачан.`,
+      );
     } catch (e) {
       if (e instanceof DOMException && e.name === 'AbortError') {
         setStatus('Отменено');

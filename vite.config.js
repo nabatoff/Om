@@ -29,5 +29,16 @@ export default defineConfig(({ mode }) => {
             'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(key),
             'import.meta.env.VITE_STAFF_AUTH_DOMAIN': JSON.stringify(staffAuthDomain),
         },
+        server: {
+            // Локально: твой KZ IP → goszakup (без EU Supabase edge / таймаутов)
+            proxy: {
+                '/goszakup-origin': {
+                    target: 'https://goszakup.gov.kz',
+                    changeOrigin: true,
+                    secure: true,
+                    rewrite: (p) => p.replace(/^\/goszakup-origin/, ''),
+                },
+            },
+        },
     };
 });
