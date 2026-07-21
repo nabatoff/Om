@@ -4,8 +4,8 @@ const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
 const LIST_URL = "https://goszakup.gov.kz/ru/registry/contract";
 const SHOW_URL = "https://goszakup.gov.kz/ru/egzcontract/cpublic/show";
-const MAX_ENRICH = 4;
-const FETCH_TIMEOUT_MS = 10_000;
+const MAX_ENRICH = 3;
+const FETCH_TIMEOUT_MS = 12_000;
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -45,7 +45,11 @@ function errText(e: unknown): string {
 }
 
 function parseMoney(raw: string): number | null {
-  const cleaned = raw.replace(/\s/g, "").replace(/,/g, ".").replace(/[^\d.-]/g, "");
+  const cleaned = raw
+    .replace(/&nbsp;|&#160;|&#xA0;/gi, "")
+    .replace(/\s/g, "")
+    .replace(/,/g, ".")
+    .replace(/[^\d.-]/g, "");
   if (!cleaned) return null;
   const n = Number(cleaned);
   return Number.isFinite(n) ? n : null;
@@ -152,18 +156,49 @@ function parseListRange(html: string): { from: number; to: number; total: number
 }
 
 function parseDetailSums(html: string): { planSum: number | null; finalSum: number | null } {
-  const planChunk = sliceAround(html, "Общая плановая сумма договора", 0, 250);
-  const finalChunk = sliceAround(html, "Общая итоговая сумма договора", 0, 250);
-  const planM = planChunk.match(
-    /Общая\s+плановая\s+сумма\s+договора\s*<\/td>\s*<td[^>]*>\s*([^<]+)\s*<\/td>/i,
-  );
-  const finalM = finalChunk.match(
-    /Общая\s+итоговая\s+сумма\s+договора\s*<\/td>\s*<td[^>]*>\s*([^<]+)\s*<\/td>/i,
-  );
-  return {
-    planSum: planM ? parseMoney(planM[1]) : null,
-    finalSum: finalM ? parseMoney(finalM[1]) : null,
+  const grab = (label: string): number | null => {
+    const chunk = sliceAround(html, label, 0, 400);
+    if (!chunk) return null;
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const m =
+      chunk.match(new RegExp(`${escaped}\\s*<\\/td>\\s*<td[^>]*>\\s*([^<]+)\\s*<\\/td>`, "i")) ??
+      chunk.match(/<\/td>\s*<td[^>]*>\s*([^<]+)\s*<\/td>/i);
+    return m ? parseMoney(m[1]) : null;
   };
+  return {
+    planSum: grab("Общая плановая сумма договора"),
+    finalSum: grab("Общая итоговая сумма договора"),
+  };
+}
+
+async function enrichOne(row: ListRow): Promise<GoszakupContractRow> {
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const detailHtml = await fetchText(`${SHOW_URL}/${row.id}`, 2);
+      const sums = parseDetailSums(detailHtml);
+      if (sums.planSum != null || sums.finalSum != null) {
+        return { ...row, ...sums };
+      }
+      // страница без сумм / капча / обрезанный HTML — ещё раз
+      if (attempt < 3) await sleep(450 * attempt);
+    } catch (e) {
+      console.error(`[goszakup] detail ${row.id} try ${attempt}:`, errText(e));
+      if (attempt >= 3) return { ...row, planSum: null, finalSum: null };
+      await sleep(450 * attempt);
+    }
+  }
+  return { ...row, planSum: null, finalSum: null };
+}
+
+async function handleEnrich(items: ListRow[]): Promise<Response> {
+  const slice = items.slice(0, MAX_ENRICH);
+  // последовательно: параллель по 4 давала ~50% пустых сумм (таймауты/рейтлимит)
+  const rows: GoszakupContractRow[] = [];
+  for (let i = 0; i < slice.length; i++) {
+    if (i > 0) await sleep(150);
+    rows.push(await enrichOne(slice[i]));
+  }
+  return json({ ok: true, action: "enrich", rows });
 }
 
 async function isAdminWrite(req: Request): Promise<boolean> {
@@ -227,24 +262,6 @@ async function handleList(bin: string, page: number): Promise<Response> {
     to: range?.to ?? null,
     rows,
   });
-}
-
-async function handleEnrich(items: ListRow[]): Promise<Response> {
-  const slice = items.slice(0, MAX_ENRICH);
-  const rows = await Promise.all(
-    slice.map(async (row) => {
-      try {
-        // 1 попытка — быстрее; null лучше, чем ждать ретраи по 15с
-        const detailHtml = await fetchText(`${SHOW_URL}/${row.id}`, 1);
-        const sums = parseDetailSums(detailHtml);
-        return { ...row, ...sums };
-      } catch (e) {
-        console.error(`[goszakup] detail ${row.id}:`, errText(e));
-        return { ...row, planSum: null, finalSum: null };
-      }
-    }),
-  );
-  return json({ ok: true, action: "enrich", rows });
 }
 
 Deno.serve(async (req: Request) => {

@@ -46,7 +46,7 @@ export function GoszakupContractsPanel() {
         setStatus('Договоры не найдены');
         return;
       }
-      exportGoszakupContractsToExcel(rows, digits);
+      await exportGoszakupContractsToExcel(rows, digits);
       setStatus(`Готово: ${rows.length} договоров${total != null ? ` (из ${total})` : ''}. Excel скачан.`);
     } catch (e) {
       if (e instanceof DOMException && e.name === 'AbortError') {

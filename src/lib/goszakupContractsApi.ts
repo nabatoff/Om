@@ -33,9 +33,9 @@ type EnrichResult = {
   error?: string;
 };
 
-/** Батч на edge (MAX_ENRICH=4) × параллельные invoke */
-const ENRICH_CHUNK = 4;
-const ENRICH_CONCURRENCY = 4;
+/** Батч на edge (MAX_ENRICH=3) × параллельные invoke; пустые суммы — добор */
+const ENRICH_CHUNK = 3;
+const ENRICH_CONCURRENCY = 2;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
@@ -63,79 +63,62 @@ async function mapPool<T, R>(
   return out;
 }
 
-function xmlEscape(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
+export async function exportGoszakupContractsToExcel(
+  rows: GoszakupContractRow[],
+  supplierBin: string,
+): Promise<void> {
+  const ExcelJS = (await import('exceljs')).default;
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'Om CRM';
+  workbook.created = new Date();
 
-function xmlStringCell(value: string | null | undefined): string {
-  const s = value == null ? '' : String(value);
-  if (!s) return '<Cell/>';
-  return `<Cell><Data ss:Type="String">${xmlEscape(s)}</Data></Cell>`;
-}
+  const sheet = workbook.addWorksheet('Договоры', {
+    views: [{ state: 'frozen', ySplit: 1 }],
+  });
 
-function formatMoney(n: number | null | undefined): string {
-  if (n == null || !Number.isFinite(n)) return '';
-  return new Intl.NumberFormat('ru-RU', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(n);
-}
-
-function buildExcelXml(rows: string[][]): string {
-  const rowXml = rows
-    .map((cells) => `<Row>${cells.map((cell) => xmlStringCell(cell)).join('')}</Row>`)
-    .join('');
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<?mso-application progid="Excel.Sheet"?>
-<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
- xmlns:o="urn:schemas-microsoft-com:office:office"
- xmlns:x="urn:schemas-microsoft-com:office:excel"
- xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
- xmlns:html="http://www.w3.org/TR/REC-html40">
- <Worksheet ss:Name="Договоры">
-  <Table>${rowXml}</Table>
- </Worksheet>
-</Workbook>`;
-}
-
-export function exportGoszakupContractsToExcel(rows: GoszakupContractRow[], supplierBin: string): void {
-  const header = [
-    '#',
-    'Номер договора',
-    'Номер закупки',
-    'Тип договора',
-    'Статус договора',
-    'Дата создания',
-    'Общая плановая сумма договора',
-    'Общая итоговая сумма договора',
-    'Заказчик',
-    'Поставщик',
-    'Способ закупки',
+  sheet.columns = [
+    { header: '#', key: 'id', width: 12 },
+    { header: 'Номер договора', key: 'contractNumber', width: 24 },
+    { header: 'Номер закупки', key: 'buyNumber', width: 16 },
+    { header: 'Тип договора', key: 'contractType', width: 18 },
+    { header: 'Статус договора', key: 'status', width: 22 },
+    { header: 'Дата создания', key: 'createdAt', width: 20 },
+    { header: 'Общая плановая сумма договора', key: 'planSum', width: 18 },
+    { header: 'Общая итоговая сумма договора', key: 'finalSum', width: 18 },
+    { header: 'Заказчик', key: 'customer', width: 36 },
+    { header: 'Поставщик', key: 'supplier', width: 28 },
+    { header: 'Способ закупки', key: 'tradeMethod', width: 28 },
   ];
 
-  const data = rows.map((r) => [
-    r.id,
-    r.contractNumber,
-    r.buyNumber,
-    r.contractType,
-    r.status,
-    r.createdAt,
-    formatMoney(r.planSum),
-    formatMoney(r.finalSum),
-    r.customer,
-    r.supplier,
-    r.tradeMethod,
-  ]);
+  sheet.getRow(1).font = { bold: true };
+  sheet.getRow(1).alignment = { vertical: 'middle', wrapText: true };
 
-  const xml = buildExcelXml([header, ...data]);
-  const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8' });
+  for (const r of rows) {
+    sheet.addRow({
+      id: r.id,
+      contractNumber: r.contractNumber,
+      buyNumber: r.buyNumber,
+      contractType: r.contractType,
+      status: r.status,
+      createdAt: r.createdAt,
+      planSum: r.planSum == null || !Number.isFinite(r.planSum) ? null : r.planSum,
+      finalSum: r.finalSum == null || !Number.isFinite(r.finalSum) ? null : r.finalSum,
+      customer: r.customer,
+      supplier: r.supplier,
+      tradeMethod: r.tradeMethod,
+    });
+  }
+
+  sheet.getColumn('planSum').numFmt = '#,##0.00';
+  sheet.getColumn('finalSum').numFmt = '#,##0.00';
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `goszakup-contracts-${supplierBin}-${new Date().toISOString().slice(0, 10)}.xls`;
+  a.download = `goszakup-contracts-${supplierBin}-${new Date().toISOString().slice(0, 10)}.xlsx`;
   a.click();
   URL.revokeObjectURL(a.href);
 }
@@ -293,6 +276,56 @@ export async function exportAllGoszakupContractsByBin(
   );
 
   const enriched = chunkResults.flat();
+  options.onProgress?.({
+    page,
+    loaded: enriched.length,
+    total: total ?? listed.length,
+    phase: 'enrich',
+  });
+
+  // Добор карточек, где суммы не вытащились (таймаут/рейтлимит goszakup)
+  const missingIdx = enriched
+    .map((r, i) => (r.planSum == null && r.finalSum == null ? i : -1))
+    .filter((i) => i >= 0);
+  if (missingIdx.length > 0) {
+    options.onProgress?.({
+      page,
+      loaded: enriched.length - missingIdx.length,
+      total: total ?? listed.length,
+      phase: 'enrich',
+    });
+    await mapPool(
+      missingIdx,
+      2,
+      async (idx) => {
+        if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+        const row = enriched[idx]!;
+        const { planSum: _p, finalSum: _f, ...base } = row;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          try {
+            const [fixed] = await enrichChunk([base]);
+            if (fixed && (fixed.planSum != null || fixed.finalSum != null)) {
+              enriched[idx] = fixed;
+              break;
+            }
+          } catch {
+            /* retry */
+          }
+          await sleep(500 * attempt);
+        }
+        options.onProgress?.({
+          page,
+          loaded: enriched.filter((r) => r.planSum != null || r.finalSum != null).length,
+          total: total ?? listed.length,
+          phase: 'enrich',
+        });
+        return null;
+      },
+      undefined,
+      options.signal,
+    );
+  }
+
   options.onProgress?.({
     page,
     loaded: enriched.length,
