@@ -194,18 +194,17 @@ function parseDetailSums(html: string): { planSum: number | null; finalSum: numb
   };
 }
 
-async function enrichOne(row: ListRow): Promise<GoszakupContractRow> {
+async function enrichOne(row: ListRow): Promise<GoszakupContractRow & { enrichStatus: "ok" | "empty" | "timeout" }> {
   for (let attempt = 1; attempt <= DETAIL_ATTEMPTS; attempt++) {
     try {
       // 1 fetch на попытку — без внутреннего ×2, иначе 40–70с на abort
       const detailHtml = await fetchText(`${SHOW_URL}/${row.id}`, 1, FETCH_TIMEOUT_MS);
       if (isEmptyDetailShell(detailHtml)) {
-        // Повтор бесполезен — публичной карточки нет
-        return { ...row, planSum: null, finalSum: null };
+        return { ...row, planSum: null, finalSum: null, enrichStatus: "empty" };
       }
       const sums = parseDetailSums(detailHtml);
       if (sums.planSum != null || sums.finalSum != null) {
-        return { ...row, ...sums };
+        return { ...row, ...sums, enrichStatus: "ok" };
       }
       if (attempt < DETAIL_ATTEMPTS) await sleep(600);
     } catch (e) {
@@ -213,17 +212,17 @@ async function enrichOne(row: ListRow): Promise<GoszakupContractRow> {
       console.error(`[goszakup] detail ${row.id} try ${attempt}:`, msg);
       const aborted = msg.includes("AbortError");
       if (aborted || attempt >= DETAIL_ATTEMPTS) {
-        return { ...row, planSum: null, finalSum: null };
+        return { ...row, planSum: null, finalSum: null, enrichStatus: "timeout" };
       }
       await sleep(600);
     }
   }
-  return { ...row, planSum: null, finalSum: null };
+  return { ...row, planSum: null, finalSum: null, enrichStatus: "empty" };
 }
 
 async function handleEnrich(items: ListRow[]): Promise<Response> {
   const slice = items.slice(0, MAX_ENRICH);
-  const rows: GoszakupContractRow[] = [];
+  const rows = [];
   for (const row of slice) {
     rows.push(await enrichOne(row));
   }

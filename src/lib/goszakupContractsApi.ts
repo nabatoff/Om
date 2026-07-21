@@ -13,16 +13,18 @@ export type GoszakupContractRow = GoszakupListRow & {
 };
 
 type ListRow = GoszakupListRow;
-
 type EnrichStatus = 'ok' | 'empty' | 'timeout' | 'error';
-
 type Enriched = GoszakupContractRow & { _status?: EnrichStatus };
 
-/** Prod: Vercel→goszakup нестабилен; concurrency 1 + fallback на Supabase edge */
-const ENRICH_CONCURRENCY = 1;
-const REFILL_PASSES = 3;
-/** Ниже лимита Vercel Hobby Edge (~25s), чтобы успеть fallback */
-const CARD_TIMEOUT_MS = 20_000;
+/**
+ * Dev (Vite proxy, KZ IP): можно параллелить.
+ * Prod (Supabase EU→goszakup): только 1 — иначе abort/504.
+ * Vercel proxy на goszakup НЕ используем: стабильные 502/504.
+ */
+const USE_LOCAL_PROXY = import.meta.env.DEV;
+const ENRICH_CONCURRENCY = USE_LOCAL_PROXY ? 4 : 1;
+const REFILL_PASSES = USE_LOCAL_PROXY ? 2 : 3;
+const LOCAL_CARD_TIMEOUT_MS = 20_000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
@@ -108,46 +110,24 @@ export async function exportGoszakupContractsToExcel(
   URL.revokeObjectURL(a.href);
 }
 
-/** Dev: Vite proxy (KZ IP). Prod: rewrite `/goszakup-origin` → goszakup, иначе `/api/goszakup-proxy`. */
-async function fetchGoszakupHtml(pathAndQuery: string, signal?: AbortSignal): Promise<string> {
-  const candidates = import.meta.env.DEV
-    ? [`/goszakup-origin${pathAndQuery}`]
-    : [
-        `/goszakup-origin${pathAndQuery}`,
-        `/api/goszakup-proxy?path=${encodeURIComponent(pathAndQuery)}`,
-      ];
+/* ——— local Vite proxy (только DEV) ——— */
 
-  let lastErr: Error | null = null;
-  for (const url of candidates) {
-    const ac = new AbortController();
-    const onAbort = () => ac.abort();
-    signal?.addEventListener('abort', onAbort);
-    const timer = setTimeout(() => ac.abort(), CARD_TIMEOUT_MS);
-    try {
-      const res = await fetch(url, {
-        signal: ac.signal,
-        headers: { Accept: 'text/html' },
-      });
-      if (!res.ok) throw new Error(`goszakup HTTP ${res.status}`);
-      const html = await res.text();
-      // SPA fallback (rewrite не задеплоен) — пробуем следующий candidate
-      if (html.includes('id="root"') && html.length < 5_000) {
-        throw new Error('proxy unavailable (SPA fallback)');
-      }
-      return html;
-    } catch (e) {
-      lastErr = e instanceof Error ? e : new Error(String(e));
-      const aborted =
-        (e instanceof DOMException && e.name === 'AbortError') ||
-        lastErr.message.toLowerCase().includes('abort');
-      // на abort не жжём второй candidate зря дольше — но API path короче, стоит попробовать
-      if (aborted && url.startsWith('/api/')) break;
-    } finally {
-      clearTimeout(timer);
-      signal?.removeEventListener('abort', onAbort);
-    }
+async function fetchLocalGoszakupHtml(pathAndQuery: string, signal?: AbortSignal): Promise<string> {
+  const ac = new AbortController();
+  const onAbort = () => ac.abort();
+  signal?.addEventListener('abort', onAbort);
+  const timer = setTimeout(() => ac.abort(), LOCAL_CARD_TIMEOUT_MS);
+  try {
+    const res = await fetch(`/goszakup-origin${pathAndQuery}`, {
+      signal: ac.signal,
+      headers: { Accept: 'text/html' },
+    });
+    if (!res.ok) throw new Error(`goszakup HTTP ${res.status}`);
+    return await res.text();
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', onAbort);
   }
-  throw lastErr ?? new Error('goszakup fetch failed');
 }
 
 function buildListPath(bin: string, page: number): string {
@@ -157,12 +137,12 @@ function buildListPath(bin: string, page: number): string {
   return `/ru/registry/contract?${params.toString()}`;
 }
 
-async function fetchListPageViaProxy(
+async function fetchListPageLocal(
   bin: string,
   page: number,
   signal?: AbortSignal,
 ): Promise<{ rows: ListRow[]; hasMore: boolean; total: number | null }> {
-  const html = await fetchGoszakupHtml(buildListPath(bin, page), signal);
+  const html = await fetchLocalGoszakupHtml(buildListPath(bin, page), signal);
   const rows = parseListRows(html);
   const range = parseListRange(html);
   if (rows.length === 0 && page === 1) {
@@ -176,9 +156,9 @@ async function fetchListPageViaProxy(
   };
 }
 
-async function enrichOneViaProxy(row: ListRow, signal?: AbortSignal): Promise<Enriched> {
+async function enrichOneLocal(row: ListRow, signal?: AbortSignal): Promise<Enriched> {
   try {
-    const html = await fetchGoszakupHtml(`/ru/egzcontract/cpublic/show/${row.id}`, signal);
+    const html = await fetchLocalGoszakupHtml(`/ru/egzcontract/cpublic/show/${row.id}`, signal);
     if (isEmptyDetailShell(html)) {
       return { ...row, planSum: null, finalSum: null, _status: 'empty' };
     }
@@ -190,8 +170,7 @@ async function enrichOneViaProxy(row: ListRow, signal?: AbortSignal): Promise<En
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     const aborted =
-      (e instanceof DOMException && e.name === 'AbortError') ||
-      /abort|timeout|504|502|503/i.test(msg);
+      (e instanceof DOMException && e.name === 'AbortError') || /abort|timeout/i.test(msg);
     return {
       ...row,
       planSum: null,
@@ -201,15 +180,7 @@ async function enrichOneViaProxy(row: ListRow, signal?: AbortSignal): Promise<En
   }
 }
 
-/** Proxy (быстро когда жив) → Supabase edge (добирает 504) */
-async function enrichOneHybrid(row: ListRow, signal?: AbortSignal): Promise<Enriched> {
-  const viaProxy = await enrichOneViaProxy(row, signal);
-  if (viaProxy._status === 'ok' || viaProxy._status === 'empty') return viaProxy;
-  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-  return enrichOneViaEdge(row);
-}
-
-/* ——— fallback: старый edge (если proxy недоступен) ——— */
+/* ——— prod: Supabase edge ——— */
 
 function isTransientInvokeError(msg: string): boolean {
   const m = msg.toLowerCase();
@@ -276,7 +247,7 @@ async function invokeJson<T extends { ok?: boolean; error?: string }>(
   throw lastErr ?? new Error('Ошибка edge function');
 }
 
-async function fetchListPageViaEdge(
+async function fetchListPageEdge(
   bin: string,
   page: number,
 ): Promise<{ rows: ListRow[]; hasMore: boolean; total: number | null }> {
@@ -294,24 +265,29 @@ async function fetchListPageViaEdge(
   };
 }
 
-async function enrichOneViaEdge(row: ListRow): Promise<Enriched> {
+async function enrichOneEdge(row: ListRow): Promise<Enriched> {
   try {
     const res = await invokeJson<{
       ok?: boolean;
       error?: string;
-      rows?: GoszakupContractRow[];
-    }>({
-      action: 'enrich',
-      items: [row],
-    });
+      rows?: (GoszakupContractRow & { enrichStatus?: EnrichStatus })[];
+    }>({ action: 'enrich', items: [row] });
     const fixed = res.rows?.[0];
-    if (fixed && (fixed.planSum != null || fixed.finalSum != null)) {
-      return { ...fixed, _status: 'ok' };
+    if (!fixed) {
+      return { ...row, planSum: null, finalSum: null, _status: 'error' };
     }
-    return { ...row, planSum: null, finalSum: null, _status: 'empty' };
+    const status: EnrichStatus =
+      fixed.enrichStatus ??
+      (fixed.planSum != null || fixed.finalSum != null ? 'ok' : 'timeout');
+    return {
+      ...fixed,
+      planSum: fixed.planSum,
+      finalSum: fixed.finalSum,
+      _status: status,
+    };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    const aborted = msg.toLowerCase().includes('abort') || msg.toLowerCase().includes('timeout');
+    const aborted = /abort|timeout|504|502|503/i.test(msg);
     return {
       ...row,
       planSum: null,
@@ -324,6 +300,20 @@ async function enrichOneViaEdge(row: ListRow): Promise<Enriched> {
 function stripStatus(row: Enriched): GoszakupContractRow {
   const { _status: _, ...rest } = row;
   return rest;
+}
+
+function toListRow(row: Enriched): ListRow {
+  return {
+    id: row.id,
+    contractNumber: row.contractNumber,
+    buyNumber: row.buyNumber,
+    contractType: row.contractType,
+    status: row.status,
+    createdAt: row.createdAt,
+    customer: row.customer,
+    supplier: row.supplier,
+    tradeMethod: row.tradeMethod,
+  };
 }
 
 export async function exportAllGoszakupContractsByBin(
@@ -341,7 +331,6 @@ export async function exportAllGoszakupContractsByBin(
   const bin = supplierBin.replace(/\D/g, '');
   if (bin.length !== 12) throw new Error('БИН должен состоять из 12 цифр');
 
-  let useProxy = true;
   const listed: ListRow[] = [];
   let page = 1;
   let total: number | null = null;
@@ -349,21 +338,9 @@ export async function exportAllGoszakupContractsByBin(
 
   while (hasMore) {
     if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-    let pageRes: { rows: ListRow[]; hasMore: boolean; total: number | null };
-    try {
-      if (useProxy) {
-        pageRes = await fetchListPageViaProxy(bin, page, options.signal);
-      } else {
-        pageRes = await fetchListPageViaEdge(bin, page);
-      }
-    } catch (e) {
-      if (useProxy && page === 1) {
-        useProxy = false;
-        pageRes = await fetchListPageViaEdge(bin, page);
-      } else {
-        throw e;
-      }
-    }
+    const pageRes = USE_LOCAL_PROXY
+      ? await fetchListPageLocal(bin, page, options.signal)
+      : await fetchListPageEdge(bin, page);
     listed.push(...pageRes.rows);
     total = pageRes.total ?? total;
     hasMore = pageRes.hasMore;
@@ -373,7 +350,7 @@ export async function exportAllGoszakupContractsByBin(
     if (page > 500) break;
   }
 
-  const enrichOne = enrichOneHybrid;
+  const enrichOne = USE_LOCAL_PROXY ? enrichOneLocal : enrichOneEdge;
   let enrichedCount = 0;
 
   const enriched = await mapPool(
@@ -393,15 +370,10 @@ export async function exportAllGoszakupContractsByBin(
     options.signal,
   );
 
-  // Добор только timeout/error — empty (shell) бесполезен; refill тоже hybrid
   for (let pass = 0; pass < REFILL_PASSES; pass++) {
     const missingIdx = enriched
       .map((r, i) =>
-        (r._status === 'timeout' || r._status === 'error') &&
-        r.planSum == null &&
-        r.finalSum == null
-          ? i
-          : -1,
+        r.planSum == null && r.finalSum == null && r._status !== 'empty' ? i : -1,
       )
       .filter((i) => i >= 0);
     if (missingIdx.length === 0) break;
@@ -411,25 +383,11 @@ export async function exportAllGoszakupContractsByBin(
       1,
       async (idx) => {
         if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-        const row = enriched[idx]!;
-        const fixed = await enrichOneHybrid(
-          {
-            id: row.id,
-            contractNumber: row.contractNumber,
-            buyNumber: row.buyNumber,
-            contractType: row.contractType,
-            status: row.status,
-            createdAt: row.createdAt,
-            customer: row.customer,
-            supplier: row.supplier,
-            tradeMethod: row.tradeMethod,
-          },
-          options.signal,
-        );
+        const fixed = await enrichOne(toListRow(enriched[idx]!), options.signal);
         if (fixed.planSum != null || fixed.finalSum != null || fixed._status === 'empty') {
           enriched[idx] = fixed;
-        } else if (fixed._status) {
-          enriched[idx] = { ...enriched[idx]!, _status: fixed._status };
+        } else {
+          enriched[idx] = { ...enriched[idx]!, _status: fixed._status ?? 'timeout' };
         }
         options.onProgress?.({
           page,
@@ -437,7 +395,7 @@ export async function exportAllGoszakupContractsByBin(
           total: total ?? listed.length,
           phase: 'enrich',
         });
-        await sleep(400 + pass * 200);
+        await sleep(300 + pass * 150);
         return null;
       },
       options.signal,

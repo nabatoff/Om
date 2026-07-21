@@ -74,7 +74,11 @@ export function GoszakupContractsPanel() {
         <div>
           <h2 className="text-lg font-bold text-gray-900">Договоры госзакупа</h2>
           <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">
-            Выгрузка по БИН поставщика · суммы с карточки (плановая / итоговая)
+            Выгрузка по БИН · суммы с карточки (плановая / итоговая)
+          </p>
+          <p className="text-xs text-amber-700/80 mt-1">
+            На проде goszakup с Vercel/EU часто таймаутит. Для полного покрытия сумм —{' '}
+            <code className="text-[11px] bg-amber-50 px-1 rounded">npm run dev</code> локально.
           </p>
         </div>
       </div>

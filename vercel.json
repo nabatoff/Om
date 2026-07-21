@@ -5,10 +5,6 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
-      "source": "/goszakup-origin/:path*",
-      "destination": "https://goszakup.gov.kz/:path*"
-    },
-    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
