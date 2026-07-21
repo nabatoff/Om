@@ -33,9 +33,9 @@ type EnrichResult = {
   error?: string;
 };
 
-/** Батч на edge (MAX_ENRICH=3) × параллельные invoke; пустые суммы — добор */
-const ENRICH_CHUNK = 3;
-const ENRICH_CONCURRENCY = 2;
+/** 1 карточка / invoke × N параллельно; progress двигается по одной */
+const ENRICH_CHUNK = 1;
+const ENRICH_CONCURRENCY = 4;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
@@ -283,35 +283,25 @@ export async function exportAllGoszakupContractsByBin(
     phase: 'enrich',
   });
 
-  // Добор карточек, где суммы не вытащились (таймаут/рейтлимит goszakup)
+  // Добор пустых сумм — осторожно, без лавины (goszakup с edge нестабилен)
   const missingIdx = enriched
     .map((r, i) => (r.planSum == null && r.finalSum == null ? i : -1))
     .filter((i) => i >= 0);
   if (missingIdx.length > 0) {
-    options.onProgress?.({
-      page,
-      loaded: enriched.length - missingIdx.length,
-      total: total ?? listed.length,
-      phase: 'enrich',
-    });
     await mapPool(
       missingIdx,
-      2,
+      3,
       async (idx) => {
         if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
         const row = enriched[idx]!;
         const { planSum: _p, finalSum: _f, ...base } = row;
-        for (let attempt = 1; attempt <= 3; attempt++) {
-          try {
-            const [fixed] = await enrichChunk([base]);
-            if (fixed && (fixed.planSum != null || fixed.finalSum != null)) {
-              enriched[idx] = fixed;
-              break;
-            }
-          } catch {
-            /* retry */
+        try {
+          const [fixed] = await enrichChunk([base]);
+          if (fixed && (fixed.planSum != null || fixed.finalSum != null)) {
+            enriched[idx] = fixed;
           }
-          await sleep(500 * attempt);
+        } catch {
+          /* leave null */
         }
         options.onProgress?.({
           page,
@@ -319,6 +309,7 @@ export async function exportAllGoszakupContractsByBin(
           total: total ?? listed.length,
           phase: 'enrich',
         });
+        await sleep(200);
         return null;
       },
       undefined,

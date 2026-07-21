@@ -4,8 +4,10 @@ const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
 const LIST_URL = "https://goszakup.gov.kz/ru/registry/contract";
 const SHOW_URL = "https://goszakup.gov.kz/ru/egzcontract/cpublic/show";
-const MAX_ENRICH = 3;
-const FETCH_TIMEOUT_MS = 12_000;
+const MAX_ENRICH = 1;
+/** goszakup из EU edge часто >10с; длинный один таймаут лучше, чем куча abort-ретраев */
+const FETCH_TIMEOUT_MS = 20_000;
+const DETAIL_ATTEMPTS = 2;
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -69,11 +71,11 @@ function sliceAround(hay: string, needle: string, before = 0, after = 400): stri
   return hay.slice(Math.max(0, i - before), Math.min(hay.length, i + needle.length + after));
 }
 
-async function fetchText(url: string, attempts = 2): Promise<string> {
+async function fetchText(url: string, attempts = 2, timeoutMs = FETCH_TIMEOUT_MS): Promise<string> {
   let lastErr: unknown;
   for (let a = 1; a <= attempts; a++) {
     const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(), FETCH_TIMEOUT_MS);
+    const timer = setTimeout(() => ac.abort(), timeoutMs);
     try {
       const res = await fetch(url, {
         headers: {
@@ -85,11 +87,15 @@ async function fetchText(url: string, attempts = 2): Promise<string> {
         signal: ac.signal,
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const text = await res.text();
-      return text;
+      return await res.text();
     } catch (e) {
       lastErr = e;
-      if (a < attempts) await sleep(400 * a);
+      const aborted =
+        (e instanceof Error && e.name === "AbortError") ||
+        (typeof e === "object" && e != null && "name" in e && (e as { name: string }).name === "AbortError");
+      // На abort повтор почти бесполезен — сайт просто не отвечает с edge
+      if (aborted) break;
+      if (a < attempts) await sleep(300 * a);
     } finally {
       clearTimeout(timer);
     }
@@ -172,19 +178,23 @@ function parseDetailSums(html: string): { planSum: number | null; finalSum: numb
 }
 
 async function enrichOne(row: ListRow): Promise<GoszakupContractRow> {
-  for (let attempt = 1; attempt <= 3; attempt++) {
+  for (let attempt = 1; attempt <= DETAIL_ATTEMPTS; attempt++) {
     try {
-      const detailHtml = await fetchText(`${SHOW_URL}/${row.id}`, 2);
+      // 1 fetch на попытку — без внутреннего ×2, иначе 40–70с на abort
+      const detailHtml = await fetchText(`${SHOW_URL}/${row.id}`, 1, FETCH_TIMEOUT_MS);
       const sums = parseDetailSums(detailHtml);
       if (sums.planSum != null || sums.finalSum != null) {
         return { ...row, ...sums };
       }
-      // страница без сумм / капча / обрезанный HTML — ещё раз
-      if (attempt < 3) await sleep(450 * attempt);
+      if (attempt < DETAIL_ATTEMPTS) await sleep(400);
     } catch (e) {
-      console.error(`[goszakup] detail ${row.id} try ${attempt}:`, errText(e));
-      if (attempt >= 3) return { ...row, planSum: null, finalSum: null };
-      await sleep(450 * attempt);
+      const msg = errText(e);
+      console.error(`[goszakup] detail ${row.id} try ${attempt}:`, msg);
+      const aborted = msg.includes("AbortError");
+      if (aborted || attempt >= DETAIL_ATTEMPTS) {
+        return { ...row, planSum: null, finalSum: null };
+      }
+      await sleep(400);
     }
   }
   return { ...row, planSum: null, finalSum: null };
@@ -192,11 +202,9 @@ async function enrichOne(row: ListRow): Promise<GoszakupContractRow> {
 
 async function handleEnrich(items: ListRow[]): Promise<Response> {
   const slice = items.slice(0, MAX_ENRICH);
-  // последовательно: параллель по 4 давала ~50% пустых сумм (таймауты/рейтлимит)
   const rows: GoszakupContractRow[] = [];
-  for (let i = 0; i < slice.length; i++) {
-    if (i > 0) await sleep(150);
-    rows.push(await enrichOne(slice[i]));
+  for (const row of slice) {
+    rows.push(await enrichOne(row));
   }
   return json({ ok: true, action: "enrich", rows });
 }
