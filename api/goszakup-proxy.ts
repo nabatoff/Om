@@ -14,8 +14,10 @@ function isAllowedPath(pathWithQuery: string): boolean {
   }
 }
 
+/** Singapore ближе к KZ, чем US/EU — меньше 504 */
 export const config = {
   runtime: 'edge',
+  regions: ['sin1'],
   maxDuration: 60,
 };
 
@@ -38,8 +40,9 @@ export default async function handler(req: Request): Promise<Response> {
   }
 
   const target = new URL(path, ORIGIN);
+  // Hobby edge ~25s; уходим раньше, чтобы клиент успел fallback на Supabase
   const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort(), 45_000);
+  const timer = setTimeout(() => ac.abort(), 18_000);
   try {
     const upstream = await fetch(target.toString(), {
       headers: {
