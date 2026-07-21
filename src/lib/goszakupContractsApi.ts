@@ -33,9 +33,11 @@ type EnrichResult = {
   error?: string;
 };
 
-/** 1 карточка / invoke × N параллельно; progress двигается по одной */
+/** 1 карточка / invoke; низкий concurrency — иначе EU→goszakup abort'ит ~18% */
 const ENRICH_CHUNK = 1;
-const ENRICH_CONCURRENCY = 4;
+const ENRICH_CONCURRENCY = 2;
+const REFILL_PASSES = 2;
+const REFILL_CONCURRENCY = 1;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
@@ -283,14 +285,15 @@ export async function exportAllGoszakupContractsByBin(
     phase: 'enrich',
   });
 
-  // Добор пустых сумм — осторожно, без лавины (goszakup с edge нестабилен)
-  const missingIdx = enriched
-    .map((r, i) => (r.planSum == null && r.finalSum == null ? i : -1))
-    .filter((i) => i >= 0);
-  if (missingIdx.length > 0) {
+  // Добор пустых сумм: последовательно, 2 прохода (таймауты edge, не «пустые» shell)
+  for (let pass = 0; pass < REFILL_PASSES; pass++) {
+    const missingIdx = enriched
+      .map((r, i) => (r.planSum == null && r.finalSum == null ? i : -1))
+      .filter((i) => i >= 0);
+    if (missingIdx.length === 0) break;
     await mapPool(
       missingIdx,
-      3,
+      REFILL_CONCURRENCY,
       async (idx) => {
         if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
         const row = enriched[idx]!;
@@ -309,7 +312,7 @@ export async function exportAllGoszakupContractsByBin(
           total: total ?? listed.length,
           phase: 'enrich',
         });
-        await sleep(200);
+        await sleep(350 + pass * 150);
         return null;
       },
       undefined,

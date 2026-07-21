@@ -5,9 +5,18 @@ const UA =
 const LIST_URL = "https://goszakup.gov.kz/ru/registry/contract";
 const SHOW_URL = "https://goszakup.gov.kz/ru/egzcontract/cpublic/show";
 const MAX_ENRICH = 1;
-/** goszakup из EU edge часто >10с; длинный один таймаут лучше, чем куча abort-ретраев */
-const FETCH_TIMEOUT_MS = 20_000;
+/** goszakup из EU edge часто 15–25с; один длинный таймаут лучше abort-ретраев */
+const FETCH_TIMEOUT_MS = 28_000;
 const DETAIL_ATTEMPTS = 2;
+const BROWSER_HEADERS: Record<string, string> = {
+  "User-Agent": UA,
+  Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+  "Accept-Language": "ru-RU,ru;q=0.9,en;q=0.8",
+  "Cache-Control": "no-cache",
+  Pragma: "no-cache",
+  Referer: LIST_URL,
+  Connection: "close",
+};
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -71,19 +80,19 @@ function sliceAround(hay: string, needle: string, before = 0, after = 400): stri
   return hay.slice(Math.max(0, i - before), Math.min(hay.length, i + needle.length + after));
 }
 
-async function fetchText(url: string, attempts = 2, timeoutMs = FETCH_TIMEOUT_MS): Promise<string> {
+async function fetchText(
+  url: string,
+  attempts = 2,
+  timeoutMs = FETCH_TIMEOUT_MS,
+  extraHeaders?: Record<string, string>,
+): Promise<string> {
   let lastErr: unknown;
   for (let a = 1; a <= attempts; a++) {
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), timeoutMs);
     try {
       const res = await fetch(url, {
-        headers: {
-          "User-Agent": UA,
-          Accept: "text/html,application/xhtml+xml",
-          "Accept-Language": "ru-RU,ru;q=0.9",
-          Connection: "close",
-        },
+        headers: { ...BROWSER_HEADERS, ...extraHeaders },
         signal: ac.signal,
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -95,12 +104,20 @@ async function fetchText(url: string, attempts = 2, timeoutMs = FETCH_TIMEOUT_MS
         (typeof e === "object" && e != null && "name" in e && (e as { name: string }).name === "AbortError");
       // На abort повтор почти бесполезен — сайт просто не отвечает с edge
       if (aborted) break;
-      if (a < attempts) await sleep(300 * a);
+      if (a < attempts) await sleep(400 * a);
     } finally {
       clearTimeout(timer);
     }
   }
   throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+}
+
+/** Пустой шаблон карточки без сумм (архив / нет публичных данных) */
+function isEmptyDetailShell(html: string): boolean {
+  if (html.includes("{subject_count}")) return true;
+  const hasPlan = html.includes("Общая плановая сумма договора");
+  const hasFinal = html.includes("Общая итоговая сумма договора");
+  return !hasPlan && !hasFinal && html.length < 28_000;
 }
 
 function extractTableBody(html: string): string | null {
@@ -182,11 +199,15 @@ async function enrichOne(row: ListRow): Promise<GoszakupContractRow> {
     try {
       // 1 fetch на попытку — без внутреннего ×2, иначе 40–70с на abort
       const detailHtml = await fetchText(`${SHOW_URL}/${row.id}`, 1, FETCH_TIMEOUT_MS);
+      if (isEmptyDetailShell(detailHtml)) {
+        // Повтор бесполезен — публичной карточки нет
+        return { ...row, planSum: null, finalSum: null };
+      }
       const sums = parseDetailSums(detailHtml);
       if (sums.planSum != null || sums.finalSum != null) {
         return { ...row, ...sums };
       }
-      if (attempt < DETAIL_ATTEMPTS) await sleep(400);
+      if (attempt < DETAIL_ATTEMPTS) await sleep(600);
     } catch (e) {
       const msg = errText(e);
       console.error(`[goszakup] detail ${row.id} try ${attempt}:`, msg);
@@ -194,7 +215,7 @@ async function enrichOne(row: ListRow): Promise<GoszakupContractRow> {
       if (aborted || attempt >= DETAIL_ATTEMPTS) {
         return { ...row, planSum: null, finalSum: null };
       }
-      await sleep(400);
+      await sleep(600);
     }
   }
   return { ...row, planSum: null, finalSum: null };
