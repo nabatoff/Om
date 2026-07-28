@@ -104,7 +104,9 @@ import {
   resolveMergedOrdersCommissionDisplay,
   resolveOrderCommissionDisplay,
   resolveOrderCommissionTotal,
+  commissionKtpSourceHint,
   validateOrderLinesAmount,
+  validateOrderViaLegalEntity,
   type OrderCommissionFields,
 } from './lib/commission';
 import { groupOrdersByCounterparty, type GroupedCounterpartyOrder } from './lib/ordersGrouping';
@@ -243,6 +245,7 @@ const App = () => {
     entity: string;
     bin: string;
     viaBin?: string;
+    viaEntityName?: string;
     amounts: number[];
     totalAmount: number;
     mrpKztApplied?: number | null;
@@ -250,7 +253,7 @@ const App = () => {
     commissionAmount?: number | null;
     sourceOrders?: OrderCommissionFields[];
     editableOrder?: OrderRow | null;
-  }>({ isOpen: false, entity: '', bin: '', viaBin: '', amounts: [], totalAmount: 0 });
+  }>({ isOpen: false, entity: '', bin: '', viaBin: '', viaEntityName: '', amounts: [], totalAmount: 0 });
   const [editingOrder, setEditingOrder] = useState<OrderRow | null>(null);
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
   const [newClientData, setNewClientData] = useState<NewClientFormData>(() => emptyNewClientForm());
@@ -530,6 +533,11 @@ const App = () => {
     if (!skipValidation) {
       for (const o of confirmedOrders) {
         if (!o.bin) continue;
+        const vVia = validateOrderViaLegalEntity(o.viaEntityName, o.viaBin);
+        if (!vVia.ok) {
+          if (!silent) alert(vVia.message);
+          return false;
+        }
         const v = validateOrderLinesAmount(o.amounts, o.totalAmount, mrpKzt);
         if (!v.ok) {
           if (!silent) alert(v.message);
@@ -1648,6 +1656,7 @@ const App = () => {
                     entity: order.entityName,
                     bin: order.bin,
                     viaBin: order.viaBin,
+                    viaEntityName: order.viaEntityName,
                     amounts: order.amounts,
                     totalAmount: order.totalAmount,
                     mrpKztApplied: order.mrpKztApplied,
@@ -2312,6 +2321,10 @@ const OrdersBlock = ({
     const v = validateOrderLinesAmount(amounts, total, mrpKzt);
     return v.ok ? null : v.message;
   };
+  const orderViaError = (viaEntityName: string, viaBin: string) => {
+    const v = validateOrderViaLegalEntity(viaEntityName, viaBin);
+    return v.ok ? null : v.message;
+  };
 
   const addOrder = () =>
     setData([...data, { entityName: '', bin: '', viaEntityName: '', viaBin: '', orderCount: 1, amounts: [0], totalAmount: 0 }]);
@@ -2353,7 +2366,8 @@ const OrdersBlock = ({
             order.totalAmount > 0 || order.amounts.some((a) => a > 0)
               ? orderAmountError(order.amounts, order.totalAmount)
               : null;
-          const canSaveOrder = Boolean(order.entityName.trim() && order.bin.trim() && !amountErr);
+          const viaErr = orderViaError(order.viaEntityName, order.viaBin);
+          const canSaveOrder = Boolean(order.entityName.trim() && order.bin.trim() && !amountErr && !viaErr);
           return (
           <div key={oIdx} className="bg-gray-50/50 p-6 rounded-[32px] border border-gray-100 space-y-4 relative">
             <button
@@ -2390,6 +2404,9 @@ const OrdersBlock = ({
               </div>
               <div className="space-y-1.5 text-left md:col-span-2">
                 <label className="text-[9px] font-black text-gray-400 uppercase ml-2">Юр. лицо через которое был заказ</label>
+                <p className="text-[9px] text-violet-700/80 ml-2 leading-snug">
+                  Если заполнено — КТП и комиссия считаются по этому юрлицу, не по контрагенту
+                </p>
                 <ContractorLookup
                   value={order.viaEntityName}
                   onSelect={(name, bin) => {
@@ -2425,6 +2442,12 @@ const OrdersBlock = ({
               <p className="text-[10px] font-bold text-red-600 flex items-center gap-1">
                 <AlertTriangle size={12} />
                 {amountErr}
+              </p>
+            ) : null}
+            {viaErr ? (
+              <p className="text-[10px] font-bold text-red-600 flex items-center gap-1">
+                <AlertTriangle size={12} />
+                {viaErr}
               </p>
             ) : null}
             <div className="flex justify-end">
@@ -4171,6 +4194,7 @@ const OrderItemsModal = ({
     entity: string;
     bin: string;
     viaBin?: string;
+    viaEntityName?: string;
     amounts: number[];
     totalAmount: number;
     mrpKztApplied?: number | null;
@@ -4190,6 +4214,18 @@ const OrderItemsModal = ({
       ? resolveMergedOrdersCommissionDisplay(modal.sourceOrders, clientKtpByBin)
       : resolveOrderCommissionDisplay(modal, clientKtpByBin);
 
+  const ktpHint = (() => {
+    if (modal.sourceOrders?.length) {
+      const withVia = modal.sourceOrders.find(
+        (o) => String(o.viaBin ?? '').replace(/\D/g, '').length === 12,
+      );
+      if (withVia) {
+        return commissionKtpSourceHint(withVia.bin ?? modal.bin, withVia.viaBin, withVia.viaEntityName);
+      }
+    }
+    return commissionKtpSourceHint(modal.bin, modal.viaBin, modal.viaEntityName);
+  })();
+
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[400] flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
@@ -4197,6 +4233,9 @@ const OrderItemsModal = ({
           <div>
             <h3 className="font-black text-gray-900 text-lg uppercase">{modal.entity}</h3>
             <p className="text-[10px] text-gray-400 font-bold uppercase mt-1">БИН: {modal.bin}</p>
+            {isAdmin && ktpHint ? (
+              <p className="text-[10px] font-bold text-violet-700 mt-1 normal-case">{ktpHint}</p>
+            ) : null}
           </div>
           <button type="button" onClick={onClose} className="p-3 hover:bg-gray-100 rounded-full text-gray-400">
             <X size={24} />

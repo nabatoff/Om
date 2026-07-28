@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle, Save, Trash2, UserPlus, X } from 'lucide-react';
 import type { UiClient, UiOrder } from '../lib/crmApi';
 import { adminDeleteConfirmedOrder, adminUpdateConfirmedOrder } from '../lib/crmApi';
-import { formatMoneyKzt, validateOrderLinesAmount } from '../lib/commission';
+import { formatMoneyKzt, validateOrderLinesAmount, validateOrderViaLegalEntity } from '../lib/commission';
 import type { OrderRow } from '../lib/ordersGrouping';
 
 function normalizeName(s: string): string {
@@ -115,7 +115,12 @@ export function AdminOrderEditModal({ order, clients, mrpKzt, onOpenAddClient, o
     return v.ok ? null : v.message;
   }, [draft.amounts, draft.totalAmount, mrpKzt]);
 
-  const canSave = Boolean(draft.entityName.trim() && draft.bin.trim() && order.id && !amountErr);
+  const viaErr = useMemo(() => {
+    const v = validateOrderViaLegalEntity(draft.viaEntityName, draft.viaBin);
+    return v.ok ? null : v.message;
+  }, [draft.viaEntityName, draft.viaBin]);
+
+  const canSave = Boolean(draft.entityName.trim() && draft.bin.trim() && order.id && !amountErr && !viaErr);
 
   const updateCount = (raw: string) => {
     const count = Math.max(1, parseInt(raw, 10) || 1);
@@ -143,6 +148,10 @@ export function AdminOrderEditModal({ order, clients, mrpKzt, onOpenAddClient, o
     }
     if (amountErr) {
       setErr(amountErr);
+      return;
+    }
+    if (viaErr) {
+      setErr(viaErr);
       return;
     }
     setSaving(true);
@@ -210,14 +219,19 @@ export function AdminOrderEditModal({ order, clients, mrpKzt, onOpenAddClient, o
             onOpenAddClient={onOpenAddClient}
           />
 
-          <ContractorField
-            label="Юр. лицо через которое был заказ"
-            value={draft.viaEntityName || draft.viaBin}
-            clients={clients}
-            datalistId="admin-order-edit-via"
-            onSelect={(name, bin) => setDraft({ ...draft, viaEntityName: name, viaBin: bin })}
-            onOpenAddClient={onOpenAddClient}
-          />
+          <div className="space-y-1">
+            <ContractorField
+              label="Юр. лицо через которое был заказ"
+              value={draft.viaEntityName || draft.viaBin}
+              clients={clients}
+              datalistId="admin-order-edit-via"
+              onSelect={(name, bin) => setDraft({ ...draft, viaEntityName: name, viaBin: bin })}
+              onOpenAddClient={onOpenAddClient}
+            />
+            <p className="text-[9px] text-violet-700/80 ml-2 leading-snug">
+              Если заполнено — КТП и комиссия считаются по этому юрлицу, не по контрагенту
+            </p>
+          </div>
 
           <div className="space-y-1.5">
             <label className="text-[9px] font-black text-gray-400 uppercase ml-2">К-во заказов</label>
@@ -255,6 +269,12 @@ export function AdminOrderEditModal({ order, clients, mrpKzt, onOpenAddClient, o
             <p className="text-[11px] font-bold text-red-600 flex items-center gap-1">
               <AlertTriangle size={14} />
               {amountErr}
+            </p>
+          ) : null}
+          {viaErr ? (
+            <p className="text-[11px] font-bold text-red-600 flex items-center gap-1">
+              <AlertTriangle size={14} />
+              {viaErr}
             </p>
           ) : null}
           {err ? <p className="text-[11px] font-bold text-red-600">{err}</p> : null}

@@ -82,6 +82,7 @@ export type OrderCommissionFields = {
   totalAmount: number;
   bin?: string;
   viaBin?: string;
+  viaEntityName?: string;
   isKtpApplied?: boolean | null;
   mrpKztApplied?: number | null;
   commissionAmount?: number | null;
@@ -209,4 +210,32 @@ export function validateOrderLinesAmount(
     }
   }
   return { ok: true };
+}
+
+/** Имя юрлица без БИН → комиссия ошибочно пойдёт по контрагенту */
+export function validateOrderViaLegalEntity(
+  viaEntityName: string,
+  viaBin: string,
+): OrderAmountValidation {
+  const name = viaEntityName.trim();
+  if (!name) return { ok: true };
+  const bin = String(viaBin ?? '').replace(/\D/g, '');
+  if (bin.length === 12) return { ok: true };
+  return {
+    ok: false,
+    message:
+      'Если указано юрлицо — выберите его из справочника (БИН 12 цифр). Иначе комиссия посчитается по контрагенту.',
+  };
+}
+
+/** Подсказка для админа: по какому БИН берётся КТП */
+export function commissionKtpSourceHint(bin: string, viaBin?: string, viaEntityName?: string): string | null {
+  const via = String(viaBin ?? '').replace(/\D/g, '');
+  if (via.length === 12) {
+    const label = viaEntityName?.trim() || via;
+    return `КТП и ставка комиссии — по юрлицу «${label}»`;
+  }
+  const b = String(bin ?? '').replace(/\D/g, '');
+  if (b.length === 12) return 'КТП и ставка комиссии — по контрагенту';
+  return null;
 }
