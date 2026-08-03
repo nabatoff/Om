@@ -753,6 +753,23 @@ export async function adminDeleteConfirmedOrder(orderId: string): Promise<void> 
   if (error) throw error;
 }
 
+export type AdminCreateConfirmedOrderInput = AdminConfirmedOrderPatch & {
+  managerId: string;
+  reportDate: string;
+};
+
+/** Админ: создать заказ вручную и привязать к менеджеру + дате отчёта. */
+export async function adminCreateConfirmedOrder(input: AdminCreateConfirmedOrderInput): Promise<string> {
+  const { managerId, reportDate, ...patch } = input;
+  const { data, error } = await getSupabase().rpc('admin_create_confirmed_order', {
+    p_manager_id: managerId,
+    p_report_date: reportDate,
+    p_payload: patch,
+  });
+  if (error) throw error;
+  return String(data);
+}
+
 export async function saveKpiToDb(payload: {
   reportId?: string;
   reportDate: string;

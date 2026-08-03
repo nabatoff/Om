@@ -81,6 +81,7 @@ import { EnsTruCheckPanel } from './components/EnsTruCheckPanel';
 import { SupplierRegistryPanel } from './components/SupplierRegistryPanel';
 import { GoszakupContractsPanel } from './components/GoszakupContractsPanel';
 import { AdminOrderEditModal } from './components/AdminOrderEditModal';
+import { AdminOrderCreateModal } from './components/AdminOrderCreateModal';
 import type { OrderRow } from './lib/ordersGrouping';
 import { AdminSettingsPanel } from './components/AdminSettingsPanel';
 import { SalesComparisonDashboard } from './components/SalesComparisonDashboard';
@@ -255,6 +256,7 @@ const App = () => {
     editableOrder?: OrderRow | null;
   }>({ isOpen: false, entity: '', bin: '', viaBin: '', viaEntityName: '', amounts: [], totalAmount: 0 });
   const [editingOrder, setEditingOrder] = useState<OrderRow | null>(null);
+  const [creatingOrder, setCreatingOrder] = useState(false);
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
   const [newClientData, setNewClientData] = useState<NewClientFormData>(() => emptyNewClientForm());
   const [clientCategories, setClientCategories] = useState<ClientCategory[]>([]);
@@ -1666,6 +1668,7 @@ const App = () => {
                   })
                 }
                 onEditOrder={canAdminWrite ? (order) => setEditingOrder(order) : undefined}
+                onCreateOrder={canAdminWrite ? () => setCreatingOrder(true) : undefined}
                 openGroupedOrderDetails={(group) =>
                   setOrderDetailModal({
                     isOpen: true,
@@ -1981,6 +1984,27 @@ const App = () => {
           }}
           onSaved={refresh}
           onClose={() => setEditingOrder(null)}
+        />
+      ) : null}
+
+      {creatingOrder && canAdminWrite ? (
+        <AdminOrderCreateModal
+          clients={clients}
+          managers={managerProfiles}
+          mrpKzt={mrpKzt}
+          onOpenAddClient={(inputValue, callback) => {
+            const isBin = /^\d{12}$/.test(inputValue.trim());
+            setEditingClientBin(null);
+            setNewClientData({
+              ...emptyNewClientForm(sessionUserId ?? ''),
+              name: isBin ? '' : inputValue,
+              bin: isBin ? inputValue : '',
+            });
+            setOnClientCreatedCallback(() => callback);
+            setIsClientModalOpen(true);
+          }}
+          onSaved={refresh}
+          onClose={() => setCreatingOrder(false)}
         />
       ) : null}
 
@@ -3603,6 +3627,7 @@ const OrdersHistoryDashboard = ({
   openOrderDetails,
   openGroupedOrderDetails,
   onEditOrder,
+  onCreateOrder,
 }: {
   isAdmin: boolean;
   orders: OrderRow[];
@@ -3624,6 +3649,7 @@ const OrdersHistoryDashboard = ({
   openOrderDetails: (order: OrderRow) => void;
   openGroupedOrderDetails: (group: GroupedCounterpartyOrder) => void;
   onEditOrder?: (order: OrderRow) => void;
+  onCreateOrder?: () => void;
 }) => {
   type OrdersSortKey = 'orderCount' | 'totalAmount';
 
@@ -3823,6 +3849,16 @@ const OrdersHistoryDashboard = ({
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest">Подтверждённые заказы</h2>
         <div className="flex flex-wrap items-center gap-2">
+          {onCreateOrder ? (
+            <button
+              type="button"
+              onClick={onCreateOrder}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 text-white text-[10px] font-black uppercase tracking-wider hover:bg-blue-500"
+            >
+              <Plus size={14} />
+              Создать заказ
+            </button>
+          ) : null}
           {isAdmin ? (
             <button
               type="button"
