@@ -57,20 +57,27 @@ export function LeadDiggerLeadsPanel({ mode, dateFrom, dateTo, creatorId }: Prop
   useEffect(() => {
     if (!creatorId) return;
     const sb = getSupabase();
-    const channel = sb
-      .channel(`enterprise-leads-${creatorId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'crm_enterprise_leads', filter: `creator_id=eq.${creatorId}` },
-        () => {
-          void load();
-        },
-      )
-      .subscribe();
+    // Unique topic per mount/mode — reuse of the same name returns an already-subscribed
+    // channel and .on('postgres_changes') then throws.
+    const topic = `enterprise-leads:${creatorId}:${mode}:${crypto.randomUUID()}`;
+    const channel = sb.channel(topic);
+    channel.on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'crm_enterprise_leads',
+        filter: `creator_id=eq.${creatorId}`,
+      },
+      () => {
+        void load();
+      },
+    );
+    channel.subscribe();
     return () => {
       void sb.removeChannel(channel);
     };
-  }, [creatorId, load]);
+  }, [creatorId, mode, load]);
 
   const filtered = useMemo(() => {
     return rows.filter((r) => {
