@@ -54,7 +54,8 @@ Deno.serve(async (req: Request) => {
   const code = norm(body.login_code || "");
   const password = body.password || "";
   const full_name = (body.full_name || "").trim();
-  const role = body.role === "admin" ? "admin" : "manager";
+  const role =
+    body.role === "admin" ? "admin" : body.role === "lead_digger" ? "lead_digger" : "manager";
 
   if (code.length < 2 || code.length > 32) {
     return new Response(JSON.stringify({ error: "Логин: 2–32 символа (a–z, 0–9, _)" }), { status: 400, headers: { ...cors, "Content-Type": "application/json" } });

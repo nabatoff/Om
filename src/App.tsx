@@ -46,6 +46,7 @@ import {
   fetchClientsAdminApi,
   fetchClientCategoriesApi,
   fetchManagerProfilesApi,
+  fetchAssigneeProfilesApi,
   setClientProfileApi,
   upsertClientCategoryApi,
   fetchAdminAnalyticsTabEnabledApi,
@@ -82,6 +83,12 @@ import { SupplierRegistryPanel } from './components/SupplierRegistryPanel';
 import { GoszakupContractsPanel } from './components/GoszakupContractsPanel';
 import { AdminOrderEditModal } from './components/AdminOrderEditModal';
 import { AdminOrderCreateModal } from './components/AdminOrderCreateModal';
+import { EnterpriseLeadsBuffer } from './components/EnterpriseLeadsBuffer';
+import { LeadDiggerLeadsPanel } from './components/LeadDiggerLeadsPanel';
+import { LeadDiggerConversionDashboard } from './components/LeadDiggerConversionDashboard';
+import { ManagerEnterpriseLeadsPanel } from './components/ManagerEnterpriseLeadsPanel';
+import { setClientBusinessScaleApi } from './lib/enterpriseLeadsApi';
+import { notifyEnterpriseLeadTelegram } from './lib/telegramEnterpriseLead';
 import type { OrderRow } from './lib/ordersGrouping';
 import { AdminSettingsPanel } from './components/AdminSettingsPanel';
 import { SalesComparisonDashboard } from './components/SalesComparisonDashboard';
@@ -188,14 +195,24 @@ function getSavedClientsOrdersSubView(): ClientsOrdersSubView {
   return localStorage.getItem(LS_CLIENTS_ORDERS_SUBVIEW) === 'orders' ? 'orders' : 'clients';
 }
 
-function getSavedAdminSubView(): 'salesDashboard' | 'dashboard' | 'kpi' | 'staff' | 'meetings' | 'settings' {
+function getSavedAdminSubView():
+  | 'salesDashboard'
+  | 'dashboard'
+  | 'kpi'
+  | 'staff'
+  | 'meetings'
+  | 'settings'
+  | 'enterpriseLeads'
+  | 'diggerConversion' {
   const raw = localStorage.getItem(LS_ADMIN_SUBVIEW);
   return raw === 'salesDashboard' ||
     raw === 'dashboard' ||
     raw === 'kpi' ||
     raw === 'staff' ||
     raw === 'meetings' ||
-    raw === 'settings'
+    raw === 'settings' ||
+    raw === 'enterpriseLeads' ||
+    raw === 'diggerConversion'
     ? raw
     : 'salesDashboard';
 }
@@ -206,12 +223,13 @@ function getSavedManagerOrdersSection(): 'calendar' | 'meetings' | 'orders' {
 }
 
 const App = () => {
-  const { session, ready: authReady, managerName, signOut, isAdmin, canAdminWrite } = useAuth();
+  const { session, ready: authReady, managerName, signOut, isAdmin, canAdminWrite, isLeadDigger } = useAuth();
   const canManageClients = !isAdmin || canAdminWrite;
   const sessionUserId = session?.user?.id;
   const [currentView, setCurrentView] = useState<CurrentView>(() => getSavedCurrentView());
   const [clients, setClients] = useState<UiClient[]>([]);
   const [managerProfiles, setManagerProfiles] = useState<Array<{ id: string; fullName: string }>>([]);
+  const [assigneeProfiles, setAssigneeProfiles] = useState<Array<{ id: string; fullName: string; role: string }>>([]);
   const [standaloneCp, setStandaloneCp] = useState<ClientStandaloneCp[]>([]);
   const [allReports, setAllReports] = useState<FullReport[]>([]);
   const [deletedMeetings, setDeletedMeetings] = useState<DeletedMeeting[]>([]);
@@ -281,7 +299,14 @@ const App = () => {
   const [saving, setSaving] = useState(false);
   const [booting, setBooting] = useState(true);
   const [adminSubView, setAdminSubView] = useState<
-    'salesDashboard' | 'dashboard' | 'kpi' | 'staff' | 'meetings' | 'settings'
+    | 'salesDashboard'
+    | 'dashboard'
+    | 'kpi'
+    | 'staff'
+    | 'meetings'
+    | 'settings'
+    | 'enterpriseLeads'
+    | 'diggerConversion'
   >(() => getSavedAdminSubView());
   const [clientsOrdersSubView, setClientsOrdersSubView] = useState<ClientsOrdersSubView>(() =>
     getSavedClientsOrdersSubView(),
@@ -378,8 +403,12 @@ const App = () => {
       const managers = isAdmin
         ? await fetchManagerProfilesApi().catch(() => [] as Array<{ id: string; fullName: string }>)
         : [];
+      const assignees = isAdmin
+        ? await fetchAssigneeProfilesApi().catch(() => [] as Array<{ id: string; fullName: string; role: string }>)
+        : [];
       setClients(c);
       setManagerProfiles(managers);
+      setAssigneeProfiles(assignees);
       setAllReports(r);
       setDeletedMeetings(basket);
       setStandaloneCp(standalone);
@@ -432,7 +461,7 @@ const App = () => {
       setAdminSubView('kpi');
     }
     if (isAdmin && !canAdminWrite && currentView === 'admin') {
-      const allowed: typeof adminSubView[] = ['kpi'];
+      const allowed: typeof adminSubView[] = ['kpi', 'diggerConversion'];
       if (!allowed.includes(adminSubView)) {
         setAdminSubView('kpi');
       }
@@ -676,13 +705,26 @@ const App = () => {
         if (isAdmin) {
           await setClientManager(bin, managerId);
         }
+        if ((isLeadDigger || canAdminWrite) && newClientData.businessScale === 'enterprise') {
+          const leadId = await setClientBusinessScaleApi(bin, 'enterprise');
+          if (leadId) {
+            void notifyEnterpriseLeadTelegram({
+              clientName: name,
+              bin,
+              creatorName: managerName,
+            }).catch((e) => console.error(e));
+          }
+        }
         const merged = {
           ...updatedClient,
           ...profileFields,
+          businessScale: newClientData.businessScale,
           categoryName:
             clientCategories.find((c) => c.id === categoryId)?.name ?? updatedClient.categoryName ?? null,
           managerId,
-          managerName: managerProfiles.find((m) => m.id === managerId)?.fullName ?? null,
+          managerName: assigneeProfiles.find((m) => m.id === managerId)?.fullName
+            ?? managerProfiles.find((m) => m.id === managerId)?.fullName
+            ?? null,
         };
         setClients((prev) =>
           prev
@@ -704,8 +746,20 @@ const App = () => {
           bin,
           managerId,
           ...profileFields,
+          businessScale: 'smb',
           categoryName: clientCategories.find((c) => c.id === categoryId)?.name ?? null,
         });
+        if ((isLeadDigger || canAdminWrite) && newClientData.businessScale === 'enterprise') {
+          const leadId = await setClientBusinessScaleApi(bin, 'enterprise');
+          if (leadId) {
+            void notifyEnterpriseLeadTelegram({
+              clientName: name,
+              bin,
+              creatorName: managerName,
+            }).catch((e) => console.error(e));
+          }
+          newUser.businessScale = 'enterprise';
+        }
         setClients((prev) => {
           if (prev.some((c) => c.bin === newUser.bin)) return prev;
           return [...prev, newUser].sort((a, b) => a.name.localeCompare(b.name, 'ru'));
@@ -1293,6 +1347,9 @@ const App = () => {
             clients={clients}
             allReports={allReports}
             mrpKzt={mrpKzt}
+            isLeadDigger={isLeadDigger}
+            isSalesManager={!isAdmin && !isLeadDigger}
+            sessionUserId={sessionUserId}
             onOpenAddClient={(inputValue, callback) => {
               const isBin = /^\d{12}$/.test(inputValue.trim());
               setEditingClientBin(null);
@@ -1344,6 +1401,28 @@ const App = () => {
               >
                 <FileText size={14} />
                 KPI отчёт
+              </button>
+              {canAdminWrite ? (
+                <button
+                  type="button"
+                  onClick={() => setAdminSubView('enterpriseLeads')}
+                  className={`flex-1 min-w-[110px] sm:min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all ${
+                    adminSubView === 'enterpriseLeads' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
+                  }`}
+                >
+                  <UserPlus size={14} />
+                  Входящие лиды
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => setAdminSubView('diggerConversion')}
+                className={`flex-1 min-w-[110px] sm:min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all ${
+                  adminSubView === 'diggerConversion' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
+                }`}
+              >
+                <Target size={14} />
+                Лидорубы
               </button>
               {canAdminWrite ? (
               <button
@@ -1486,6 +1565,10 @@ const App = () => {
                 onDeleteReport={canAdminWrite ? removeReport : undefined}
               />
             )}
+            {adminSubView === 'enterpriseLeads' && canAdminWrite && (
+              <EnterpriseLeadsBuffer managers={managerProfiles} onAssigned={refresh} />
+            )}
+            {adminSubView === 'diggerConversion' && <LeadDiggerConversionDashboard />}
             {adminSubView === 'staff' && canAdminWrite && <StaffManager />}
             {adminSubView === 'meetings' && canAdminWrite && (
               <ManagerMeetingsPanel
@@ -1756,12 +1839,36 @@ const App = () => {
                     onChange={(e) => setNewClientData({ ...newClientData, managerId: e.target.value })}
                   >
                     <option value="">Не назначен</option>
-                    {managerProfiles.map((m) => (
+                    {assigneeProfiles.map((m) => (
                       <option key={m.id} value={m.id}>
                         {m.fullName}
+                        {m.role === 'lead_digger' ? ' (лидоруб)' : ''}
                       </option>
                     ))}
                   </select>
+                </div>
+              )}
+              {(isLeadDigger || canAdminWrite) && (
+                <div className="space-y-2 text-left">
+                  <label className="text-[10px] font-black text-gray-400 uppercase ml-2 tracking-tighter">
+                    Масштаб бизнеса
+                  </label>
+                  <select
+                    className="w-full bg-gray-50 border-none p-4 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-violet-500 transition-all outline-none"
+                    value={newClientData.businessScale}
+                    onChange={(e) =>
+                      setNewClientData({
+                        ...newClientData,
+                        businessScale: e.target.value === 'enterprise' ? 'enterprise' : 'smb',
+                      })
+                    }
+                  >
+                    <option value="smb">СМБ</option>
+                    <option value="enterprise">Крупный бизнес</option>
+                  </select>
+                  <p className="text-[9px] text-violet-700/80 ml-2">
+                    Крупный — карточка уйдёт в буфер руководителя на распределение
+                  </p>
                 </div>
               )}
               {isAdmin && (
@@ -2063,6 +2170,9 @@ const ManagerDashboard = ({
   onOpenAddClient,
   allReports,
   mrpKzt,
+  isLeadDigger = false,
+  isSalesManager = false,
+  sessionUserId = null,
 }: {
   stats: FormStats;
   setStats: SetState<FormStats>;
@@ -2086,6 +2196,9 @@ const ManagerDashboard = ({
   onOpenAddClient: (input: string, cb: (c: UiClient) => void) => void;
   allReports: FullReport[];
   mrpKzt: number;
+  isLeadDigger?: boolean;
+  isSalesManager?: boolean;
+  sessionUserId?: string | null;
 }) => {
   const [statDraft, setStatDraft] = useState<Record<keyof FormStats, string>>({
     processedTotal: String(stats.processedTotal),
@@ -2237,10 +2350,21 @@ const ManagerDashboard = ({
         seedKey={`conducted-${reportDate}`}
         onSaveItem={() => onSaveAction({ refreshAfterSave: false })}
       />
+      {isSalesManager ? <ManagerEnterpriseLeadsPanel onChanged={() => onSaveAction({ refreshAfterSave: true })} /> : null}
+      {isLeadDigger ? (
+        <div className="space-y-4">
+          <LeadDiggerLeadsPanel mode="status" dateFrom={reportDate} dateTo={reportDate} creatorId={sessionUserId ?? undefined} />
+          <LeadDiggerLeadsPanel mode="returns" creatorId={sessionUserId ?? undefined} />
+        </div>
+      ) : null}
       <OrdersBlock
-        data={confirmedOrders}
+        data={
+          isLeadDigger
+            ? confirmedOrders.filter((o) => clients.find((c) => c.bin === o.bin)?.businessScale !== 'enterprise')
+            : confirmedOrders
+        }
         setData={setConfirmedOrders}
-        clients={clients}
+        clients={isLeadDigger ? clients.filter((c) => c.businessScale !== 'enterprise') : clients}
         onOpenAddClient={onOpenAddClient}
         seedKey={`orders-${reportDate}`}
         mrpKzt={mrpKzt}

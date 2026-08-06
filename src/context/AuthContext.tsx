@@ -29,6 +29,8 @@ type AuthCtx = {
   isAdmin: boolean;
   /** Полный админ: изменения, настройки, сотрудники (`profiles.admin_write`) */
   canAdminWrite: boolean;
+  /** Роль лидоруба (`profiles.role = 'lead_digger'`) */
+  isLeadDigger: boolean;
   managerName: string;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
@@ -43,6 +45,7 @@ const UNCONFIG: AuthCtx = {
   ready: true,
   isAdmin: false,
   canAdminWrite: false,
+  isLeadDigger: false,
   managerName: '',
   signIn: async () => ({ error: new Error('Supabase не настроен') }),
   signOut: async () => {},
@@ -201,6 +204,11 @@ function AuthProviderInner({ children }: { children: ReactNode }) {
     [isAdmin, profile?.admin_write],
   );
 
+  const isLeadDigger = useMemo(
+    () => profile?.role === 'lead_digger' && profile?.is_active !== false,
+    [profile?.role, profile?.is_active],
+  );
+
   const value: AuthCtx = {
     session,
     user,
@@ -208,6 +216,7 @@ function AuthProviderInner({ children }: { children: ReactNode }) {
     ready,
     isAdmin,
     canAdminWrite,
+    isLeadDigger,
     managerName,
     signIn,
     signOut,

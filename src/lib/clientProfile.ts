@@ -66,6 +66,7 @@ export type NewClientFormData = {
   gzTurnoverPrevYear: string;
   attractionYear: number;
   attractionMonth: number;
+  businessScale: 'smb' | 'enterprise';
 };
 
 export function emptyNewClientForm(managerId = ''): NewClientFormData {
@@ -79,6 +80,7 @@ export function emptyNewClientForm(managerId = ''): NewClientFormData {
     gzTurnoverPrevYear: '',
     attractionYear: year,
     attractionMonth: month,
+    businessScale: 'smb',
   };
 }
 
@@ -89,6 +91,7 @@ export function newClientFormFromClient(c: {
   categoryId?: string | null;
   gzTurnoverPrevYear?: number | null;
   attractionMonth?: string | null;
+  businessScale?: 'smb' | 'enterprise' | null;
 }): NewClientFormData {
   const parsed = parseAttractionMonth(c.attractionMonth);
   const { year, month } = parsed ?? currentAttractionParts();
@@ -101,5 +104,6 @@ export function newClientFormFromClient(c: {
     gzTurnoverPrevYear: c.gzTurnoverPrevYear != null ? String(c.gzTurnoverPrevYear) : '',
     attractionYear: year,
     attractionMonth: month,
+    businessScale: c.businessScale === 'enterprise' ? 'enterprise' : 'smb',
   };
 }

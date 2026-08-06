@@ -15,15 +15,17 @@ export type UiClient = {
   gzTurnoverPrevYear?: number | null;
   /** Первый день месяца привлечения, YYYY-MM-DD. */
   attractionMonth?: string | null;
+  /** smb | enterprise */
+  businessScale?: 'smb' | 'enterprise';
   /** Только при админской загрузке справочника. */
   isKtp?: boolean;
 };
 
 const clientSelectFields =
-  'name, bin, manager_id, cp_paid, cp_paid_at, category_id, gz_turnover_prev_year, attraction_month, manager:profiles!crm_clients_manager_id_fkey(full_name), category:crm_client_categories(id, name)';
+  'name, bin, manager_id, cp_paid, cp_paid_at, category_id, gz_turnover_prev_year, attraction_month, business_scale, manager:profiles!crm_clients_manager_id_fkey(full_name), category:crm_client_categories(id, name)';
 
 const clientAdminSelectFields =
-  'name, bin, manager_id, cp_paid, cp_paid_at, is_ktp, category_id, gz_turnover_prev_year, attraction_month, manager:profiles!crm_clients_manager_id_fkey(full_name), category:crm_client_categories(id, name)';
+  'name, bin, manager_id, cp_paid, cp_paid_at, is_ktp, category_id, gz_turnover_prev_year, attraction_month, business_scale, manager:profiles!crm_clients_manager_id_fkey(full_name), category:crm_client_categories(id, name)';
 export type UiManagerProfile = { id: string; fullName: string };
 export type FormStats = {
   processedTotal: number;
@@ -211,6 +213,7 @@ function mapClientRow(c: {
   category_id?: string | null;
   gz_turnover_prev_year?: string | number | null;
   attraction_month?: string | null;
+  business_scale?: string | null;
   manager?: { full_name?: string | null } | null;
   category?: { id?: string | null; name?: string | null } | null;
 }): UiClient {
@@ -230,6 +233,7 @@ function mapClientRow(c: {
     categoryName: c.category?.name ?? null,
     gzTurnoverPrevYear: gz,
     attractionMonth: c.attraction_month ? String(c.attraction_month).slice(0, 10) : null,
+    businessScale: c.business_scale === 'enterprise' ? 'enterprise' : 'smb',
     ...(c.is_ktp !== undefined ? { isKtp: Boolean(c.is_ktp) } : {}),
   };
 }
@@ -242,6 +246,7 @@ function clientInsertPayload(c: UiClient) {
     category_id: c.categoryId ?? null,
     gz_turnover_prev_year: c.gzTurnoverPrevYear ?? null,
     attraction_month: c.attractionMonth ?? null,
+    business_scale: c.businessScale === 'enterprise' ? 'enterprise' : 'smb',
   };
 }
 
@@ -307,6 +312,22 @@ export async function fetchManagerProfilesApi(): Promise<UiManagerProfile[]> {
   return (data || []).map((r) => ({
     id: String(r.id),
     fullName: String((r.full_name as string | null) || '').trim() || String(r.id).slice(0, 8),
+  }));
+}
+
+/** Менеджеры крупного + лидорубы (для назначения карточки клиента). */
+export async function fetchAssigneeProfilesApi(): Promise<Array<UiManagerProfile & { role: string }>> {
+  const { data, error } = await getSupabase()
+    .from('profiles')
+    .select('id, full_name, role, is_active')
+    .in('role', ['manager', 'lead_digger'])
+    .neq('is_active', false)
+    .order('full_name', { ascending: true, nullsFirst: false });
+  if (error) throw error;
+  return (data || []).map((r) => ({
+    id: String(r.id),
+    fullName: String((r.full_name as string | null) || '').trim() || String(r.id).slice(0, 8),
+    role: String(r.role || 'manager'),
   }));
 }
 

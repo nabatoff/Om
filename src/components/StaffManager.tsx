@@ -10,7 +10,7 @@ export function StaffManager() {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ login_code: '', password: '', full_name: '', role: 'manager' as 'manager' | 'admin' });
+  const [form, setForm] = useState({ login_code: '', password: '', full_name: '', role: 'manager' as 'manager' | 'admin' | 'lead_digger' });
   const [formErr, setFormErr] = useState<string | null>(null);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [pwdFor, setPwdFor] = useState<Row | null>(null);
@@ -221,9 +221,10 @@ export function StaffManager() {
           <select
             className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-4 py-2.5 text-sm font-bold"
             value={form.role}
-            onChange={(e) => setForm((f) => ({ ...f, role: e.target.value as 'manager' | 'admin' }))}
+            onChange={(e) => setForm((f) => ({ ...f, role: e.target.value as 'manager' | 'admin' | 'lead_digger' }))}
           >
-            <option value="manager">Менеджер</option>
+            <option value="manager">Менеджер (крупный)</option>
+            <option value="lead_digger">Лидоруб</option>
             <option value="admin">Администратор</option>
           </select>
         </div>
@@ -274,6 +275,11 @@ export function StaffManager() {
                         <span className="inline-flex items-center gap-1 text-amber-700 text-xs">
                           <Shield size={12} />
                           admin
+                        </span>
+                      ) : r.role === 'lead_digger' ? (
+                        <span className="inline-flex items-center gap-1 text-violet-700 text-xs">
+                          <Briefcase size={12} />
+                          лидоруб
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 text-slate-600 text-xs">
