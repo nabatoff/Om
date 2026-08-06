@@ -71,6 +71,7 @@ import {
   saveKpiToDb,
   setClientCpPaid,
   setClientManager,
+  setClientDigger,
   sendTelegramDailyReportNow,
   setTelegramWeeklyForecastApi,
 } from './lib/crmApi';
@@ -700,9 +701,22 @@ const App = () => {
     }
     const name = newClientData.name.trim();
     const bin = newClientData.bin.replace(/\D/g, '');
-    const managerId = isAdmin ? (newClientData.managerId || null) : (sessionUserId ?? null);
-    if (isAdmin && !editingClientBin && !managerId) {
-      alert('Для нового контрагента выберите менеджера.');
+    const managerId = isAdmin
+      ? (assigneeProfiles.find((p) => p.id === newClientData.managerId)?.role === 'manager'
+          ? newClientData.managerId || null
+          : null)
+      : isLeadDigger
+        ? null
+        : (sessionUserId ?? null);
+    const diggerId = isAdmin
+      ? (assigneeProfiles.find((p) => p.id === newClientData.managerId)?.role === 'lead_digger'
+          ? newClientData.managerId || null
+          : null)
+      : isLeadDigger
+        ? (sessionUserId ?? null)
+        : null;
+    if (isAdmin && !editingClientBin && !managerId && !diggerId) {
+      alert('Для нового контрагента выберите менеджера или лидоруба.');
       return;
     }
     const openedFromInlinePicker = Boolean(onClientCreatedCallback);
@@ -739,7 +753,8 @@ const App = () => {
             clientCategories.find((c) => c.id === categoryId)?.name ?? existing?.categoryName ?? null,
         });
         if (isAdmin) {
-          await setClientManager(bin, managerId);
+          if (managerId) await setClientManager(bin, managerId);
+          if (diggerId) await setClientDigger(bin, diggerId);
         }
         if ((isLeadDigger || canAdminWrite) && newClientData.businessScale === 'enterprise') {
           const leadId = await setClientBusinessScaleApi(bin, 'enterprise');
@@ -757,10 +772,16 @@ const App = () => {
           businessScale: newClientData.businessScale,
           categoryName:
             clientCategories.find((c) => c.id === categoryId)?.name ?? updatedClient.categoryName ?? null,
-          managerId,
-          managerName: assigneeProfiles.find((m) => m.id === managerId)?.fullName
-            ?? managerProfiles.find((m) => m.id === managerId)?.fullName
-            ?? null,
+          managerId: managerId ?? updatedClient.managerId ?? null,
+          managerName: managerId
+            ? (assigneeProfiles.find((m) => m.id === managerId)?.fullName
+              ?? managerProfiles.find((m) => m.id === managerId)?.fullName
+              ?? null)
+            : (updatedClient.managerName ?? null),
+          diggerId: diggerId ?? updatedClient.diggerId ?? null,
+          diggerName: diggerId
+            ? (assigneeProfiles.find((m) => m.id === diggerId)?.fullName ?? null)
+            : (updatedClient.diggerName ?? null),
         };
         setClients((prev) =>
           prev
@@ -781,10 +802,15 @@ const App = () => {
           name,
           bin,
           managerId,
+          diggerId,
           ...profileFields,
           businessScale: 'smb',
           categoryName: clientCategories.find((c) => c.id === categoryId)?.name ?? null,
         });
+        if (isAdmin) {
+          if (managerId) await setClientManager(bin, managerId);
+          if (diggerId) await setClientDigger(bin, diggerId);
+        }
         if ((isLeadDigger || canAdminWrite) && newClientData.businessScale === 'enterprise') {
           const leadId = await setClientBusinessScaleApi(bin, 'enterprise');
           if (leadId) {
@@ -1368,8 +1394,8 @@ const App = () => {
           </div>
 
           {isAdmin && isAdminCoreView ? (
-            <div className="flex flex-col gap-2 py-2 border-t border-gray-100">
-              <div className="om-pill-track bg-gray-50/80">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 py-2 border-t border-gray-100">
+              <div className="om-pill-track bg-gray-50/80 min-w-0 flex-1">
                 {canAdminWrite ? (
                   <button
                     type="button"
@@ -1429,7 +1455,7 @@ const App = () => {
               </div>
 
               {canAdminWrite ? (
-                <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2 shrink-0">
                   <input
                     id="telegram-weekly-forecast"
                     type="text"
@@ -1439,13 +1465,13 @@ const App = () => {
                     disabled={telegramWeeklyForecastSaving || telegramReportSending}
                     placeholder="Прогноз"
                     title="Прогноз на неделю"
-                    className="col-span-1 min-w-0 w-full sm:w-[8.5rem] px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold disabled:opacity-60 outline-none focus:border-blue-500 min-h-10"
+                    className="min-w-0 w-[7.5rem] sm:w-[8.5rem] px-2.5 sm:px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold disabled:opacity-60 outline-none focus:border-blue-500 min-h-10"
                   />
                   <button
                     type="button"
                     disabled={telegramWeeklyForecastSaving || telegramReportSending || !forecastDirty}
                     onClick={() => void saveTelegramWeeklyForecast()}
-                    className="col-span-1 px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-xs font-bold uppercase tracking-wide text-emerald-800 hover:bg-emerald-100 disabled:opacity-40 disabled:pointer-events-none min-h-10"
+                    className="px-2.5 sm:px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-xs font-bold uppercase tracking-wide text-emerald-800 hover:bg-emerald-100 disabled:opacity-40 disabled:pointer-events-none min-h-10"
                   >
                     {telegramWeeklyForecastSaving ? '…' : 'OK'}
                   </button>
@@ -1456,13 +1482,13 @@ const App = () => {
                     onChange={(e) => setTelegramReportDate(e.target.value)}
                     disabled={telegramReportSending}
                     title="Дата отчёта"
-                    className="col-span-1 min-w-0 w-full sm:w-auto px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold disabled:opacity-60 outline-none focus:border-blue-500 min-h-10"
+                    className="min-w-0 w-auto px-2.5 sm:px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold disabled:opacity-60 outline-none focus:border-blue-500 min-h-10"
                   />
                   <button
                     type="button"
                     disabled={telegramReportSending}
                     onClick={() => setTelegramReportDate(formatYmdLocal(new Date()))}
-                    className="col-span-1 px-3 py-2 rounded-xl border border-gray-200 text-xs font-bold uppercase tracking-wide text-gray-600 hover:bg-gray-50 disabled:opacity-60 min-h-10"
+                    className="px-2.5 sm:px-3 py-2 rounded-xl border border-gray-200 text-xs font-bold uppercase tracking-wide text-gray-600 hover:bg-gray-50 disabled:opacity-60 min-h-10"
                   >
                     Сегодня
                   </button>
@@ -1470,7 +1496,7 @@ const App = () => {
                     type="button"
                     disabled={telegramReportSending}
                     onClick={() => void handleSendTelegramDailyReport()}
-                    className="col-span-2 sm:col-span-1 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-bold uppercase tracking-wide border border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-100 disabled:opacity-60 disabled:pointer-events-none transition-colors min-h-10"
+                    className="inline-flex items-center justify-center gap-2 px-2.5 sm:px-3 py-2 rounded-xl text-xs font-bold uppercase tracking-wide border border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-100 disabled:opacity-60 disabled:pointer-events-none transition-colors min-h-10"
                     title="Сводка за выбранную дату по данным в базе на текущий момент"
                   >
                     {telegramReportSending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
@@ -1856,7 +1882,9 @@ const App = () => {
               </div>
               {isAdmin && (
                 <div className="text-left">
-                  <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1.5">Менеджер клиента</label>
+                  <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1.5">
+                    Менеджер / лидоруб
+                  </label>
                   <select
                     className="w-full border border-gray-200 text-sm font-bold rounded-lg px-4 py-2.5 outline-none focus:border-blue-500 transition cursor-pointer"
                     value={newClientData.managerId}
@@ -2542,6 +2570,12 @@ const ManagerDashboard = ({
           open={transferModalOpen}
           rowCount={transferModalCount}
           reportDate={reportDate}
+          clients={clients.filter(
+            (c) =>
+              (sessionUserId && c.diggerId === sessionUserId) ||
+              (sessionUserId && !c.diggerId && c.managerId === sessionUserId) ||
+              (!c.diggerId && !c.managerId),
+          )}
           onClose={() => {
             setTransferModalOpen(false);
             setTransferDraft('');

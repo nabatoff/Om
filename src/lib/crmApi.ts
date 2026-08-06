@@ -8,6 +8,8 @@ export type UiClient = {
   bin: string;
   managerId?: string | null;
   managerName?: string | null;
+  diggerId?: string | null;
+  diggerName?: string | null;
   cpPaid?: boolean;
   cpPaidAt?: string | null;
   categoryId?: string | null;
@@ -22,10 +24,10 @@ export type UiClient = {
 };
 
 const clientSelectFields =
-  'name, bin, manager_id, cp_paid, cp_paid_at, category_id, gz_turnover_prev_year, attraction_month, business_scale, manager:profiles!crm_clients_manager_id_fkey(full_name), category:crm_client_categories(id, name)';
+  'name, bin, manager_id, digger_id, cp_paid, cp_paid_at, category_id, gz_turnover_prev_year, attraction_month, business_scale, manager:profiles!crm_clients_manager_id_fkey(full_name), digger:profiles!crm_clients_digger_id_fkey(full_name), category:crm_client_categories(id, name)';
 
 const clientAdminSelectFields =
-  'name, bin, manager_id, cp_paid, cp_paid_at, is_ktp, category_id, gz_turnover_prev_year, attraction_month, business_scale, manager:profiles!crm_clients_manager_id_fkey(full_name), category:crm_client_categories(id, name)';
+  'name, bin, manager_id, digger_id, cp_paid, cp_paid_at, is_ktp, category_id, gz_turnover_prev_year, attraction_month, business_scale, manager:profiles!crm_clients_manager_id_fkey(full_name), digger:profiles!crm_clients_digger_id_fkey(full_name), category:crm_client_categories(id, name)';
 export type UiManagerProfile = { id: string; fullName: string };
 export type FormStats = {
   processedTotal: number;
@@ -207,6 +209,7 @@ function mapClientRow(c: {
   name: string;
   bin: string;
   manager_id?: string | null;
+  digger_id?: string | null;
   cp_paid?: boolean | null;
   cp_paid_at?: string | null;
   is_ktp?: boolean | null;
@@ -215,6 +218,7 @@ function mapClientRow(c: {
   attraction_month?: string | null;
   business_scale?: string | null;
   manager?: { full_name?: string | null } | null;
+  digger?: { full_name?: string | null } | null;
   category?: { id?: string | null; name?: string | null } | null;
 }): UiClient {
   const gzRaw = c.gz_turnover_prev_year;
@@ -227,6 +231,8 @@ function mapClientRow(c: {
     bin: String(c.bin).trim(),
     managerId: c.manager_id ?? null,
     managerName: c.manager?.full_name ?? null,
+    diggerId: c.digger_id ?? null,
+    diggerName: c.digger?.full_name ?? null,
     cpPaid: Boolean(c.cp_paid),
     cpPaidAt: c.cp_paid_at ?? null,
     categoryId: c.category_id ?? c.category?.id ?? null,
@@ -243,6 +249,7 @@ function clientInsertPayload(c: UiClient) {
     name: c.name,
     bin: c.bin,
     manager_id: c.managerId ?? null,
+    digger_id: c.diggerId ?? null,
     category_id: c.categoryId ?? null,
     gz_turnover_prev_year: c.gzTurnoverPrevYear ?? null,
     attraction_month: c.attractionMonth ?? null,
@@ -464,6 +471,16 @@ export async function setClientManager(bin: string, managerId: string | null): P
   const { error } = await getSupabase().rpc('set_crm_client_manager', {
     p_bin: b,
     p_manager_id: managerId,
+  });
+  if (error) throw error;
+}
+
+/** Админ: назначить/сменить лидоруба у контрагента. */
+export async function setClientDigger(bin: string, diggerId: string | null): Promise<void> {
+  const b = bin.trim();
+  const { error } = await getSupabase().rpc('set_crm_client_digger', {
+    p_bin: b,
+    p_digger_id: diggerId,
   });
   if (error) throw error;
 }

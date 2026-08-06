@@ -155,6 +155,17 @@ export async function diggerTransferEnterpriseBatchApi(
   };
 }
 
+export async function adminDeleteReturnedLeadApi(leadId: string): Promise<void> {
+  const { error } = await getSupabase().rpc('admin_delete_returned_lead', { p_lead_id: leadId });
+  if (error) throw error;
+}
+
+export async function adminClearReturnedLeadsApi(): Promise<number> {
+  const { data, error } = await getSupabase().rpc('admin_clear_returned_leads');
+  if (error) throw error;
+  return Math.max(0, Number(data) || 0);
+}
+
 /** UI status for lead digger transferred list */
 export function leadDisplayStatus(lead: EnterpriseLead): {
   key: 'pending' | 'waiting' | 'done' | 'cancelled' | 'returned';

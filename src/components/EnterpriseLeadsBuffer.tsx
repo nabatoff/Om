@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import { RefreshCw, X } from 'lucide-react';
+import { RefreshCw, Trash2, X } from 'lucide-react';
 import type { UiManagerProfile } from '../lib/crmApi';
 import {
   adminAssignEnterpriseLeadApi,
+  adminClearReturnedLeadsApi,
+  adminDeleteReturnedLeadApi,
   formatLeadDate,
   listEnterpriseLeadsApi,
   listLeadEventsApi,
@@ -14,6 +16,8 @@ type Props = {
   managers: UiManagerProfile[];
   onAssigned?: () => void | Promise<void>;
 };
+
+type BufferTab = 'pending' | 'assigned' | 'returned';
 
 function avatarLetter(name: string): string {
   const t = name.trim();
@@ -28,11 +32,13 @@ function avatarTone(name: string): string {
 }
 
 export function EnterpriseLeadsBuffer({ managers, onAssigned }: Props) {
-  const [tab, setTab] = useState<'pending' | 'assigned'>('pending');
+  const [tab, setTab] = useState<BufferTab>('pending');
   const [rows, setRows] = useState<EnterpriseLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [assigningId, setAssigningId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [clearing, setClearing] = useState(false);
   const [pickManager, setPickManager] = useState<Record<string, string>>({});
   const [eventsFor, setEventsFor] = useState<string | null>(null);
   const [events, setEvents] = useState<LeadEvent[]>([]);
@@ -78,6 +84,35 @@ export function EnterpriseLeadsBuffer({ managers, onAssigned }: Props) {
     }
   };
 
+  const deleteReturned = async (leadId: string) => {
+    if (!confirm('Удалить этот возврат из истории?')) return;
+    setDeletingId(leadId);
+    setErr(null);
+    try {
+      await adminDeleteReturnedLeadApi(leadId);
+      await load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Не удалось удалить');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const clearAllReturned = async () => {
+    if (!confirm('Удалить ВСЕ возвраты на СМБ? Это необратимо.')) return;
+    setClearing(true);
+    setErr(null);
+    try {
+      const n = await adminClearReturnedLeadsApi();
+      await load();
+      if (n === 0) setErr('Возвратов не было');
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Не удалось очистить');
+    } finally {
+      setClearing(false);
+    }
+  };
+
   const openEvents = async (leadId: string) => {
     setEventsFor(leadId);
     try {
@@ -101,7 +136,7 @@ export function EnterpriseLeadsBuffer({ managers, onAssigned }: Props) {
               Лиды сегмента «Крупный бизнес», переданные лидорубами для распределения.
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <div className="inline-flex rounded-full border border-gray-100 bg-gray-50/50 p-1">
               <button
                 type="button"
@@ -121,11 +156,31 @@ export function EnterpriseLeadsBuffer({ managers, onAssigned }: Props) {
               >
                 Назначенные
               </button>
+              <button
+                type="button"
+                onClick={() => setTab('returned')}
+                className={`px-4 py-1.5 rounded-full text-xs font-semibold transition ${
+                  tab === 'returned' ? 'bg-orange-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
+                }`}
+              >
+                Возвраты
+              </button>
             </div>
             {pendingCount !== null ? (
               <div className="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg text-sm font-bold">
                 В очереди: {pendingCount}
               </div>
+            ) : null}
+            {tab === 'returned' ? (
+              <button
+                type="button"
+                disabled={clearing || rows.length === 0}
+                onClick={() => void clearAllReturned()}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold uppercase border border-red-100 text-red-600 hover:bg-red-50 disabled:opacity-40"
+              >
+                <Trash2 size={14} />
+                {clearing ? '…' : 'Обнулить все'}
+              </button>
             ) : null}
             <button
               type="button"
@@ -143,7 +198,7 @@ export function EnterpriseLeadsBuffer({ managers, onAssigned }: Props) {
         {loading && rows.length === 0 ? (
           <p className="text-sm text-gray-400 py-4">Загрузка…</p>
         ) : rows.length === 0 ? (
-          <p className="text-sm text-gray-400 py-4">Буфер пуст</p>
+          <p className="text-sm text-gray-400 py-4">{tab === 'returned' ? 'Нет возвратов' : 'Буфер пуст'}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm min-w-[720px]">
@@ -151,7 +206,7 @@ export function EnterpriseLeadsBuffer({ managers, onAssigned }: Props) {
                 <tr>
                   <th className="px-4 py-3 rounded-l-lg">Компания</th>
                   <th className="px-4 py-3">Инициатор (Лидоруб)</th>
-                  <th className="px-4 py-3">Дата создания</th>
+                  <th className="px-4 py-3">{tab === 'returned' ? 'Дата возврата' : 'Дата создания'}</th>
                   <th className="px-4 py-3 rounded-r-lg text-right">Действие</th>
                 </tr>
               </thead>
@@ -174,39 +229,62 @@ export function EnterpriseLeadsBuffer({ managers, onAssigned }: Props) {
                           {name}
                         </div>
                       </td>
-                      <td className="px-4 py-4 text-gray-500">{formatLeadDate(r.transferredAt)}</td>
+                      <td className="px-4 py-4 text-gray-500">
+                        {formatLeadDate(tab === 'returned' ? r.returnedAt : r.transferredAt)}
+                      </td>
                       <td className="px-4 py-4 text-right">
-                        <div className="inline-flex flex-wrap items-center justify-end gap-2">
-                          <select
-                            className="bg-white border border-gray-200 text-gray-700 text-xs font-bold rounded-lg px-3 py-2 outline-none focus:border-blue-500 cursor-pointer shadow-sm"
-                            value={pickManager[r.id] || ''}
-                            onChange={(e) => setPickManager((p) => ({ ...p, [r.id]: e.target.value }))}
-                          >
-                            <option value="" disabled>
-                              Назначить…
-                            </option>
-                            {managers.map((m) => (
-                              <option key={m.id} value={m.id}>
-                                {m.fullName}
+                        {tab === 'returned' ? (
+                          <div className="inline-flex flex-wrap items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              disabled={deletingId === r.id}
+                              onClick={() => void deleteReturned(r.id)}
+                              className="inline-flex items-center gap-1.5 bg-red-50 hover:bg-red-100 text-red-700 px-3 py-2 rounded-lg text-xs font-bold transition disabled:opacity-40 border border-red-100"
+                            >
+                              <Trash2 size={14} />
+                              {deletingId === r.id ? '…' : 'Удалить'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void openEvents(r.id)}
+                              className="text-xs font-bold text-gray-500 hover:text-gray-800 px-2 py-2"
+                            >
+                              Журнал
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="inline-flex flex-wrap items-center justify-end gap-2">
+                            <select
+                              className="bg-white border border-gray-200 text-gray-700 text-xs font-bold rounded-lg px-3 py-2 outline-none focus:border-blue-500 cursor-pointer shadow-sm"
+                              value={pickManager[r.id] || ''}
+                              onChange={(e) => setPickManager((p) => ({ ...p, [r.id]: e.target.value }))}
+                            >
+                              <option value="" disabled>
+                                Назначить…
                               </option>
-                            ))}
-                          </select>
-                          <button
-                            type="button"
-                            disabled={assigningId === r.id || !pickManager[r.id]}
-                            onClick={() => void assign(r.id)}
-                            className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-xs font-bold transition disabled:opacity-40"
-                          >
-                            {assigningId === r.id ? '…' : 'OK'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void openEvents(r.id)}
-                            className="text-xs font-bold text-gray-500 hover:text-gray-800 px-2 py-2"
-                          >
-                            Журнал
-                          </button>
-                        </div>
+                              {managers.map((m) => (
+                                <option key={m.id} value={m.id}>
+                                  {m.fullName}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              disabled={assigningId === r.id || !pickManager[r.id]}
+                              onClick={() => void assign(r.id)}
+                              className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-xs font-bold transition disabled:opacity-40"
+                            >
+                              {assigningId === r.id ? '…' : 'OK'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void openEvents(r.id)}
+                              className="text-xs font-bold text-gray-500 hover:text-gray-800 px-2 py-2"
+                            >
+                              Журнал
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );
