@@ -86,7 +86,8 @@ import { EnterpriseLeadsBuffer } from './components/EnterpriseLeadsBuffer';
 import { LeadDiggerLeadsPanel } from './components/LeadDiggerLeadsPanel';
 import { LeadDiggerConversionDashboard } from './components/LeadDiggerConversionDashboard';
 import { ManagerEnterpriseLeadsPanel } from './components/ManagerEnterpriseLeadsPanel';
-import { setClientBusinessScaleApi, listEnterpriseLeadsApi } from './lib/enterpriseLeadsApi';
+import { DiggerTransferModal } from './components/DiggerTransferModal';
+import { setClientBusinessScaleApi, listEnterpriseLeadsApi, type EnterpriseLead } from './lib/enterpriseLeadsApi';
 import { notifyEnterpriseLeadTelegram } from './lib/telegramEnterpriseLead';
 import {
   STAFF_DEPT_OPTIONS,
@@ -170,6 +171,8 @@ type SaveReportOptions = {
   silent?: boolean;
   skipValidation?: boolean;
   refreshAfterSave?: boolean;
+  /** Свежий список назначенных (обход stale state после setAssignedMeetings). */
+  assignedMeetingsOverride?: UiAssigned[];
 };
 
 const LS_CURRENT_VIEW = 'om.currentView';
@@ -463,9 +466,9 @@ const App = () => {
       setCurrentView('clientsOrders');
       setClientsOrdersSubView('orders');
     }
-    if (isAdmin && !canAdminWrite && currentView === 'manager') {
+    if (isAdmin && currentView === 'manager') {
       setCurrentView('admin');
-      setAdminSubView('kpi');
+      if (!canAdminWrite) setAdminSubView('kpi');
     }
     if (isAdmin && !canAdminWrite && currentView === 'admin') {
       const allowed: typeof adminSubView[] = ['kpi', 'diggerConversion'];
@@ -573,8 +576,14 @@ const App = () => {
   }, [currentView, managerReportForDate]);
 
   const saveReport = async (options: SaveReportOptions = {}): Promise<boolean> => {
-    const { silent = false, skipValidation = false, refreshAfterSave = true } = options;
-    const allEntries = [...assignedMeetings, ...conductedMeetings, ...confirmedOrders];
+    const {
+      silent = false,
+      skipValidation = false,
+      refreshAfterSave = true,
+      assignedMeetingsOverride,
+    } = options;
+    const assignedForSave = assignedMeetingsOverride ?? assignedMeetings;
+    const allEntries = [...assignedForSave, ...conductedMeetings, ...confirmedOrders];
     const invalidEntry = allEntries.find((e) => !e.bin);
     if (invalidEntry && !skipValidation) {
       if (!silent) {
@@ -609,7 +618,7 @@ const App = () => {
         reportId: managerReportForDate?.id,
         reportDate: managerReportDate,
         stats: { ...formStats },
-        assignedMeetings,
+        assignedMeetings: assignedForSave,
         conductedMeetings,
         confirmedOrders,
       });
@@ -1230,6 +1239,10 @@ const App = () => {
   const navPill = (active: boolean) =>
     `om-pill ${active ? 'om-pill-active' : ''}`;
 
+  const isAdminUtilityView =
+    currentView === 'admin' && (adminSubView === 'staff' || adminSubView === 'settings');
+  const isAdminCoreView = currentView === 'admin' && !isAdminUtilityView;
+
   return (
     <div className="om-page min-h-screen flex flex-col">
       <header className="om-header">
@@ -1262,7 +1275,7 @@ const App = () => {
 
           <div className="py-2">
             <div className="om-pill-track">
-              {(!isAdmin || canAdminWrite) && (
+              {!isAdmin && (
                 <button type="button" onClick={() => setCurrentView('manager')} className={navPill(currentView === 'manager')}>
                   <FileText size={16} /> Отчёт
                 </button>
@@ -1274,7 +1287,7 @@ const App = () => {
                     setCurrentView('admin');
                     setAdminSubView(canAdminWrite ? 'salesDashboard' : 'kpi');
                   }}
-                  className={navPill(currentView === 'admin')}
+                  className={navPill(isAdminCoreView)}
                 >
                   <List size={16} /> Админка
                 </button>
@@ -1300,6 +1313,30 @@ const App = () => {
                   <FileSpreadsheet size={16} /> Госзакуп
                 </button>
               )}
+              {isAdmin && canAdminWrite ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCurrentView('admin');
+                    setAdminSubView('staff');
+                  }}
+                  className={navPill(currentView === 'admin' && adminSubView === 'staff')}
+                >
+                  <UserCog size={16} /> Сотрудники
+                </button>
+              ) : null}
+              {isAdmin && canAdminWrite ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCurrentView('admin');
+                    setAdminSubView('settings');
+                  }}
+                  className={navPill(currentView === 'admin' && adminSubView === 'settings')}
+                >
+                  <Settings size={16} /> Настройки
+                </button>
+              ) : null}
               {!isAdmin && (
                 <>
                   <button type="button" onClick={() => setCurrentView('clients')} className={navPill(currentView === 'clients')}>
@@ -1318,7 +1355,7 @@ const App = () => {
             </div>
           </div>
 
-          {isAdmin && currentView === 'admin' ? (
+          {isAdmin && isAdminCoreView ? (
             <div className="flex flex-col gap-2 py-2 border-t border-gray-100">
               <div className="om-pill-track bg-gray-50/80">
                 {canAdminWrite ? (
@@ -1375,26 +1412,6 @@ const App = () => {
                   >
                     <List size={16} />
                     Встречи
-                  </button>
-                ) : null}
-                {canAdminWrite ? (
-                  <button
-                    type="button"
-                    onClick={() => setAdminSubView('staff')}
-                    className={`om-subpill ${adminSubView === 'staff' ? 'om-subpill-active' : 'om-subpill-idle'}`}
-                  >
-                    <UserCog size={16} />
-                    Сотрудники
-                  </button>
-                ) : null}
-                {canAdminWrite ? (
-                  <button
-                    type="button"
-                    onClick={() => setAdminSubView('settings')}
-                    className={`om-subpill ${adminSubView === 'settings' ? 'om-subpill-active' : 'om-subpill-idle'}`}
-                  >
-                    <Settings size={16} />
-                    Настройки
                   </button>
                 ) : null}
               </div>
@@ -1500,6 +1517,7 @@ const App = () => {
             isLeadDigger={isLeadDigger}
             isSalesManager={!isAdmin && !isLeadDigger}
             sessionUserId={sessionUserId}
+            creatorName={managerName}
             onOpenAddClient={(inputValue, callback) => {
               const isBin = /^\d{12}$/.test(inputValue.trim());
               setEditingClientBin(null);
@@ -2168,6 +2186,7 @@ const ManagerDashboard = ({
   isLeadDigger = false,
   isSalesManager = false,
   sessionUserId = null,
+  creatorName = '',
 }: {
   stats: FormStats;
   setStats: SetState<FormStats>;
@@ -2194,6 +2213,7 @@ const ManagerDashboard = ({
   isLeadDigger?: boolean;
   isSalesManager?: boolean;
   sessionUserId?: string | null;
+  creatorName?: string;
 }) => {
   const [statDraft, setStatDraft] = useState<Record<keyof FormStats, string>>({
     processedTotal: String(stats.processedTotal),
@@ -2202,6 +2222,9 @@ const ManagerDashboard = ({
     validatedTotal: String(stats.validatedTotal),
   });
   const [transferredToEnterprise, setTransferredToEnterprise] = useState(0);
+  const [transferDraft, setTransferDraft] = useState('');
+  const [transferModalCount, setTransferModalCount] = useState(0);
+  const [transferModalOpen, setTransferModalOpen] = useState(false);
 
   useEffect(() => {
     setStatDraft({
@@ -2211,6 +2234,17 @@ const ManagerDashboard = ({
       validatedTotal: String(stats.validatedTotal),
     });
   }, [stats.processedTotal, stats.newInWork, stats.callsTotal, stats.validatedTotal]);
+
+  const refreshTransferredCount = useCallback(async () => {
+    try {
+      const data = await listEnterpriseLeadsApi('all');
+      setTransferredToEnterprise(
+        data.filter((r) => (r.transferredAt || '').slice(0, 10) === reportDate).length,
+      );
+    } catch {
+      setTransferredToEnterprise(0);
+    }
+  }, [reportDate]);
 
   useEffect(() => {
     if (!isLeadDigger) {
@@ -2258,6 +2292,17 @@ const ManagerDashboard = ({
       void sb.removeChannel(channel);
     };
   }, [isLeadDigger, reportDate, sessionUserId]);
+
+  const openTransferModalFromDraft = () => {
+    const n = Math.max(0, parseInt(transferDraft, 10) || 0);
+    if (n <= 0) return;
+    if (n > 50) {
+      alert('Максимум 50 компаний за раз');
+      return;
+    }
+    setTransferModalCount(n);
+    setTransferModalOpen(true);
+  };
 
   const handleStatChange = (field: keyof FormStats, value: string) => {
     setStatDraft((prev) => ({ ...prev, [field]: value }));
@@ -2383,8 +2428,25 @@ const ManagerDashboard = ({
                 Передано в круп
                 <ArrowRightCircle size={14} className="text-gray-400" />
               </div>
-              <div className="text-2xl font-black text-gray-700">{transferredToEnterprise}</div>
-              <p className="text-[10px] text-gray-400 mt-1">За выбранную дату отчёта</p>
+              <input
+                type="number"
+                min={0}
+                max={50}
+                className="w-full text-2xl font-black text-gray-700 outline-none bg-transparent"
+                value={transferDraft}
+                placeholder={String(transferredToEnterprise)}
+                onChange={(e) => setTransferDraft(e.target.value.replace(/[^\d]/g, ''))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    openTransferModalFromDraft();
+                  }
+                }}
+                onBlur={() => openTransferModalFromDraft()}
+              />
+              <p className="text-[10px] text-gray-400 mt-1">
+                За дату: {transferredToEnterprise} · введи N → Enter/blur
+              </p>
             </div>
           ) : null}
         </div>
@@ -2462,6 +2524,51 @@ const ManagerDashboard = ({
       <div className="flex justify-end pt-4">
         {saving && <span className="text-xs text-gray-400 font-bold">Сохранение...</span>}
       </div>
+
+      {isLeadDigger ? (
+        <DiggerTransferModal
+          open={transferModalOpen}
+          rowCount={transferModalCount}
+          reportDate={reportDate}
+          onClose={() => {
+            setTransferModalOpen(false);
+            setTransferDraft('');
+          }}
+          onSuccess={async ({ items, meetingRows }) => {
+            for (const item of items) {
+              if (!item.created || item.skipped_existing) continue;
+              void notifyEnterpriseLeadTelegram({
+                clientName: item.name,
+                bin: item.bin,
+                creatorName: creatorName || 'Лидоруб',
+              }).catch((e) => console.error(e));
+            }
+
+            const existingBins = new Set(
+              assignedMeetings.map((m) => m.bin.replace(/\D/g, '')).filter(Boolean),
+            );
+            const extras: UiAssigned[] = meetingRows
+              .filter((r) => r.bin && !existingBins.has(r.bin))
+              .map((r) => ({
+                entityName: r.name,
+                bin: r.bin,
+                date: reportDate,
+                type: 'Новая',
+              }));
+            const merged = extras.length > 0 ? [...assignedMeetings, ...extras] : assignedMeetings;
+            if (extras.length > 0) {
+              setAssignedMeetings(merged);
+              await onSaveAction({
+                assignedMeetingsOverride: merged,
+                refreshAfterSave: true,
+              });
+            }
+
+            setTransferDraft('');
+            await refreshTransferredCount();
+          }}
+        />
+      ) : null}
     </div>
   );
 };
@@ -3558,10 +3665,31 @@ const KpiDashboard = ({
   setStaffDept: (dept: StaffDept) => void;
   onDeleteReport?: (reportId: string) => void;
 }) => {
+  const isDiggerKpi = staffDept === 'diggers';
   const kpiTablePeriod = useMemo(() => adminDateFilterBounds(filterDateFrom, filterDateTo), [filterDateFrom, filterDateTo]);
   const kpiTablePeriodLabel = `${formatDisplayDate(kpiTablePeriod.from)} — ${formatDisplayDate(kpiTablePeriod.to)}${
     kpiTablePeriod.isDefaultMonth ? ' · текущий месяц по умолчанию' : ''
   }`;
+
+  const [enterpriseLeads, setEnterpriseLeads] = useState<EnterpriseLead[]>([]);
+
+  useEffect(() => {
+    if (!isDiggerKpi) {
+      setEnterpriseLeads([]);
+      return;
+    }
+    let cancelled = false;
+    void listEnterpriseLeadsApi('all')
+      .then((rows) => {
+        if (!cancelled) setEnterpriseLeads(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setEnterpriseLeads([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isDiggerKpi, filterDateFrom, filterDateTo, filterManager]);
 
   const kpiRows = useMemo(
     () =>
@@ -3570,6 +3698,37 @@ const KpiDashboard = ({
       ),
     [reports],
   );
+
+  const diggerLeadsInPeriod = useMemo(() => {
+    const bounds = adminDateFilterBounds(filterDateFrom, filterDateTo);
+    return enterpriseLeads.filter((l) => {
+      if (l.routingStatus === 'returned_to_smb') return false;
+      const day = (l.transferredAt || '').slice(0, 10);
+      if (!reportDateMatchesAdminBounds(day, bounds)) return false;
+      if (filterManager !== 'Все' && l.creatorName !== filterManager) return false;
+      return true;
+    });
+  }, [enterpriseLeads, filterDateFrom, filterDateTo, filterManager]);
+
+  const diggerTransferTotals = useMemo(() => {
+    const transferred = diggerLeadsInPeriod.length;
+    const completed = diggerLeadsInPeriod.filter((l) => l.meetingStatus === 'completed').length;
+    return {
+      transferred,
+      completed,
+      conversion: kpiConversionPercent(completed, transferred),
+    };
+  }, [diggerLeadsInPeriod]);
+
+  const transferredByManagerDate = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const l of diggerLeadsInPeriod) {
+      const day = (l.transferredAt || '').slice(0, 10);
+      const key = `${l.creatorName}||${day}`;
+      map.set(key, (map.get(key) || 0) + 1);
+    }
+    return map;
+  }, [diggerLeadsInPeriod]);
 
   const meetingTotals = useMemo(() => {
     let conductedFact = 0;
@@ -3658,14 +3817,18 @@ const KpiDashboard = ({
       <section className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-5 shadow-sm">
         <div className="mb-3 text-left">
           <h3 className="text-[11px] font-bold text-gray-700 uppercase tracking-widest">
-            {monthlyManagerSummary.isDefaultMonth
-              ? `Общая сводка за месяц (${monthlyManagerSummary.monthPrefix})`
-              : 'Общая сводка за период'}
+            {isDiggerKpi
+              ? monthlyManagerSummary.isDefaultMonth
+                ? `KPI лидорубов за месяц (${monthlyManagerSummary.monthPrefix})`
+                : 'KPI лидорубов за период'
+              : monthlyManagerSummary.isDefaultMonth
+                ? `Общая сводка за месяц (${monthlyManagerSummary.monthPrefix})`
+                : 'Общая сводка за период'}
           </h3>
           <p className="text-[10px] text-gray-500 mt-1">
             {monthlyManagerSummary.periodLabel}
             {' · '}
-            менеджер: {filterManager === 'Все' ? 'все' : filterManager}
+            {isDiggerKpi ? 'лидоруб' : 'менеджер'}: {filterManager === 'Все' ? 'все' : filterManager}
             {staffDept === 'diggers' ? ' · отдел: лидорубы' : staffDept === 'managers' ? ' · отдел: менеджеры' : ''}
             . Отчётов: {monthlyManagerSummary.reportsCount}
           </p>
@@ -3687,133 +3850,240 @@ const KpiDashboard = ({
             <p className="text-[10px] text-amber-700 font-bold uppercase">Квалификация</p>
             <p className="text-lg font-black text-amber-800">{monthlyManagerSummary.validatedTotal}</p>
           </div>
-          <div className="rounded-xl bg-slate-50 border border-slate-100 p-3 text-left">
-            <p className="text-[10px] text-slate-700 font-bold uppercase">Назначено новых</p>
-            <p className="text-lg font-black text-slate-900">{monthlyManagerSummary.assignedNew}</p>
-          </div>
-          <div className="rounded-xl bg-teal-50 border border-teal-100 p-3 text-left">
-            <p className="text-[10px] text-teal-700 font-bold uppercase">Проведено новых</p>
-            <p className="text-lg font-black text-teal-800">{monthlyManagerSummary.conductedNew}</p>
-          </div>
-          <div className="rounded-xl bg-blue-50 border border-blue-100 p-3 text-left">
-            <p className="text-[10px] text-blue-700 font-bold uppercase">Проведено повторных</p>
-            <p className="text-lg font-black text-blue-800">{monthlyManagerSummary.conductedRepeat}</p>
-          </div>
+          {isDiggerKpi ? (
+            <>
+              <div className="rounded-xl bg-slate-50 border border-slate-100 p-3 text-left">
+                <p className="text-[10px] text-slate-700 font-bold uppercase">Передано</p>
+                <p className="text-lg font-black text-slate-900">{diggerTransferTotals.transferred}</p>
+              </div>
+              <div className="rounded-xl bg-teal-50 border border-teal-100 p-3 text-left">
+                <p className="text-[10px] text-teal-700 font-bold uppercase">Проведено по крупным</p>
+                <p className="text-lg font-black text-teal-800">{diggerTransferTotals.completed}</p>
+              </div>
+              <div className="rounded-xl bg-blue-50 border border-blue-100 p-3 text-left">
+                <p className="text-[10px] text-blue-700 font-bold uppercase">Конверсия</p>
+                <p className="text-lg font-black text-blue-800">{formatKpiPercent(diggerTransferTotals.conversion)}</p>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="rounded-xl bg-slate-50 border border-slate-100 p-3 text-left">
+                <p className="text-[10px] text-slate-700 font-bold uppercase">Назначено новых</p>
+                <p className="text-lg font-black text-slate-900">{monthlyManagerSummary.assignedNew}</p>
+              </div>
+              <div className="rounded-xl bg-teal-50 border border-teal-100 p-3 text-left">
+                <p className="text-[10px] text-teal-700 font-bold uppercase">Проведено новых</p>
+                <p className="text-lg font-black text-teal-800">{monthlyManagerSummary.conductedNew}</p>
+              </div>
+              <div className="rounded-xl bg-blue-50 border border-blue-100 p-3 text-left">
+                <p className="text-[10px] text-blue-700 font-bold uppercase">Проведено повторных</p>
+                <p className="text-lg font-black text-blue-800">{monthlyManagerSummary.conductedRepeat}</p>
+              </div>
+            </>
+          )}
         </div>
-        <div className="mt-4 pt-4 border-t border-gray-100 text-left">
-          <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Конверсия</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            <div className="rounded-xl bg-amber-50/60 border border-amber-100 p-3">
-              <p className="text-[10px] text-amber-800 font-bold uppercase leading-snug">Прошли квалификацию</p>
-              <p className="text-xl font-black text-amber-950 mt-1">
-                {formatKpiPercent(monthlyManagerSummary.passedQualificationPct)}
-              </p>
-              <p className="text-[9px] text-amber-700/80 mt-1 leading-snug">
-                Квалификация ÷ Звонки × 100%
-              </p>
-            </div>
-            <div className="rounded-xl bg-slate-50/80 border border-slate-200 p-3">
-              <p className="text-[10px] text-slate-700 font-bold uppercase leading-snug">Назначено ГЭП</p>
-              <p className="text-xl font-black text-slate-900 mt-1">
-                {formatKpiPercent(monthlyManagerSummary.assignedGepPct)}
-              </p>
-              <p className="text-[9px] text-slate-600 mt-1 leading-snug">
-                Назначено новых ÷ Квалификация × 100%
-              </p>
-            </div>
-            <div className="rounded-xl bg-teal-50/60 border border-teal-100 p-3">
-              <p className="text-[10px] text-teal-800 font-bold uppercase leading-snug">Проведен ГЭП</p>
-              <p className="text-xl font-black text-teal-950 mt-1">
-                {formatKpiPercent(monthlyManagerSummary.conductedGepPct)}
-              </p>
-              <p className="text-[9px] text-teal-800/80 mt-1 leading-snug">
-                Проведено новых ÷ Назначено новых × 100%
-              </p>
-            </div>
-            <div className="rounded-xl bg-orange-50/70 border border-orange-100 p-3">
-              <p className="text-[10px] text-orange-900 font-bold uppercase leading-snug">Подтвержден заказ</p>
-              <p className="text-xl font-black text-orange-950 mt-1">
-                {formatKpiPercent(monthlyManagerSummary.confirmedOrderConvPct)}
-              </p>
-              <p className="text-[9px] text-orange-900/80 mt-1 leading-snug">
-                Уникальные контрагенты с «проведено новых» (KPI) и заказом в периоде ÷ Проведено новых × 100%
-              </p>
-              <p className="text-[9px] text-orange-800/70 mt-1 font-mono">
-                {monthlyManagerSummary.confirmedOrderConvNumerator} / {monthlyManagerSummary.conductedNew}
-              </p>
+        {isDiggerKpi ? (
+          <div className="mt-4 pt-4 border-t border-gray-100 text-left">
+            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Конверсия по крупным</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div className="rounded-xl bg-amber-50/60 border border-amber-100 p-3">
+                <p className="text-[10px] text-amber-800 font-bold uppercase leading-snug">Прошли квалификацию</p>
+                <p className="text-xl font-black text-amber-950 mt-1">
+                  {formatKpiPercent(monthlyManagerSummary.passedQualificationPct)}
+                </p>
+                <p className="text-[9px] text-amber-700/80 mt-1 leading-snug">Квалификация ÷ Звонки × 100%</p>
+              </div>
+              <div className="rounded-xl bg-slate-50/80 border border-slate-200 p-3">
+                <p className="text-[10px] text-slate-700 font-bold uppercase leading-snug">Доходимость круп</p>
+                <p className="text-xl font-black text-slate-900 mt-1">
+                  {formatKpiPercent(diggerTransferTotals.conversion)}
+                </p>
+                <p className="text-[9px] text-slate-600 mt-1 leading-snug">
+                  Проведено ÷ Передано × 100% (без возвратов на СМБ)
+                </p>
+                <p className="text-[9px] text-slate-500 mt-1 font-mono">
+                  {diggerTransferTotals.completed} / {diggerTransferTotals.transferred}
+                </p>
+              </div>
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="mt-4 pt-4 border-t border-gray-100 text-left">
+            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Конверсия</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="rounded-xl bg-amber-50/60 border border-amber-100 p-3">
+                <p className="text-[10px] text-amber-800 font-bold uppercase leading-snug">Прошли квалификацию</p>
+                <p className="text-xl font-black text-amber-950 mt-1">
+                  {formatKpiPercent(monthlyManagerSummary.passedQualificationPct)}
+                </p>
+                <p className="text-[9px] text-amber-700/80 mt-1 leading-snug">
+                  Квалификация ÷ Звонки × 100%
+                </p>
+              </div>
+              <div className="rounded-xl bg-slate-50/80 border border-slate-200 p-3">
+                <p className="text-[10px] text-slate-700 font-bold uppercase leading-snug">Назначено ГЭП</p>
+                <p className="text-xl font-black text-slate-900 mt-1">
+                  {formatKpiPercent(monthlyManagerSummary.assignedGepPct)}
+                </p>
+                <p className="text-[9px] text-slate-600 mt-1 leading-snug">
+                  Назначено новых ÷ Квалификация × 100%
+                </p>
+              </div>
+              <div className="rounded-xl bg-teal-50/60 border border-teal-100 p-3">
+                <p className="text-[10px] text-teal-800 font-bold uppercase leading-snug">Проведен ГЭП</p>
+                <p className="text-xl font-black text-teal-950 mt-1">
+                  {formatKpiPercent(monthlyManagerSummary.conductedGepPct)}
+                </p>
+                <p className="text-[9px] text-teal-800/80 mt-1 leading-snug">
+                  Проведено новых ÷ Назначено новых × 100%
+                </p>
+              </div>
+              <div className="rounded-xl bg-orange-50/70 border border-orange-100 p-3">
+                <p className="text-[10px] text-orange-900 font-bold uppercase leading-snug">Подтвержден заказ</p>
+                <p className="text-xl font-black text-orange-950 mt-1">
+                  {formatKpiPercent(monthlyManagerSummary.confirmedOrderConvPct)}
+                </p>
+                <p className="text-[9px] text-orange-900/80 mt-1 leading-snug">
+                  Уникальные контрагенты с «проведено новых» (KPI) и заказом в периоде ÷ Проведено новых × 100%
+                </p>
+                <p className="text-[9px] text-orange-800/70 mt-1 font-mono">
+                  {monthlyManagerSummary.confirmedOrderConvNumerator} / {monthlyManagerSummary.conductedNew}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </section>
       <section className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-x-auto text-left">
         <div className="px-6 pt-5 pb-2 space-y-1">
-          <h3 className="text-xs font-bold text-gray-700 uppercase tracking-widest">Отдельный отчёт по KPI менеджеров</h3>
+          <h3 className="text-xs font-bold text-gray-700 uppercase tracking-widest">
+            {isDiggerKpi ? 'Отдельный отчёт по KPI лидорубов' : 'Отдельный отчёт по KPI менеджеров'}
+          </h3>
           <p className="text-[10px] text-gray-500">{kpiTablePeriodLabel}</p>
           <p className="text-[10px] text-gray-500 leading-relaxed">
-            Столбцы встреч считаются автоматически из назначенных и проведённых встреч отчёта (тип «Новая» / «Повторная» по полю типа встречи).
+            {isDiggerKpi
+              ? '«Передано» — лиды в буфер за дату отчёта (без возвратов на СМБ). Базовые KPI — из дневных отчётов.'
+              : 'Столбцы встреч считаются автоматически из назначенных и проведённых встреч отчёта (тип «Новая» / «Повторная» по полю типа встречи).'}
           </p>
         </div>
-        <table className="w-full text-left border-collapse min-w-[1180px]">
-          <thead>
-            <tr className="bg-gray-50/50 text-[10px] font-bold text-gray-400 uppercase border-y border-gray-100">
-              <th className="py-4 px-6">Дата отчета</th>
-              <th className="py-4 px-4">Менеджер</th>
-              <th className="py-4 px-4 text-center">Отработано</th>
-              <th className="py-4 px-4 text-center">Взято новых</th>
-              <th className="py-4 px-4 text-center">Звонки</th>
-              <th className="py-4 px-4 text-center">Квалификация</th>
-              <th className="py-4 px-4 text-center">Фактически за день проведено</th>
-              <th className="py-4 px-4 text-center">Назначено новых</th>
-              <th className="py-4 px-4 text-center">Проведено новых</th>
-              <th className="py-4 px-4 text-center">Проведено повторных</th>
-              {onDeleteReport ? <th className="py-4 px-4 text-right">Действия</th> : null}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-50">
-            {kpiRows.map((report) => (
-              <tr key={`kpi-${report.id}`} className="hover:bg-gray-50/50">
-                <td className="py-3.5 px-6 text-gray-600 whitespace-nowrap">{formatDisplayDate(report.date)}</td>
-                <td className="py-3.5 px-4 font-bold text-gray-800 whitespace-nowrap">{report.manager}</td>
-                <td className="py-3.5 px-4 text-center font-black text-gray-800">{report.stats.processedTotal}</td>
-                <td className="py-3.5 px-4 text-center font-black text-emerald-700">{report.stats.newInWork}</td>
-                <td className="py-3.5 px-4 text-center font-black text-indigo-700">{report.stats.callsTotal}</td>
-                <td className="py-3.5 px-4 text-center font-black text-amber-700">{report.stats.validatedTotal}</td>
-                <td className="py-3.5 px-4 text-center font-black text-sky-700">{report.conductedMeetings.length}</td>
-                <td className="py-3.5 px-4 text-center font-black text-slate-800">{countAssignedNewMeetings(report)}</td>
-                <td className="py-3.5 px-4 text-center font-black text-teal-700">{countConductedNewMeetings(report, allReports)}</td>
-                <td className="py-3.5 px-4 text-center font-black text-blue-700">{countConductedRepeatMeetings(report)}</td>
-                {onDeleteReport ? (
-                <td className="py-3.5 px-4 text-right">
-                  <button
-                    type="button"
-                    onClick={() => onDeleteReport(report.id)}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase text-red-600 border border-red-100 hover:bg-red-50"
-                    title="Удалить KPI-отчёт"
-                  >
-                    <Trash2 size={12} /> Удалить
-                  </button>
-                </td>
-                ) : null}
+        {isDiggerKpi ? (
+          <table className="w-full text-left border-collapse min-w-[980px]">
+            <thead>
+              <tr className="bg-gray-50/50 text-[10px] font-bold text-gray-400 uppercase border-y border-gray-100">
+                <th className="py-4 px-6">Дата отчета</th>
+                <th className="py-4 px-4">Лидоруб</th>
+                <th className="py-4 px-4 text-center">Отработано</th>
+                <th className="py-4 px-4 text-center">Взято новых</th>
+                <th className="py-4 px-4 text-center">Звонки</th>
+                <th className="py-4 px-4 text-center">Квалификация</th>
+                <th className="py-4 px-4 text-center">Передано</th>
+                {onDeleteReport ? <th className="py-4 px-4 text-right">Действия</th> : null}
               </tr>
-            ))}
-            {kpiRows.length > 0 && (
-              <tr className="bg-gray-50/80 font-black text-[11px] text-gray-700">
-                <td className="py-3 px-6" colSpan={2}>
-                  Итого по таблице
-                </td>
-                <td className="py-3 px-4 text-center text-gray-500">—</td>
-                <td className="py-3 px-4 text-center text-gray-500">—</td>
-                <td className="py-3 px-4 text-center text-gray-500">—</td>
-                <td className="py-3 px-4 text-center text-gray-500">—</td>
-                <td className="py-3 px-4 text-center text-sky-900">{meetingTotals.conductedFact}</td>
-                <td className="py-3 px-4 text-center text-slate-900">{meetingTotals.assignedNew}</td>
-                <td className="py-3 px-4 text-center text-teal-900">{meetingTotals.conductedNew}</td>
-                <td className="py-3 px-4 text-center text-violet-900">{meetingTotals.conductedRepeat}</td>
-                <td className="py-3 px-4" />
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {kpiRows.map((report) => (
+                <tr key={`kpi-digger-${report.id}`} className="hover:bg-gray-50/50">
+                  <td className="py-3.5 px-6 text-gray-600 whitespace-nowrap">{formatDisplayDate(report.date)}</td>
+                  <td className="py-3.5 px-4 font-bold text-gray-800 whitespace-nowrap">{report.manager}</td>
+                  <td className="py-3.5 px-4 text-center font-black text-gray-800">{report.stats.processedTotal}</td>
+                  <td className="py-3.5 px-4 text-center font-black text-emerald-700">{report.stats.newInWork}</td>
+                  <td className="py-3.5 px-4 text-center font-black text-indigo-700">{report.stats.callsTotal}</td>
+                  <td className="py-3.5 px-4 text-center font-black text-amber-700">{report.stats.validatedTotal}</td>
+                  <td className="py-3.5 px-4 text-center font-black text-slate-800">
+                    {transferredByManagerDate.get(`${report.manager}||${report.date}`) || 0}
+                  </td>
+                  {onDeleteReport ? (
+                    <td className="py-3.5 px-4 text-right">
+                      <button
+                        type="button"
+                        onClick={() => onDeleteReport(report.id)}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase text-red-600 border border-red-100 hover:bg-red-50"
+                        title="Удалить KPI-отчёт"
+                      >
+                        <Trash2 size={12} /> Удалить
+                      </button>
+                    </td>
+                  ) : null}
+                </tr>
+              ))}
+              {kpiRows.length > 0 && (
+                <tr className="bg-gray-50/80 font-black text-[11px] text-gray-700">
+                  <td className="py-3 px-6" colSpan={2}>
+                    Итого по таблице
+                  </td>
+                  <td className="py-3 px-4 text-center text-gray-500">—</td>
+                  <td className="py-3 px-4 text-center text-gray-500">—</td>
+                  <td className="py-3 px-4 text-center text-gray-500">—</td>
+                  <td className="py-3 px-4 text-center text-gray-500">—</td>
+                  <td className="py-3 px-4 text-center text-slate-900">{diggerTransferTotals.transferred}</td>
+                  <td className="py-3 px-4" />
+                </tr>
+              )}
+            </tbody>
+          </table>
+        ) : (
+          <table className="w-full text-left border-collapse min-w-[1180px]">
+            <thead>
+              <tr className="bg-gray-50/50 text-[10px] font-bold text-gray-400 uppercase border-y border-gray-100">
+                <th className="py-4 px-6">Дата отчета</th>
+                <th className="py-4 px-4">Менеджер</th>
+                <th className="py-4 px-4 text-center">Отработано</th>
+                <th className="py-4 px-4 text-center">Взято новых</th>
+                <th className="py-4 px-4 text-center">Звонки</th>
+                <th className="py-4 px-4 text-center">Квалификация</th>
+                <th className="py-4 px-4 text-center">Фактически за день проведено</th>
+                <th className="py-4 px-4 text-center">Назначено новых</th>
+                <th className="py-4 px-4 text-center">Проведено новых</th>
+                <th className="py-4 px-4 text-center">Проведено повторных</th>
+                {onDeleteReport ? <th className="py-4 px-4 text-right">Действия</th> : null}
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {kpiRows.map((report) => (
+                <tr key={`kpi-${report.id}`} className="hover:bg-gray-50/50">
+                  <td className="py-3.5 px-6 text-gray-600 whitespace-nowrap">{formatDisplayDate(report.date)}</td>
+                  <td className="py-3.5 px-4 font-bold text-gray-800 whitespace-nowrap">{report.manager}</td>
+                  <td className="py-3.5 px-4 text-center font-black text-gray-800">{report.stats.processedTotal}</td>
+                  <td className="py-3.5 px-4 text-center font-black text-emerald-700">{report.stats.newInWork}</td>
+                  <td className="py-3.5 px-4 text-center font-black text-indigo-700">{report.stats.callsTotal}</td>
+                  <td className="py-3.5 px-4 text-center font-black text-amber-700">{report.stats.validatedTotal}</td>
+                  <td className="py-3.5 px-4 text-center font-black text-sky-700">{report.conductedMeetings.length}</td>
+                  <td className="py-3.5 px-4 text-center font-black text-slate-800">{countAssignedNewMeetings(report)}</td>
+                  <td className="py-3.5 px-4 text-center font-black text-teal-700">{countConductedNewMeetings(report, allReports)}</td>
+                  <td className="py-3.5 px-4 text-center font-black text-blue-700">{countConductedRepeatMeetings(report)}</td>
+                  {onDeleteReport ? (
+                  <td className="py-3.5 px-4 text-right">
+                    <button
+                      type="button"
+                      onClick={() => onDeleteReport(report.id)}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase text-red-600 border border-red-100 hover:bg-red-50"
+                      title="Удалить KPI-отчёт"
+                    >
+                      <Trash2 size={12} /> Удалить
+                    </button>
+                  </td>
+                  ) : null}
+                </tr>
+              ))}
+              {kpiRows.length > 0 && (
+                <tr className="bg-gray-50/80 font-black text-[11px] text-gray-700">
+                  <td className="py-3 px-6" colSpan={2}>
+                    Итого по таблице
+                  </td>
+                  <td className="py-3 px-4 text-center text-gray-500">—</td>
+                  <td className="py-3 px-4 text-center text-gray-500">—</td>
+                  <td className="py-3 px-4 text-center text-gray-500">—</td>
+                  <td className="py-3 px-4 text-center text-gray-500">—</td>
+                  <td className="py-3 px-4 text-center text-sky-900">{meetingTotals.conductedFact}</td>
+                  <td className="py-3 px-4 text-center text-slate-900">{meetingTotals.assignedNew}</td>
+                  <td className="py-3 px-4 text-center text-teal-900">{meetingTotals.conductedNew}</td>
+                  <td className="py-3 px-4 text-center text-violet-900">{meetingTotals.conductedRepeat}</td>
+                  <td className="py-3 px-4" />
+                </tr>
+              )}
+            </tbody>
+          </table>
+        )}
       </section>
     </div>
   );

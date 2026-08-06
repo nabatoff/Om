@@ -123,6 +123,38 @@ export async function leadDiggerConversionStatsApi(): Promise<LeadDiggerConversi
   }));
 }
 
+export type DiggerTransferBatchItem = {
+  bin: string;
+  name: string;
+  meeting_scheduled: boolean;
+};
+
+export type DiggerTransferBatchResultItem = {
+  bin: string;
+  name: string;
+  lead_id: string;
+  created: boolean;
+  meeting_scheduled: boolean;
+  meeting_id?: string | null;
+  skipped_existing?: boolean;
+};
+
+export async function diggerTransferEnterpriseBatchApi(
+  reportDate: string,
+  items: DiggerTransferBatchItem[],
+): Promise<{ ok: boolean; items: DiggerTransferBatchResultItem[] }> {
+  const { data, error } = await getSupabase().rpc('digger_transfer_enterprise_batch', {
+    p_report_date: reportDate,
+    p_items: items,
+  });
+  if (error) throw error;
+  const raw = (data || {}) as { ok?: boolean; items?: DiggerTransferBatchResultItem[] };
+  return {
+    ok: Boolean(raw.ok),
+    items: Array.isArray(raw.items) ? raw.items : [],
+  };
+}
+
 /** UI status for lead digger transferred list */
 export function leadDisplayStatus(lead: EnterpriseLead): {
   key: 'pending' | 'waiting' | 'done' | 'cancelled' | 'returned';
