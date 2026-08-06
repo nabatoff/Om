@@ -18,6 +18,7 @@ import {
   formatKpiPercent,
   type SalesDashboardPeriod,
 } from '../lib/kpiMetrics';
+import { STAFF_DEPT_OPTIONS, type StaffDept } from '../lib/staffDept';
 
 type DeltaResult = { percent: string; raw: string | number; positive: boolean };
 
@@ -142,11 +143,15 @@ export function SalesComparisonDashboard({
   filterManager,
   setFilterManager,
   managerOptions,
+  staffDept = 'all',
+  setStaffDept,
 }: {
   allReports: FullReport[];
   filterManager: string;
   setFilterManager: Dispatch<SetStateAction<string>>;
   managerOptions: string[];
+  staffDept?: StaffDept;
+  setStaffDept?: (dept: StaffDept) => void;
 }) {
   const monthOptions = useMemo(() => {
     const fromReports = collectReportMonthYms(allReports);
@@ -243,12 +248,31 @@ export function SalesComparisonDashboard({
             <h2 className="text-lg font-black text-gray-900">Сравнительный дэшборд продаж</h2>
             <p className="text-xs text-gray-500 mt-1">
               MoM-сравнение ключевых метрик воронки
-              {filterManager !== 'Все' ? ` · менеджер: ${filterManager}` : ''}
+              {staffDept === 'diggers' ? ' · лидорубы' : staffDept === 'managers' ? ' · менеджеры' : ''}
+              {filterManager !== 'Все' ? ` · ${filterManager}` : ''}
             </p>
           </div>
           <div className="flex flex-wrap items-end gap-3">
+            {setStaffDept ? (
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-gray-400 uppercase">Отдел</label>
+                <select
+                  className="px-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-sm font-bold min-w-[140px]"
+                  value={staffDept}
+                  onChange={(e) => setStaffDept(e.target.value as StaffDept)}
+                >
+                  {STAFF_DEPT_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-gray-400 uppercase">Менеджер</label>
+              <label className="text-[10px] font-bold text-gray-400 uppercase">
+                {staffDept === 'diggers' ? 'Лидоруб' : staffDept === 'managers' ? 'Менеджер' : 'Сотрудник'}
+              </label>
               <select
                 className="px-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-sm font-bold min-w-[160px]"
                 value={filterManager}

@@ -29,6 +29,7 @@ import {
   ChevronUp,
   ChevronDown,
   Download,
+  ArrowRightCircle,
 } from 'lucide-react';
 import { adminDateFilterBounds, formatYmdLocal, reportDateMatchesAdminBounds } from './lib/periodBounds';
 import { PeriodFilterFields } from './components/PeriodFilterFields';
@@ -85,8 +86,14 @@ import { EnterpriseLeadsBuffer } from './components/EnterpriseLeadsBuffer';
 import { LeadDiggerLeadsPanel } from './components/LeadDiggerLeadsPanel';
 import { LeadDiggerConversionDashboard } from './components/LeadDiggerConversionDashboard';
 import { ManagerEnterpriseLeadsPanel } from './components/ManagerEnterpriseLeadsPanel';
-import { setClientBusinessScaleApi } from './lib/enterpriseLeadsApi';
+import { setClientBusinessScaleApi, listEnterpriseLeadsApi } from './lib/enterpriseLeadsApi';
 import { notifyEnterpriseLeadTelegram } from './lib/telegramEnterpriseLead';
+import {
+  STAFF_DEPT_OPTIONS,
+  managerOptionsForDept,
+  reportMatchesStaffDept,
+  type StaffDept,
+} from './lib/staffDept';
 import type { OrderRow } from './lib/ordersGrouping';
 import { AdminSettingsPanel } from './components/AdminSettingsPanel';
 import { SalesComparisonDashboard } from './components/SalesComparisonDashboard';
@@ -129,7 +136,7 @@ import {
   type NewClientFormData,
 } from './lib/clientProfile';
 import { ClientHistoryModal } from './components/ClientHistoryModal';
-import { isSupabaseConfigured } from './lib/supabase';
+import { isSupabaseConfigured, getSupabase } from './lib/supabase';
 import { useAuth } from './context/AuthContext';
 import { LoginView } from './components/LoginView';
 import { StaffManager } from './components/StaffManager';
@@ -283,6 +290,7 @@ const App = () => {
   const [clientHistoryFor, setClientHistoryFor] = useState<UiClient | null>(null);
   const [adminClientsFilterManager, setAdminClientsFilterManager] = useState('Все');
   const [adminFilterManager, setAdminFilterManager] = useState('Все');
+  const [adminStaffDept, setAdminStaffDept] = useState<StaffDept>('all');
   const [adminFilterDateFrom, setAdminFilterDateFrom] = useState(() => adminDateFilterBounds('', '').from);
   const [adminFilterDateTo, setAdminFilterDateTo] = useState(() => adminDateFilterBounds('', '').to);
   const [ordersFilterManager, setOrdersFilterManager] = useState('Все');
@@ -312,6 +320,7 @@ const App = () => {
   const [mrpKzt, setMrpKzt] = useState(4325);
   const [adminAnalyticsTabEnabled, setAdminAnalyticsTabEnabled] = useState(true);
   const [kpiFilterManager, setKpiFilterManager] = useState('Все');
+  const [kpiStaffDept, setKpiStaffDept] = useState<StaffDept>('all');
   const [kpiFilterDateFrom, setKpiFilterDateFrom] = useState(() => adminDateFilterBounds('', '').from);
   const [kpiFilterDateTo, setKpiFilterDateTo] = useState(() => adminDateFilterBounds('', '').to);
   const [kpiSaving, setKpiSaving] = useState(false);
@@ -513,6 +522,26 @@ const App = () => {
     });
     return ['Все', ...Array.from(set).sort((a, b) => a.localeCompare(b, 'ru'))];
   }, [allReports]);
+
+  const adminDeptManagerOptions = useMemo(
+    () => managerOptionsForDept(allReports, adminStaffDept, assigneeProfiles),
+    [allReports, adminStaffDept, assigneeProfiles],
+  );
+
+  const kpiDeptManagerOptions = useMemo(
+    () => managerOptionsForDept(allReports, kpiStaffDept, assigneeProfiles),
+    [allReports, kpiStaffDept, assigneeProfiles],
+  );
+
+  const adminDeptReports = useMemo(
+    () => allReports.filter((r) => reportMatchesStaffDept(r, adminStaffDept, assigneeProfiles)),
+    [allReports, adminStaffDept, assigneeProfiles],
+  );
+
+  const kpiDeptReports = useMemo(
+    () => allReports.filter((r) => reportMatchesStaffDept(r, kpiStaffDept, assigneeProfiles)),
+    [allReports, kpiStaffDept, assigneeProfiles],
+  );
 
   const managerReportForDate = useMemo(() => {
     if (!sessionUserId) return null;
@@ -1058,19 +1087,19 @@ const App = () => {
 
   const filteredReports = useMemo(() => {
     const bounds = adminDateFilterBounds(adminFilterDateFrom, adminFilterDateTo);
-    return allReports.filter((report) => {
+    return adminDeptReports.filter((report) => {
       const matchManager = adminFilterManager === 'Все' || report.manager === adminFilterManager;
       return matchManager && reportDateMatchesAdminBounds(report.date, bounds);
     });
-  }, [allReports, adminFilterManager, adminFilterDateFrom, adminFilterDateTo]);
+  }, [adminDeptReports, adminFilterManager, adminFilterDateFrom, adminFilterDateTo]);
 
   const kpiFilteredReports = useMemo(() => {
     const bounds = adminDateFilterBounds(kpiFilterDateFrom, kpiFilterDateTo);
-    return allReports.filter((report) => {
+    return kpiDeptReports.filter((report) => {
       const matchManager = kpiFilterManager === 'Все' || report.manager === kpiFilterManager;
       return matchManager && reportDateMatchesAdminBounds(report.date, bounds);
     });
-  }, [allReports, kpiFilterManager, kpiFilterDateFrom, kpiFilterDateTo]);
+  }, [kpiDeptReports, kpiFilterManager, kpiFilterDateFrom, kpiFilterDateTo]);
 
   /** Админ: как в аналитике. Менеджер: RLS отдаёт только свои отчёты; фильтр по датам. */
   const reportsForOrders = useMemo(() => {
@@ -1489,10 +1518,15 @@ const App = () => {
           <div className="space-y-6">
             {adminSubView === 'salesDashboard' && canAdminWrite && (
               <SalesComparisonDashboard
-                allReports={allReports}
+                allReports={adminDeptReports}
                 filterManager={adminFilterManager}
                 setFilterManager={setAdminFilterManager}
-                managerOptions={managerFilterOptions}
+                managerOptions={adminDeptManagerOptions}
+                staffDept={adminStaffDept}
+                setStaffDept={(dept) => {
+                  setAdminStaffDept(dept);
+                  setAdminFilterManager('Все');
+                }}
               />
             )}
             {adminAnalyticsTabEnabled && adminSubView === 'dashboard' && canAdminWrite && (
@@ -1504,13 +1538,18 @@ const App = () => {
                 setFilterDateFrom={setAdminFilterDateFrom}
                 filterDateTo={adminFilterDateTo}
                 setFilterDateTo={setAdminFilterDateTo}
-                managerOptions={managerFilterOptions}
+                managerOptions={adminDeptManagerOptions}
+                staffDept={adminStaffDept}
+                setStaffDept={(dept) => {
+                  setAdminStaffDept(dept);
+                  setAdminFilterManager('Все');
+                }}
                 onOpenRealization={(title, rows) => setAdminRealizationModal({ isOpen: true, title, rows })}
               />
             )}
             {adminSubView === 'kpi' && (
               <KpiDashboard
-                allReports={allReports}
+                allReports={kpiDeptReports}
                 reports={kpiFilteredReports}
                 filterManager={kpiFilterManager}
                 setFilterManager={setKpiFilterManager}
@@ -1518,7 +1557,12 @@ const App = () => {
                 setFilterDateFrom={setKpiFilterDateFrom}
                 filterDateTo={kpiFilterDateTo}
                 setFilterDateTo={setKpiFilterDateTo}
-                managerOptions={managerFilterOptions}
+                managerOptions={kpiDeptManagerOptions}
+                staffDept={kpiStaffDept}
+                setStaffDept={(dept) => {
+                  setKpiStaffDept(dept);
+                  setKpiFilterManager('Все');
+                }}
                 onDeleteReport={canAdminWrite ? removeReport : undefined}
               />
             )}
@@ -2157,6 +2201,7 @@ const ManagerDashboard = ({
     callsTotal: String(stats.callsTotal),
     validatedTotal: String(stats.validatedTotal),
   });
+  const [transferredToEnterprise, setTransferredToEnterprise] = useState(0);
 
   useEffect(() => {
     setStatDraft({
@@ -2166,6 +2211,53 @@ const ManagerDashboard = ({
       validatedTotal: String(stats.validatedTotal),
     });
   }, [stats.processedTotal, stats.newInWork, stats.callsTotal, stats.validatedTotal]);
+
+  useEffect(() => {
+    if (!isLeadDigger) {
+      setTransferredToEnterprise(0);
+      return;
+    }
+    let cancelled = false;
+    const refreshCount = async () => {
+      try {
+        const data = await listEnterpriseLeadsApi('all');
+        if (cancelled) return;
+        setTransferredToEnterprise(
+          data.filter((r) => (r.transferredAt || '').slice(0, 10) === reportDate).length,
+        );
+      } catch {
+        if (!cancelled) setTransferredToEnterprise(0);
+      }
+    };
+    void refreshCount();
+
+    if (!sessionUserId) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const sb = getSupabase();
+    const topic = `digger-kpi-transferred:${sessionUserId}:${crypto.randomUUID()}`;
+    const channel = sb.channel(topic);
+    channel.on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'crm_enterprise_leads',
+        filter: `creator_id=eq.${sessionUserId}`,
+      },
+      () => {
+        void refreshCount();
+      },
+    );
+    channel.subscribe();
+    return () => {
+      cancelled = true;
+      void sb.removeChannel(channel);
+    };
+  }, [isLeadDigger, reportDate, sessionUserId]);
 
   const handleStatChange = (field: keyof FormStats, value: string) => {
     setStatDraft((prev) => ({ ...prev, [field]: value }));
@@ -2214,9 +2306,13 @@ const ManagerDashboard = ({
         </button>
       </div>
 
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+      <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-gray-100">
         <div className="text-xs uppercase font-bold tracking-wider text-gray-400 mb-4">Общая сводка за период</div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div
+          className={`grid grid-cols-2 gap-4 ${
+            isLeadDigger ? 'md:grid-cols-3 lg:grid-cols-5' : 'md:grid-cols-4'
+          }`}
+        >
           <div className="bg-[#f3f4f6] p-4 rounded-xl text-left">
             <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Отработано</div>
             <input
@@ -2281,6 +2377,16 @@ const ManagerDashboard = ({
               }}
             />
           </div>
+          {isLeadDigger ? (
+            <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 border-dashed text-left col-span-2 md:col-span-1">
+              <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1 flex items-center gap-1">
+                Передано в круп
+                <ArrowRightCircle size={14} className="text-gray-400" />
+              </div>
+              <div className="text-2xl font-black text-gray-700">{transferredToEnterprise}</div>
+              <p className="text-[10px] text-gray-400 mt-1">За выбранную дату отчёта</p>
+            </div>
+          ) : null}
         </div>
       </div>
       <MeetingTable
@@ -3160,6 +3266,8 @@ const AdminDashboard = ({
   filterDateTo,
   setFilterDateTo,
   managerOptions,
+  staffDept,
+  setStaffDept,
   onOpenRealization,
 }: {
   reports: FullReport[];
@@ -3170,6 +3278,8 @@ const AdminDashboard = ({
   filterDateTo: string;
   setFilterDateTo: SetState<string>;
   managerOptions: string[];
+  staffDept: StaffDept;
+  setStaffDept: (dept: StaffDept) => void;
   onOpenRealization: (
     title: string,
     rows: Array<{ manager: string; reportDate: string; entityName: string; bin: string; date: string; type: string }>,
@@ -3312,7 +3422,10 @@ const AdminDashboard = ({
         to={filterDateTo}
         setTo={setFilterDateTo}
         managerOptions={managerOptions}
+        staffDept={staffDept}
+        setStaffDept={setStaffDept}
         onReset={() => {
+          setStaffDept('all');
           setFilterManager('Все');
           const b = adminDateFilterBounds('', '');
           setFilterDateFrom(b.from);
@@ -3428,6 +3541,8 @@ const KpiDashboard = ({
   filterDateTo,
   setFilterDateTo,
   managerOptions,
+  staffDept,
+  setStaffDept,
   onDeleteReport,
 }: {
   allReports: FullReport[];
@@ -3439,6 +3554,8 @@ const KpiDashboard = ({
   filterDateTo: string;
   setFilterDateTo: SetState<string>;
   managerOptions: string[];
+  staffDept: StaffDept;
+  setStaffDept: (dept: StaffDept) => void;
   onDeleteReport?: (reportId: string) => void;
 }) => {
   const kpiTablePeriod = useMemo(() => adminDateFilterBounds(filterDateFrom, filterDateTo), [filterDateFrom, filterDateTo]);
@@ -3528,7 +3645,10 @@ const KpiDashboard = ({
         to={filterDateTo}
         setTo={setFilterDateTo}
         managerOptions={managerOptions}
+        staffDept={staffDept}
+        setStaffDept={setStaffDept}
         onReset={() => {
+          setStaffDept('all');
           setFilterManager('Все');
           const b = adminDateFilterBounds('', '');
           setFilterDateFrom(b.from);
@@ -3545,7 +3665,9 @@ const KpiDashboard = ({
           <p className="text-[10px] text-gray-500 mt-1">
             {monthlyManagerSummary.periodLabel}
             {' · '}
-            менеджер: {filterManager === 'Все' ? 'все' : filterManager}. Отчётов: {monthlyManagerSummary.reportsCount}
+            менеджер: {filterManager === 'Все' ? 'все' : filterManager}
+            {staffDept === 'diggers' ? ' · отдел: лидорубы' : staffDept === 'managers' ? ' · отдел: менеджеры' : ''}
+            . Отчётов: {monthlyManagerSummary.reportsCount}
           </p>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-2">
@@ -4131,6 +4253,8 @@ const AdminFilters = ({
   to,
   setTo,
   managerOptions,
+  staffDept = 'all',
+  setStaffDept,
   onReset,
 }: {
   manager: string;
@@ -4140,12 +4264,32 @@ const AdminFilters = ({
   to: string;
   setTo: SetState<string>;
   managerOptions: string[];
+  staffDept?: StaffDept;
+  setStaffDept?: (dept: StaffDept) => void;
   onReset: () => void;
 }) => (
   <div className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4">
     <div className="flex flex-wrap gap-4 sm:gap-6 items-end justify-between">
+      {setStaffDept ? (
+        <div className="w-full sm:flex-1 sm:min-w-[160px] space-y-1.5 text-left">
+          <label className="text-[10px] font-bold text-gray-400 uppercase">Отдел</label>
+          <select
+            className="w-full px-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-sm font-bold"
+            value={staffDept}
+            onChange={(e) => setStaffDept(e.target.value as StaffDept)}
+          >
+            {STAFF_DEPT_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
       <div className="w-full sm:flex-1 sm:min-w-[200px] space-y-1.5 text-left">
-        <label className="text-[10px] font-bold text-gray-400 uppercase">Менеджер</label>
+        <label className="text-[10px] font-bold text-gray-400 uppercase">
+          {staffDept === 'diggers' ? 'Лидоруб' : staffDept === 'managers' ? 'Менеджер' : 'Сотрудник'}
+        </label>
         <select
           className="w-full px-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-sm font-bold"
           value={manager}

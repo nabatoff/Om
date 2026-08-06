@@ -90,15 +90,6 @@ export function LeadDiggerLeadsPanel({ mode, dateFrom, dateTo, creatorId }: Prop
     });
   }, [rows, mode, dateFrom, dateTo]);
 
-  const transferredTodayCount = useMemo(() => {
-    const today = new Date();
-    const y = today.getFullYear();
-    const m = String(today.getMonth() + 1).padStart(2, '0');
-    const d = String(today.getDate()).padStart(2, '0');
-    const key = `${y}-${m}-${d}`;
-    return rows.filter((r) => (r.transferredAt || '').slice(0, 10) === key).length;
-  }, [rows]);
-
   if (mode === 'status') {
     return (
       <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-gray-100 text-left space-y-4">
@@ -109,10 +100,11 @@ export function LeadDiggerLeadsPanel({ mode, dateFrom, dateTo, creatorId }: Prop
 
         <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 border-dashed">
           <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1 flex items-center gap-1">
-            Передано сегодня
+            Передано в круп
             <ArrowRightCircle size={14} className="text-gray-400" />
           </div>
-          <div className="text-2xl font-black text-gray-700">{transferredTodayCount}</div>
+          <div className="text-2xl font-black text-gray-700">{filtered.length}</div>
+          <p className="text-[10px] text-gray-400 mt-0.5">За период фильтра</p>
         </div>
 
         {err ? <p className="text-sm font-bold text-red-600">{err}</p> : null}
