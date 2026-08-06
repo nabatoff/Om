@@ -1346,169 +1346,152 @@ const App = () => {
 
         {isAdmin && currentView === 'admin' && (
           <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div className="flex flex-wrap gap-1 bg-gray-50/50 border border-gray-100 rounded-full p-1 w-full md:w-auto">
-              {canAdminWrite ? (
-              <button
-                type="button"
-                onClick={() => setAdminSubView('salesDashboard')}
-                className={`flex-1 min-w-[110px] sm:min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-5 py-2 rounded-full text-[11px] sm:text-sm font-semibold transition-all ${
-                  adminSubView === 'salesDashboard' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
-                }`}
-              >
-                <BarChart2 size={14} />
-                Дашборд
-              </button>
-              ) : null}
-              {canAdminWrite && adminAnalyticsTabEnabled ? (
+            <div className="bg-white border border-gray-100 rounded-2xl shadow-sm p-2 flex flex-col xl:flex-row xl:items-center gap-2">
+              <div className="flex items-center gap-0.5 overflow-x-auto om-scroll flex-nowrap min-w-0 flex-1 bg-gray-50/80 rounded-full p-0.5 border border-gray-100">
+                {canAdminWrite ? (
+                  <button
+                    type="button"
+                    onClick={() => setAdminSubView('salesDashboard')}
+                    className={`shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-semibold transition-all whitespace-nowrap ${
+                      adminSubView === 'salesDashboard' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
+                    }`}
+                  >
+                    <BarChart2 size={13} />
+                    Дашборд
+                  </button>
+                ) : null}
+                {canAdminWrite && adminAnalyticsTabEnabled ? (
+                  <button
+                    type="button"
+                    onClick={() => setAdminSubView('dashboard')}
+                    className={`shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-semibold transition-all whitespace-nowrap ${
+                      adminSubView === 'dashboard' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
+                    }`}
+                  >
+                    <LayoutGrid size={13} />
+                    Аналитика
+                  </button>
+                ) : null}
                 <button
                   type="button"
-                  onClick={() => setAdminSubView('dashboard')}
-                  className={`flex-1 min-w-[110px] sm:min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-full text-[11px] sm:text-sm font-semibold transition-all ${
-                    adminSubView === 'dashboard' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
+                  onClick={() => setAdminSubView('kpi')}
+                  className={`shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-semibold transition-all whitespace-nowrap ${
+                    adminSubView === 'kpi' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
                   }`}
                 >
-                  <LayoutGrid size={14} />
-                  Аналитика
+                  <FileText size={13} />
+                  KPI
                 </button>
-              ) : null}
-              <button
-                type="button"
-                onClick={() => setAdminSubView('kpi')}
-                className={`flex-1 min-w-[110px] sm:min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-full text-[11px] sm:text-sm font-semibold transition-all ${
-                  adminSubView === 'kpi' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
-                }`}
-              >
-                <FileText size={14} />
-                KPI отчёт
-              </button>
-              {canAdminWrite ? (
+                {canAdminWrite ? (
+                  <button
+                    type="button"
+                    onClick={() => setAdminSubView('enterpriseLeads')}
+                    className={`shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-semibold transition-all whitespace-nowrap ${
+                      adminSubView === 'enterpriseLeads' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
+                    }`}
+                  >
+                    <UserPlus size={13} />
+                    Лиды
+                  </button>
+                ) : null}
                 <button
                   type="button"
-                  onClick={() => setAdminSubView('enterpriseLeads')}
-                  className={`flex-1 min-w-[110px] sm:min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-full text-[11px] sm:text-sm font-semibold transition-all ${
-                    adminSubView === 'enterpriseLeads' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
+                  onClick={() => setAdminSubView('diggerConversion')}
+                  className={`shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-semibold transition-all whitespace-nowrap ${
+                    adminSubView === 'diggerConversion' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
                   }`}
                 >
-                  <UserPlus size={14} />
-                  Входящие лиды
+                  <Target size={13} />
+                  Лидорубы
                 </button>
-              ) : null}
-              <button
-                type="button"
-                onClick={() => setAdminSubView('diggerConversion')}
-                className={`flex-1 min-w-[110px] sm:min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-full text-[11px] sm:text-sm font-semibold transition-all ${
-                  adminSubView === 'diggerConversion' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
-                }`}
-              >
-                <Target size={14} />
-                Лидорубы
-              </button>
-              {canAdminWrite ? (
-              <button
-                type="button"
-                onClick={() => setAdminSubView('meetings')}
-                className={`flex-1 min-w-[110px] sm:min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-full text-[11px] sm:text-sm font-semibold transition-all ${
-                  adminSubView === 'meetings' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
-                }`}
-              >
-                <List size={14} />
-                Все встречи
-              </button>
-              ) : null}
-              {canAdminWrite ? (
-              <button
-                type="button"
-                onClick={() => setAdminSubView('staff')}
-                className={`flex-1 min-w-[110px] sm:min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-full text-[11px] sm:text-sm font-semibold transition-all ${
-                  adminSubView === 'staff' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
-                }`}
-              >
-                <UserCog size={14} />
-                Сотрудники
-              </button>
-              ) : null}
-              {canAdminWrite ? (
-              <button
-                type="button"
-                onClick={() => setAdminSubView('settings')}
-                className={`flex-1 min-w-[110px] sm:min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-full text-[11px] sm:text-sm font-semibold transition-all ${
-                  adminSubView === 'settings' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
-                }`}
-              >
-                <Settings size={14} />
-                Настройки
-              </button>
-              ) : null}
-            </div>
-            {canAdminWrite ? (
-            <div className="flex flex-col sm:flex-row sm:items-end gap-2 w-full sm:w-auto">
-              <div className="flex flex-wrap items-end gap-2">
-                <div className="space-y-1 flex-1 min-w-[140px] sm:flex-none">
-                  <label
-                    htmlFor="telegram-weekly-forecast"
-                    className="text-[10px] font-bold text-gray-400 uppercase tracking-widest"
+                {canAdminWrite ? (
+                  <button
+                    type="button"
+                    onClick={() => setAdminSubView('meetings')}
+                    className={`shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-semibold transition-all whitespace-nowrap ${
+                      adminSubView === 'meetings' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
+                    }`}
                   >
-                    Прогноз на неделю
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      id="telegram-weekly-forecast"
-                      type="text"
-                      inputMode="numeric"
-                      value={telegramWeeklyForecastDraft}
-                      onChange={(e) => setTelegramWeeklyForecastDraft(e.target.value.replace(/[^\d]/g, ''))}
-                      disabled={telegramWeeklyForecastSaving || telegramReportSending}
-                      placeholder="0"
-                      className="w-full min-w-0 px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-bold disabled:opacity-60"
-                    />
-                    <button
-                      type="button"
-                      disabled={telegramWeeklyForecastSaving || telegramReportSending || !forecastDirty}
-                      onClick={() => void saveTelegramWeeklyForecast()}
-                      className="shrink-0 px-3 py-2.5 rounded-xl border border-emerald-200 bg-emerald-50 text-[10px] font-bold uppercase tracking-wider text-emerald-800 hover:bg-emerald-100 disabled:opacity-50 disabled:pointer-events-none"
-                    >
-                      {telegramWeeklyForecastSaving ? '…' : 'Сохранить'}
-                    </button>
-                  </div>
-                </div>
-                <div className="space-y-1 flex-1 min-w-[140px] sm:flex-none">
-                  <label
-                    htmlFor="telegram-report-date"
-                    className="text-[10px] font-bold text-gray-400 uppercase tracking-widest"
+                    <List size={13} />
+                    Встречи
+                  </button>
+                ) : null}
+                {canAdminWrite ? (
+                  <button
+                    type="button"
+                    onClick={() => setAdminSubView('staff')}
+                    className={`shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-semibold transition-all whitespace-nowrap ${
+                      adminSubView === 'staff' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
+                    }`}
                   >
-                    Дата отчёта
-                  </label>
+                    <UserCog size={13} />
+                    Сотрудники
+                  </button>
+                ) : null}
+                {canAdminWrite ? (
+                  <button
+                    type="button"
+                    onClick={() => setAdminSubView('settings')}
+                    className={`shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-semibold transition-all whitespace-nowrap ${
+                      adminSubView === 'settings' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
+                    }`}
+                  >
+                    <Settings size={13} />
+                    Настройки
+                  </button>
+                ) : null}
+              </div>
+
+              {canAdminWrite ? (
+                <div className="flex flex-wrap items-center gap-1.5 shrink-0 xl:justify-end">
+                  <input
+                    id="telegram-weekly-forecast"
+                    type="text"
+                    inputMode="numeric"
+                    value={telegramWeeklyForecastDraft}
+                    onChange={(e) => setTelegramWeeklyForecastDraft(e.target.value.replace(/[^\d\s]/g, ''))}
+                    disabled={telegramWeeklyForecastSaving || telegramReportSending}
+                    placeholder="Прогноз"
+                    title="Прогноз на неделю"
+                    className="w-[7.5rem] px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-bold disabled:opacity-60 outline-none focus:border-blue-500"
+                  />
+                  <button
+                    type="button"
+                    disabled={telegramWeeklyForecastSaving || telegramReportSending || !forecastDirty}
+                    onClick={() => void saveTelegramWeeklyForecast()}
+                    className="px-2.5 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 text-[10px] font-bold uppercase tracking-wide text-emerald-800 hover:bg-emerald-100 disabled:opacity-40 disabled:pointer-events-none"
+                  >
+                    {telegramWeeklyForecastSaving ? '…' : 'OK'}
+                  </button>
                   <input
                     id="telegram-report-date"
                     type="date"
                     value={telegramReportDate}
                     onChange={(e) => setTelegramReportDate(e.target.value)}
                     disabled={telegramReportSending}
-                    className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-bold disabled:opacity-60"
+                    title="Дата отчёта"
+                    className="px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-bold disabled:opacity-60 outline-none focus:border-blue-500"
                   />
+                  <button
+                    type="button"
+                    disabled={telegramReportSending}
+                    onClick={() => setTelegramReportDate(formatYmdLocal(new Date()))}
+                    className="px-2.5 py-1.5 rounded-lg border border-gray-200 text-[10px] font-bold uppercase tracking-wide text-gray-600 hover:bg-gray-50 disabled:opacity-60"
+                  >
+                    Сегодня
+                  </button>
+                  <button
+                    type="button"
+                    disabled={telegramReportSending}
+                    onClick={() => void handleSendTelegramDailyReport()}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wide border border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-100 disabled:opacity-60 disabled:pointer-events-none transition-colors"
+                    title="Сводка за выбранную дату по данным в базе на текущий момент"
+                  >
+                    {telegramReportSending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+                    {telegramReportSending ? '…' : 'Telegram'}
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  disabled={telegramReportSending}
-                  onClick={() => setTelegramReportDate(formatYmdLocal(new Date()))}
-                  className="px-3 py-2.5 rounded-xl border border-gray-200 text-[10px] font-bold uppercase tracking-wider text-gray-600 hover:bg-gray-50 disabled:opacity-60"
-                >
-                  Сегодня
-                </button>
-              </div>
-              <button
-                type="button"
-                disabled={telegramReportSending}
-                onClick={() => void handleSendTelegramDailyReport()}
-                className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-[11px] sm:text-xs font-bold uppercase tracking-wide border border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-100 disabled:opacity-60 disabled:pointer-events-none transition-colors"
-                title="Сводка за выбранную дату по данным в базе на текущий момент"
-              >
-                {telegramReportSending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-                {telegramReportSending ? 'Отправка…' : 'Отчёт в Telegram'}
-              </button>
-            </div>
-            ) : null}
+              ) : null}
             </div>
             {adminSubView === 'salesDashboard' && canAdminWrite && (
               <SalesComparisonDashboard
