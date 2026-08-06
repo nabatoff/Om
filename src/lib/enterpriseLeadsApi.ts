@@ -71,7 +71,7 @@ export async function listEnterpriseLeadsApi(
 ): Promise<EnterpriseLead[]> {
   const { data, error } = await getSupabase().rpc('list_enterprise_leads', { p_filter: filter });
   if (error) throw error;
-  return (data || []).map((r) => mapLead(r as Record<string, unknown>));
+  return ((data || []) as Record<string, unknown>[]).map((r) => mapLead(r));
 }
 
 export async function adminAssignEnterpriseLeadApi(leadId: string, managerId: string): Promise<void> {

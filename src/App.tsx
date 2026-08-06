@@ -2350,7 +2350,13 @@ const ManagerDashboard = ({
         seedKey={`conducted-${reportDate}`}
         onSaveItem={() => onSaveAction({ refreshAfterSave: false })}
       />
-      {isSalesManager ? <ManagerEnterpriseLeadsPanel onChanged={() => onSaveAction({ refreshAfterSave: true })} /> : null}
+      {isSalesManager ? (
+        <ManagerEnterpriseLeadsPanel
+          onChanged={async () => {
+            await onSaveAction({ refreshAfterSave: true });
+          }}
+        />
+      ) : null}
       {isLeadDigger ? (
         <div className="space-y-4">
           <LeadDiggerLeadsPanel mode="status" dateFrom={reportDate} dateTo={reportDate} creatorId={sessionUserId ?? undefined} />
