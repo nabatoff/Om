@@ -130,18 +130,18 @@ export function leadDisplayStatus(lead: EnterpriseLead): {
   color: string;
 } {
   if (lead.routingStatus === 'returned_to_smb') {
-    return { key: 'returned', label: 'Возврат на СМБ', color: 'bg-orange-100 text-orange-800' };
+    return { key: 'returned', label: 'Возврат на СМБ', color: 'bg-orange-100 text-orange-700' };
   }
   if (lead.routingStatus === 'pending_distribution') {
-    return { key: 'pending', label: 'На распределении', color: 'bg-gray-100 text-gray-700' };
+    return { key: 'pending', label: 'На распределении', color: 'bg-gray-200 text-gray-600' };
   }
   if (lead.meetingStatus === 'completed') {
-    return { key: 'done', label: 'Проведена', color: 'bg-emerald-100 text-emerald-800' };
+    return { key: 'done', label: 'Проведена', color: 'bg-emerald-100 text-emerald-700' };
   }
   if (lead.meetingStatus === 'cancelled') {
-    return { key: 'cancelled', label: 'Не состоялась', color: 'bg-red-100 text-red-800' };
+    return { key: 'cancelled', label: 'Не состоялась', color: 'bg-red-100 text-red-700' };
   }
-  return { key: 'waiting', label: 'Ожидает проведения', color: 'bg-amber-100 text-amber-900' };
+  return { key: 'waiting', label: 'Ожидает встречи', color: 'bg-yellow-100 text-yellow-700' };
 }
 
 export function formatLeadDate(iso: string | null): string {

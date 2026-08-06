@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { AlertTriangle, RefreshCw, UserCheck } from 'lucide-react';
+import { RefreshCw, X } from 'lucide-react';
 import type { UiManagerProfile } from '../lib/crmApi';
 import {
   adminAssignEnterpriseLeadApi,
@@ -14,6 +14,18 @@ type Props = {
   managers: UiManagerProfile[];
   onAssigned?: () => void | Promise<void>;
 };
+
+function avatarLetter(name: string): string {
+  const t = name.trim();
+  return t ? t[0]!.toUpperCase() : '?';
+}
+
+function avatarTone(name: string): string {
+  const code = (name.codePointAt(0) || 0) % 3;
+  if (code === 0) return 'bg-blue-100 text-blue-600';
+  if (code === 1) return 'bg-purple-100 text-purple-600';
+  return 'bg-emerald-100 text-emerald-700';
+}
 
 export function EnterpriseLeadsBuffer({ managers, onAssigned }: Props) {
   const [tab, setTab] = useState<'pending' | 'assigned'>('pending');
@@ -75,103 +87,130 @@ export function EnterpriseLeadsBuffer({ managers, onAssigned }: Props) {
     }
   };
 
+  const pendingCount = tab === 'pending' ? rows.length : null;
+
   return (
     <div className="space-y-4 text-left animate-in fade-in">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-black text-gray-800 uppercase tracking-widest">Входящие лиды</h2>
-          <p className="text-[10px] text-gray-400 font-bold uppercase mt-1">От лидорубов · крупный бизнес</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="inline-flex rounded-xl border border-gray-200 bg-gray-50 p-1">
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+        <div className="mb-6 flex flex-wrap justify-between items-end gap-3 border-b border-gray-100 pb-4">
+          <div>
+            <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide mb-1">
+              Буферная зона: Входящие лиды
+            </h2>
+            <p className="text-xs text-gray-500">
+              Лиды сегмента «Крупный бизнес», переданные лидорубами для распределения.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="inline-flex rounded-full border border-gray-100 bg-gray-50/50 p-1">
+              <button
+                type="button"
+                onClick={() => setTab('pending')}
+                className={`px-4 py-1.5 rounded-full text-xs font-semibold transition ${
+                  tab === 'pending' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
+                }`}
+              >
+                В очереди
+              </button>
+              <button
+                type="button"
+                onClick={() => setTab('assigned')}
+                className={`px-4 py-1.5 rounded-full text-xs font-semibold transition ${
+                  tab === 'assigned' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
+                }`}
+              >
+                Назначенные
+              </button>
+            </div>
+            {pendingCount !== null ? (
+              <div className="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg text-sm font-bold">
+                В очереди: {pendingCount}
+              </div>
+            ) : null}
             <button
               type="button"
-              onClick={() => setTab('pending')}
-              className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase ${tab === 'pending' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}
+              onClick={() => void load()}
+              className="p-2 text-gray-400 hover:text-blue-600 rounded-lg border border-gray-100"
+              title="Обновить"
             >
-              Буфер
-            </button>
-            <button
-              type="button"
-              onClick={() => setTab('assigned')}
-              className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase ${tab === 'assigned' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}
-            >
-              Назначенные
+              <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
             </button>
           </div>
-          <button type="button" onClick={() => void load()} className="p-2 text-gray-400 hover:text-blue-600" title="Обновить">
-            <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
-          </button>
         </div>
-      </div>
 
-      {err ? (
-        <p className="text-sm font-bold text-red-600 flex items-center gap-2">
-          <AlertTriangle size={16} />
-          {err}
-        </p>
-      ) : null}
+        {err ? <p className="text-sm font-bold text-red-600 mb-4">{err}</p> : null}
 
-      <div className="bg-white border border-gray-200 rounded-3xl overflow-hidden shadow-sm">
         {loading && rows.length === 0 ? (
-          <p className="p-6 text-sm text-gray-400">Загрузка…</p>
+          <p className="text-sm text-gray-400 py-4">Загрузка…</p>
         ) : rows.length === 0 ? (
-          <p className="p-6 text-sm text-gray-400">Буфер пуст</p>
+          <p className="text-sm text-gray-400 py-4">Буфер пуст</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[720px]">
-              <thead>
-                <tr className="text-[10px] font-black text-gray-400 uppercase border-b bg-gray-50">
-                  <th className="text-left p-3">Компания</th>
-                  <th className="text-left p-3">БИН</th>
-                  <th className="text-left p-3">Лидоруб</th>
-                  <th className="text-left p-3">Передано</th>
-                  <th className="text-left p-3">Назначить</th>
-                  <th className="text-left p-3"> </th>
+            <table className="w-full text-left text-sm min-w-[720px]">
+              <thead className="text-[10px] uppercase text-gray-400 font-bold bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 rounded-l-lg">Компания</th>
+                  <th className="px-4 py-3">Инициатор (Лидоруб)</th>
+                  <th className="px-4 py-3">Дата создания</th>
+                  <th className="px-4 py-3 rounded-r-lg text-right">Действие</th>
                 </tr>
               </thead>
-              <tbody className="divide-y">
-                {rows.map((r) => (
-                  <tr key={r.id} className="text-gray-800">
-                    <td className="p-3 font-bold">{r.clientName}</td>
-                    <td className="p-3 font-mono text-xs">{r.bin}</td>
-                    <td className="p-3">{r.creatorName || '—'}</td>
-                    <td className="p-3 text-xs">{formatLeadDate(r.transferredAt)}</td>
-                    <td className="p-3">
-                      <select
-                        className="w-full max-w-[200px] bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold"
-                        value={pickManager[r.id] || ''}
-                        onChange={(e) => setPickManager((p) => ({ ...p, [r.id]: e.target.value }))}
-                      >
-                        {managers.map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.fullName}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="p-3">
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          disabled={assigningId === r.id}
-                          onClick={() => void assign(r.id)}
-                          className="inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-blue-600 text-white text-[10px] font-black uppercase disabled:opacity-40"
-                        >
-                          <UserCheck size={14} />
-                          {assigningId === r.id ? '…' : tab === 'assigned' ? 'Переназначить' : 'Назначить'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void openEvents(r.id)}
-                          className="px-3 py-2 rounded-xl border border-gray-200 text-[10px] font-black uppercase text-gray-600"
-                        >
-                          Журнал
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+              <tbody className="divide-y divide-gray-50">
+                {rows.map((r) => {
+                  const name = r.creatorName || '—';
+                  return (
+                    <tr key={r.id} className="hover:bg-gray-50/50 transition">
+                      <td className="px-4 py-4">
+                        <div className="font-bold text-gray-900">{r.clientName}</div>
+                        <div className="text-[10px] font-mono text-gray-400 mt-0.5">{r.bin}</div>
+                      </td>
+                      <td className="px-4 py-4 text-gray-600">
+                        <div className="flex items-center gap-2">
+                          <div
+                            className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${avatarTone(name)}`}
+                          >
+                            {avatarLetter(name)}
+                          </div>
+                          {name}
+                        </div>
+                      </td>
+                      <td className="px-4 py-4 text-gray-500">{formatLeadDate(r.transferredAt)}</td>
+                      <td className="px-4 py-4 text-right">
+                        <div className="inline-flex flex-wrap items-center justify-end gap-2">
+                          <select
+                            className="bg-white border border-gray-200 text-gray-700 text-xs font-bold rounded-lg px-3 py-2 outline-none focus:border-blue-500 cursor-pointer shadow-sm"
+                            value={pickManager[r.id] || ''}
+                            onChange={(e) => setPickManager((p) => ({ ...p, [r.id]: e.target.value }))}
+                          >
+                            <option value="" disabled>
+                              Назначить…
+                            </option>
+                            {managers.map((m) => (
+                              <option key={m.id} value={m.id}>
+                                {m.fullName}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            disabled={assigningId === r.id || !pickManager[r.id]}
+                            onClick={() => void assign(r.id)}
+                            className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-xs font-bold transition disabled:opacity-40"
+                          >
+                            {assigningId === r.id ? '…' : 'OK'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void openEvents(r.id)}
+                            className="text-xs font-bold text-gray-500 hover:text-gray-800 px-2 py-2"
+                          >
+                            Журнал
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -179,19 +218,23 @@ export function EnterpriseLeadsBuffer({ managers, onAssigned }: Props) {
       </div>
 
       {eventsFor ? (
-        <div className="bg-white border border-gray-200 rounded-3xl p-4 shadow-sm">
-          <div className="flex justify-between items-center mb-3">
-            <h3 className="text-xs font-black uppercase text-gray-500">Журнал событий</h3>
-            <button type="button" className="text-xs font-bold text-gray-400" onClick={() => setEventsFor(null)}>
-              Закрыть
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
+          <div className="flex justify-between items-center mb-3 border-b border-gray-100 pb-3">
+            <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide">Журнал событий</h3>
+            <button
+              type="button"
+              className="text-gray-400 hover:text-gray-600"
+              onClick={() => setEventsFor(null)}
+            >
+              <X size={18} />
             </button>
           </div>
           <ul className="space-y-2 text-xs">
             {events.map((e) => (
-              <li key={e.id} className="flex gap-3 border-b border-gray-50 pb-2">
+              <li key={e.id} className="flex flex-wrap gap-3 border-b border-gray-50 pb-2">
                 <span className="text-gray-400 font-mono">{formatLeadDate(e.createdAt)}</span>
-                <span className="font-bold">{e.actorName || '—'}</span>
-                <span className="text-violet-700 font-black uppercase">{e.action}</span>
+                <span className="font-bold text-gray-800">{e.actorName || '—'}</span>
+                <span className="text-blue-700 font-bold uppercase">{e.action}</span>
               </li>
             ))}
             {events.length === 0 ? <li className="text-gray-400">Пусто</li> : null}

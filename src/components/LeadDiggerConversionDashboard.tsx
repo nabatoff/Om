@@ -25,44 +25,52 @@ export function LeadDiggerConversionDashboard() {
 
   return (
     <div className="space-y-4 text-left animate-in fade-in">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-sm font-black text-gray-800 uppercase tracking-widest">Лидорубы · доходимость</h2>
-          <p className="text-[10px] text-gray-400 font-bold uppercase mt-1">Проведено ÷ всего передано</p>
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+        <div className="mb-6 flex justify-between items-end border-b border-gray-100 pb-4 gap-3">
+          <div>
+            <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide mb-1">
+              Лидорубы · доходимость
+            </h2>
+            <p className="text-xs text-gray-500">Проведено ÷ всего передано</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void load()}
+            className="p-2 text-gray-400 hover:text-blue-600 rounded-lg border border-gray-100"
+          >
+            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+          </button>
         </div>
-        <button type="button" onClick={() => void load()} className="p-2 text-gray-400 hover:text-blue-600">
-          <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
-        </button>
-      </div>
 
-      {err ? <p className="text-sm font-bold text-red-600">{err}</p> : null}
+        {err ? <p className="text-sm font-bold text-red-600 mb-4">{err}</p> : null}
 
-      <div className="bg-white border border-gray-200 rounded-3xl overflow-hidden shadow-sm">
         {loading && rows.length === 0 ? (
-          <p className="p-6 text-sm text-gray-400">Загрузка…</p>
+          <p className="text-sm text-gray-400 py-4">Загрузка…</p>
         ) : rows.length === 0 ? (
-          <p className="p-6 text-sm text-gray-400">Пока нет переданных лидов</p>
+          <p className="text-sm text-gray-400 py-4">Пока нет переданных лидов</p>
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-[10px] font-black text-gray-400 uppercase border-b bg-gray-50">
-                <th className="text-left p-3">Лидоруб</th>
-                <th className="text-right p-3">Передано</th>
-                <th className="text-right p-3">Проведено</th>
-                <th className="text-right p-3">Конверсия</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {rows.map((r) => (
-                <tr key={r.creatorId}>
-                  <td className="p-3 font-bold">{r.creatorName || '—'}</td>
-                  <td className="p-3 text-right font-mono">{r.transferredCount}</td>
-                  <td className="p-3 text-right font-mono">{r.completedCount}</td>
-                  <td className="p-3 text-right font-black text-violet-700">{r.conversion}%</td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="text-[10px] uppercase text-gray-400 font-bold bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 rounded-l-lg">Лидоруб</th>
+                  <th className="px-4 py-3 text-right">Передано</th>
+                  <th className="px-4 py-3 text-right">Проведено</th>
+                  <th className="px-4 py-3 rounded-r-lg text-right">Конверсия</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {rows.map((r) => (
+                  <tr key={r.creatorId} className="hover:bg-gray-50/50 transition">
+                    <td className="px-4 py-4 font-bold text-gray-900">{r.creatorName || '—'}</td>
+                    <td className="px-4 py-4 text-right text-gray-600 font-mono">{r.transferredCount}</td>
+                    <td className="px-4 py-4 text-right text-gray-600 font-mono">{r.completedCount}</td>
+                    <td className="px-4 py-4 text-right font-black text-blue-700">{r.conversion}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

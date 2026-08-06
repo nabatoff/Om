@@ -1849,12 +1849,12 @@ const App = () => {
                 </div>
               )}
               {(isLeadDigger || canAdminWrite) && (
-                <div className="space-y-2 text-left">
-                  <label className="text-[10px] font-black text-gray-400 uppercase ml-2 tracking-tighter">
-                    Масштаб бизнеса
+                <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100 text-left space-y-2">
+                  <label className="block text-[10px] font-bold text-blue-800 uppercase tracking-wide">
+                    Масштаб бизнеса (Маршрутизация)
                   </label>
                   <select
-                    className="w-full bg-gray-50 border-none p-4 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-violet-500 transition-all outline-none"
+                    className="w-full bg-white border border-blue-200 text-gray-900 text-sm font-bold rounded-lg px-4 py-2.5 outline-none focus:border-blue-500 transition cursor-pointer shadow-sm"
                     value={newClientData.businessScale}
                     onChange={(e) =>
                       setNewClientData({
@@ -1863,11 +1863,12 @@ const App = () => {
                       })
                     }
                   >
-                    <option value="smb">СМБ</option>
-                    <option value="enterprise">Крупный бизнес</option>
+                    <option value="smb">СМБ (Оставить себе в работу)</option>
+                    <option value="enterprise">Крупный бизнес (Передать руководителю)</option>
                   </select>
-                  <p className="text-[9px] text-violet-700/80 ml-2">
-                    Крупный — карточка уйдёт в буфер руководителя на распределение
+                  <p className="text-[10px] text-gray-500 leading-relaxed">
+                    «Крупный бизнес» отправится в буфер руководителю на распределение. «СМБ» останется в вашей
+                    воронке.
                   </p>
                 </div>
               )}
@@ -2358,9 +2359,16 @@ const ManagerDashboard = ({
         />
       ) : null}
       {isLeadDigger ? (
-        <div className="space-y-4">
-          <LeadDiggerLeadsPanel mode="status" dateFrom={reportDate} dateTo={reportDate} creatorId={sessionUserId ?? undefined} />
-          <LeadDiggerLeadsPanel mode="returns" creatorId={sessionUserId ?? undefined} />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2">
+            <LeadDiggerLeadsPanel mode="returns" creatorId={sessionUserId ?? undefined} />
+          </div>
+          <LeadDiggerLeadsPanel
+            mode="status"
+            dateFrom={reportDate}
+            dateTo={reportDate}
+            creatorId={sessionUserId ?? undefined}
+          />
         </div>
       ) : null}
       <OrdersBlock

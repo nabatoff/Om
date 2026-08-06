@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { AlertTriangle, CheckCircle, RotateCcw, XCircle } from 'lucide-react';
+import { AlertTriangle, Building2, RotateCcw } from 'lucide-react';
 import {
   formatLeadDate,
   listEnterpriseLeadsApi,
@@ -57,10 +57,11 @@ export function ManagerEnterpriseLeadsPanel({ onChanged }: Props) {
   };
 
   return (
-    <div className="bg-white border border-violet-100 rounded-3xl p-4 sm:p-6 shadow-sm space-y-4 text-left">
-      <div>
-        <h3 className="text-xs font-black uppercase tracking-widest text-violet-700">Крупные лиды от лидорубов</h3>
-        <p className="text-[10px] text-gray-400 font-bold mt-1">Назначенные руководителем · обратная связь обязательна</p>
+    <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-6 text-left">
+      <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+        <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide">
+          Мой план встреч (Крупный бизнес)
+        </h2>
       </div>
 
       {err ? (
@@ -75,58 +76,117 @@ export function ManagerEnterpriseLeadsPanel({ onChanged }: Props) {
       ) : rows.length === 0 ? (
         <p className="text-sm text-gray-400">Нет назначенных лидов</p>
       ) : (
-        <ul className="space-y-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {rows.map((r) => {
             const blocked = isPastMeetingWithoutStatus(r);
             const busy = busyId === r.id;
-            return (
-              <li key={r.id} className="border border-gray-100 rounded-2xl p-4 space-y-3">
-                <div className="flex flex-wrap justify-between gap-2">
-                  <div>
-                    <p className="font-black text-gray-900">{r.clientName}</p>
-                    <p className="text-[10px] font-mono text-gray-400">{r.bin}</p>
-                    <p className="text-[10px] text-violet-700 font-bold mt-1">Инициатор: {r.creatorName || '—'}</p>
-                    <p className="text-[10px] text-gray-400">Встреча: {formatLeadDate(r.meetingDate)}</p>
+            const done = r.meetingStatus === 'completed';
+            const cancelled = r.meetingStatus === 'cancelled';
+
+            if (blocked) {
+              return (
+                <div
+                  key={r.id}
+                  className="border-2 border-red-100 rounded-2xl p-5 bg-red-50/30 flex flex-col h-full relative shadow-sm"
+                >
+                  <div className="absolute top-0 right-0 bg-gray-100 text-gray-500 text-[9px] uppercase font-bold px-3 py-1 rounded-bl-lg">
+                    От: {r.creatorName || 'Лидоруб'}
                   </div>
-                  <div className="text-right text-[10px] font-black uppercase">
-                    {r.meetingStatus === 'completed' ? (
-                      <span className="text-emerald-700">Проведена</span>
-                    ) : r.meetingStatus === 'cancelled' ? (
-                      <span className="text-red-600">Не состоялась</span>
-                    ) : blocked ? (
-                      <span className="text-amber-700">Нужен статус</span>
-                    ) : (
-                      <span className="text-gray-400">В плане</span>
-                    )}
+
+                  <div className="flex items-center gap-2 mb-2 mt-2">
+                    <span className="bg-red-100 text-red-700 text-[10px] uppercase font-bold px-2 py-0.5 rounded flex items-center gap-1 animate-pulse">
+                      <AlertTriangle size={12} />
+                      Время вышло
+                    </span>
+                  </div>
+
+                  <div className="font-extrabold text-gray-900 text-lg mb-1">{r.clientName}</div>
+                  <div className="text-xs font-medium text-red-600 mb-4">
+                    Встреча была: {formatLeadDate(r.meetingDate)}
+                  </div>
+
+                  <div className="mt-auto bg-white p-3 rounded-xl border border-red-100">
+                    <p className="text-xs text-gray-600 mb-3 font-medium text-center">
+                      Карточка заблокирована. Укажите итог встречи.
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void run(r.id, () => managerSetLeadMeetingStatusApi(r.id, 'completed'))}
+                        className="bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg text-xs font-bold transition disabled:opacity-40"
+                      >
+                        Состоялась
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void run(r.id, () => managerSetLeadMeetingStatusApi(r.id, 'cancelled'))}
+                        className="bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 rounded-lg text-xs font-bold transition disabled:opacity-40"
+                      >
+                        Не состоялась
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <div
+                key={r.id}
+                className="border border-gray-100 rounded-2xl p-5 hover:shadow-md transition bg-white flex flex-col h-full relative overflow-hidden"
+              >
+                <div className="absolute top-0 right-0 bg-gray-100 text-gray-500 text-[9px] uppercase font-bold px-3 py-1 rounded-bl-lg">
+                  От: {r.creatorName || 'Лидоруб'}
+                </div>
+
+                <div className="flex items-center gap-3 mb-4 mt-2">
+                  <div className="bg-purple-100 text-purple-700 p-3 rounded-xl">
+                    <Building2 size={24} />
+                  </div>
+                  <div>
+                    <div className="font-extrabold text-gray-900 text-lg leading-tight">{r.clientName}</div>
+                    <div className="text-xs font-medium text-gray-500 mt-0.5">
+                      {formatLeadDate(r.meetingDate)}
+                    </div>
+                    <div className="text-[10px] font-mono text-gray-400">{r.bin}</div>
                   </div>
                 </div>
 
-                {blocked ? (
-                  <p className="text-[10px] font-bold text-amber-700 flex items-center gap-1">
-                    <AlertTriangle size={12} />
-                    Дата встречи прошла — укажите «Проведено» или «Не состоялось», прежде чем двигать эту компанию дальше
-                  </p>
-                ) : null}
+                {(done || cancelled) && (
+                  <div className="mb-3">
+                    <span
+                      className={`text-[10px] uppercase font-bold px-2 py-1 rounded ${
+                        done ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
+                      }`}
+                    >
+                      {done ? 'Проведена' : 'Не состоялась'}
+                    </span>
+                  </div>
+                )}
 
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    disabled={busy || r.meetingStatus === 'completed'}
-                    onClick={() => void run(r.id, () => managerSetLeadMeetingStatusApi(r.id, 'completed'))}
-                    className="inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-emerald-600 text-white text-[10px] font-black uppercase disabled:opacity-40"
-                  >
-                    <CheckCircle size={14} />
-                    Проведено
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busy || r.meetingStatus === 'cancelled'}
-                    onClick={() => void run(r.id, () => managerSetLeadMeetingStatusApi(r.id, 'cancelled'))}
-                    className="inline-flex items-center gap-1 px-3 py-2 rounded-xl border border-red-200 text-red-600 text-[10px] font-black uppercase disabled:opacity-40"
-                  >
-                    <XCircle size={14} />
-                    Не состоялось
-                  </button>
+                <div className="mt-auto space-y-2 pt-4 border-t border-gray-50">
+                  {!done && !cancelled ? (
+                    <>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void run(r.id, () => managerSetLeadMeetingStatusApi(r.id, 'completed'))}
+                        className="w-full bg-blue-50 text-blue-700 border border-blue-100 hover:bg-blue-600 hover:text-white py-2 rounded-xl text-sm font-bold transition disabled:opacity-40"
+                      >
+                        Провести встречу
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void run(r.id, () => managerSetLeadMeetingStatusApi(r.id, 'cancelled'))}
+                        className="w-full bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 py-2 rounded-xl text-sm font-bold transition disabled:opacity-40"
+                      >
+                        Не состоялась
+                      </button>
+                    </>
+                  ) : null}
                   <button
                     type="button"
                     disabled={busy}
@@ -134,16 +194,16 @@ export function ManagerEnterpriseLeadsPanel({ onChanged }: Props) {
                       if (!window.confirm('Вернуть лид на СМБ инициатору?')) return;
                       void run(r.id, () => managerReturnLeadToSmbApi(r.id));
                     }}
-                    className="inline-flex items-center gap-1 px-3 py-2 rounded-xl border border-orange-200 text-orange-700 text-[10px] font-black uppercase disabled:opacity-40"
+                    className="w-full bg-white text-orange-600 border border-orange-200 hover:bg-orange-50 py-2 rounded-xl text-sm font-bold transition flex justify-center items-center gap-2 disabled:opacity-40"
                   >
                     <RotateCcw size={14} />
-                    Вернуть на СМБ
+                    Забраковать (На СМБ)
                   </button>
                 </div>
-              </li>
+              </div>
             );
           })}
-        </ul>
+        </div>
       )}
     </div>
   );
