@@ -1257,7 +1257,43 @@ const App = () => {
                 <span className="block sm:hidden text-[10px] font-bold text-gray-400 truncate">{managerName}</span>
               </div>
             </div>
-            <div className="flex items-center gap-2 sm:gap-6 shrink-0">
+            <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+              {isAdmin && canAdminWrite ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCurrentView('admin');
+                      setAdminSubView('staff');
+                    }}
+                    className={`inline-flex items-center gap-1.5 sm:gap-2 text-sm font-medium border px-2 sm:px-3 py-1.5 rounded-lg min-h-10 transition ${
+                      currentView === 'admin' && adminSubView === 'staff'
+                        ? 'border-blue-200 bg-blue-50 text-blue-800'
+                        : 'border-gray-200 text-gray-500 hover:text-gray-900 hover:bg-gray-50'
+                    }`}
+                    title="Сотрудники"
+                  >
+                    <UserCog size={16} />
+                    <span className="hidden md:inline">Сотрудники</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCurrentView('admin');
+                      setAdminSubView('settings');
+                    }}
+                    className={`inline-flex items-center gap-1.5 sm:gap-2 text-sm font-medium border px-2 sm:px-3 py-1.5 rounded-lg min-h-10 transition ${
+                      currentView === 'admin' && adminSubView === 'settings'
+                        ? 'border-blue-200 bg-blue-50 text-blue-800'
+                        : 'border-gray-200 text-gray-500 hover:text-gray-900 hover:bg-gray-50'
+                    }`}
+                    title="Настройки"
+                  >
+                    <Settings size={16} />
+                    <span className="hidden md:inline">Настройки</span>
+                  </button>
+                </>
+              ) : null}
               <div className="text-right hidden sm:flex flex-col">
                 <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Менеджер (Отчёт)</span>
                 <span className="text-sm font-bold text-gray-800">{managerName}</span>
@@ -1313,30 +1349,6 @@ const App = () => {
                   <FileSpreadsheet size={16} /> Госзакуп
                 </button>
               )}
-              {isAdmin && canAdminWrite ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCurrentView('admin');
-                    setAdminSubView('staff');
-                  }}
-                  className={navPill(currentView === 'admin' && adminSubView === 'staff')}
-                >
-                  <UserCog size={16} /> Сотрудники
-                </button>
-              ) : null}
-              {isAdmin && canAdminWrite ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCurrentView('admin');
-                    setAdminSubView('settings');
-                  }}
-                  className={navPill(currentView === 'admin' && adminSubView === 'settings')}
-                >
-                  <Settings size={16} /> Настройки
-                </button>
-              ) : null}
               {!isAdmin && (
                 <>
                   <button type="button" onClick={() => setCurrentView('clients')} className={navPill(currentView === 'clients')}>
