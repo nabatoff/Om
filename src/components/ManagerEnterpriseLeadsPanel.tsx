@@ -57,7 +57,7 @@ export function ManagerEnterpriseLeadsPanel({ onChanged }: Props) {
   };
 
   return (
-    <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-6 text-left">
+    <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4 sm:space-y-6 text-left">
       <div className="flex items-center justify-between border-b border-gray-100 pb-4">
         <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide">
           Мой план встреч (Крупный бизнес)

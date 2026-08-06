@@ -94,7 +94,7 @@ export function LeadDiggerLeadsPanel({ mode, dateFrom, dateTo, creatorId }: Prop
 
   if (mode === 'status') {
     return (
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 text-left space-y-4">
+      <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-gray-100 text-left space-y-4">
         <div className="flex items-center justify-between border-b border-gray-100 pb-4">
           <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide">Статус переданных</h2>
           <Info size={16} className="text-gray-400" aria-label="Крупный бизнес, переданный в другой отдел" />
@@ -151,7 +151,7 @@ export function LeadDiggerLeadsPanel({ mode, dateFrom, dateTo, creatorId }: Prop
   }
 
   return (
-    <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 text-left space-y-4">
+    <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-gray-100 text-left space-y-4">
       <div className="flex items-center justify-between border-b border-gray-100 pb-4">
         <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide">Возвраты на СМБ</h2>
         <span className="bg-orange-100 text-orange-700 text-[10px] uppercase font-bold px-2 py-1 rounded">

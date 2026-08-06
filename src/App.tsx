@@ -1205,14 +1205,17 @@ const App = () => {
     <div className="om-page min-h-screen flex flex-col">
       <header className="om-header">
         <div className="om-header-inner">
-          <div className="flex items-center justify-between h-16 border-b border-gray-100 gap-3">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="bg-blue-600 text-white p-2 rounded-lg shrink-0">
+          <div className="flex items-center justify-between h-14 sm:h-16 border-b border-gray-100 gap-2 sm:gap-3">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <div className="bg-blue-600 text-white p-1.5 sm:p-2 rounded-lg shrink-0">
                 <ShieldCheck size={20} />
               </div>
-              <span className="text-lg font-bold text-gray-900 truncate">Модуль отчетов</span>
+              <div className="min-w-0">
+                <span className="block text-base sm:text-lg font-bold text-gray-900 truncate">Модуль отчетов</span>
+                <span className="block sm:hidden text-[10px] font-bold text-gray-400 truncate">{managerName}</span>
+              </div>
             </div>
-            <div className="flex items-center gap-3 sm:gap-6 shrink-0">
+            <div className="flex items-center gap-2 sm:gap-6 shrink-0">
               <div className="text-right hidden sm:flex flex-col">
                 <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Менеджер (Отчёт)</span>
                 <span className="text-sm font-bold text-gray-800">{managerName}</span>
@@ -1220,7 +1223,7 @@ const App = () => {
               <button
                 type="button"
                 onClick={() => void signOut()}
-                className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-900 transition font-medium border border-gray-200 px-3 py-1.5 rounded-lg"
+                className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-900 transition font-medium border border-gray-200 px-2.5 sm:px-3 py-1.5 rounded-lg min-h-10"
               >
                 <LogOut size={16} />
                 <span className="hidden sm:inline">Выйти</span>
@@ -1228,7 +1231,7 @@ const App = () => {
             </div>
           </div>
 
-          <div className="flex items-center justify-between py-3 sm:py-4 gap-3 overflow-x-auto om-scroll">
+          <div className="py-2">
             <div className="om-pill-track">
               {(!isAdmin || canAdminWrite) && (
                 <button type="button" onClick={() => setCurrentView('manager')} className={navPill(currentView === 'manager')}>
@@ -1249,7 +1252,9 @@ const App = () => {
               )}
               {isAdmin ? (
                 <button type="button" onClick={() => setCurrentView('clientsOrders')} className={navPill(currentView === 'clientsOrders')}>
-                  <Users size={16} /> Клиенты и заказы
+                  <Users size={16} />
+                  <span className="sm:hidden">Клиенты</span>
+                  <span className="hidden sm:inline">Клиенты и заказы</span>
                 </button>
               ) : null}
               {isAdmin && (
@@ -1275,12 +1280,148 @@ const App = () => {
                     <ShoppingBag size={16} /> Заказы
                   </button>
                   <button type="button" onClick={() => setCurrentView('ensTru')} className={navPill(currentView === 'ensTru')}>
-                    <ClipboardCheck size={16} /> Проверка ЕНС ТРУ
+                    <ClipboardCheck size={16} />
+                    <span className="sm:hidden">ЕНС ТРУ</span>
+                    <span className="hidden sm:inline">Проверка ЕНС ТРУ</span>
                   </button>
                 </>
               )}
             </div>
           </div>
+
+          {isAdmin && currentView === 'admin' ? (
+            <div className="flex flex-col gap-2 py-2 border-t border-gray-100">
+              <div className="om-pill-track bg-gray-50/80">
+                {canAdminWrite ? (
+                  <button
+                    type="button"
+                    onClick={() => setAdminSubView('salesDashboard')}
+                    className={`om-subpill ${adminSubView === 'salesDashboard' ? 'om-subpill-active' : 'om-subpill-idle'}`}
+                  >
+                    <BarChart2 size={16} />
+                    Дашборд
+                  </button>
+                ) : null}
+                {canAdminWrite && adminAnalyticsTabEnabled ? (
+                  <button
+                    type="button"
+                    onClick={() => setAdminSubView('dashboard')}
+                    className={`om-subpill ${adminSubView === 'dashboard' ? 'om-subpill-active' : 'om-subpill-idle'}`}
+                  >
+                    <LayoutGrid size={16} />
+                    Аналитика
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => setAdminSubView('kpi')}
+                  className={`om-subpill ${adminSubView === 'kpi' ? 'om-subpill-active' : 'om-subpill-idle'}`}
+                >
+                  <FileText size={16} />
+                  KPI
+                </button>
+                {canAdminWrite ? (
+                  <button
+                    type="button"
+                    onClick={() => setAdminSubView('enterpriseLeads')}
+                    className={`om-subpill ${adminSubView === 'enterpriseLeads' ? 'om-subpill-active' : 'om-subpill-idle'}`}
+                  >
+                    <UserPlus size={16} />
+                    Лиды
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => setAdminSubView('diggerConversion')}
+                  className={`om-subpill ${adminSubView === 'diggerConversion' ? 'om-subpill-active' : 'om-subpill-idle'}`}
+                >
+                  <Target size={16} />
+                  Лидорубы
+                </button>
+                {canAdminWrite ? (
+                  <button
+                    type="button"
+                    onClick={() => setAdminSubView('meetings')}
+                    className={`om-subpill ${adminSubView === 'meetings' ? 'om-subpill-active' : 'om-subpill-idle'}`}
+                  >
+                    <List size={16} />
+                    Встречи
+                  </button>
+                ) : null}
+                {canAdminWrite ? (
+                  <button
+                    type="button"
+                    onClick={() => setAdminSubView('staff')}
+                    className={`om-subpill ${adminSubView === 'staff' ? 'om-subpill-active' : 'om-subpill-idle'}`}
+                  >
+                    <UserCog size={16} />
+                    Сотрудники
+                  </button>
+                ) : null}
+                {canAdminWrite ? (
+                  <button
+                    type="button"
+                    onClick={() => setAdminSubView('settings')}
+                    className={`om-subpill ${adminSubView === 'settings' ? 'om-subpill-active' : 'om-subpill-idle'}`}
+                  >
+                    <Settings size={16} />
+                    Настройки
+                  </button>
+                ) : null}
+              </div>
+
+              {canAdminWrite ? (
+                <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2">
+                  <input
+                    id="telegram-weekly-forecast"
+                    type="text"
+                    inputMode="numeric"
+                    value={telegramWeeklyForecastDraft}
+                    onChange={(e) => setTelegramWeeklyForecastDraft(e.target.value.replace(/[^\d\s]/g, ''))}
+                    disabled={telegramWeeklyForecastSaving || telegramReportSending}
+                    placeholder="Прогноз"
+                    title="Прогноз на неделю"
+                    className="col-span-1 min-w-0 w-full sm:w-[8.5rem] px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold disabled:opacity-60 outline-none focus:border-blue-500 min-h-10"
+                  />
+                  <button
+                    type="button"
+                    disabled={telegramWeeklyForecastSaving || telegramReportSending || !forecastDirty}
+                    onClick={() => void saveTelegramWeeklyForecast()}
+                    className="col-span-1 px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-xs font-bold uppercase tracking-wide text-emerald-800 hover:bg-emerald-100 disabled:opacity-40 disabled:pointer-events-none min-h-10"
+                  >
+                    {telegramWeeklyForecastSaving ? '…' : 'OK'}
+                  </button>
+                  <input
+                    id="telegram-report-date"
+                    type="date"
+                    value={telegramReportDate}
+                    onChange={(e) => setTelegramReportDate(e.target.value)}
+                    disabled={telegramReportSending}
+                    title="Дата отчёта"
+                    className="col-span-1 min-w-0 w-full sm:w-auto px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold disabled:opacity-60 outline-none focus:border-blue-500 min-h-10"
+                  />
+                  <button
+                    type="button"
+                    disabled={telegramReportSending}
+                    onClick={() => setTelegramReportDate(formatYmdLocal(new Date()))}
+                    className="col-span-1 px-3 py-2 rounded-xl border border-gray-200 text-xs font-bold uppercase tracking-wide text-gray-600 hover:bg-gray-50 disabled:opacity-60 min-h-10"
+                  >
+                    Сегодня
+                  </button>
+                  <button
+                    type="button"
+                    disabled={telegramReportSending}
+                    onClick={() => void handleSendTelegramDailyReport()}
+                    className="col-span-2 sm:col-span-1 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-bold uppercase tracking-wide border border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-100 disabled:opacity-60 disabled:pointer-events-none transition-colors min-h-10"
+                    title="Сводка за выбранную дату по данным в базе на текущий момент"
+                  >
+                    {telegramReportSending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
+                    {telegramReportSending ? '…' : 'Telegram'}
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </header>
 
@@ -1346,153 +1487,6 @@ const App = () => {
 
         {isAdmin && currentView === 'admin' && (
           <div className="space-y-6">
-            <div className="bg-white border border-gray-100 rounded-2xl shadow-sm p-2 flex flex-col xl:flex-row xl:items-center gap-2">
-              <div className="flex items-center gap-0.5 overflow-x-auto om-scroll flex-nowrap min-w-0 flex-1 bg-gray-50/80 rounded-full p-0.5 border border-gray-100">
-                {canAdminWrite ? (
-                  <button
-                    type="button"
-                    onClick={() => setAdminSubView('salesDashboard')}
-                    className={`shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-semibold transition-all whitespace-nowrap ${
-                      adminSubView === 'salesDashboard' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
-                    }`}
-                  >
-                    <BarChart2 size={13} />
-                    Дашборд
-                  </button>
-                ) : null}
-                {canAdminWrite && adminAnalyticsTabEnabled ? (
-                  <button
-                    type="button"
-                    onClick={() => setAdminSubView('dashboard')}
-                    className={`shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-semibold transition-all whitespace-nowrap ${
-                      adminSubView === 'dashboard' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
-                    }`}
-                  >
-                    <LayoutGrid size={13} />
-                    Аналитика
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => setAdminSubView('kpi')}
-                  className={`shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-semibold transition-all whitespace-nowrap ${
-                    adminSubView === 'kpi' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
-                  }`}
-                >
-                  <FileText size={13} />
-                  KPI
-                </button>
-                {canAdminWrite ? (
-                  <button
-                    type="button"
-                    onClick={() => setAdminSubView('enterpriseLeads')}
-                    className={`shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-semibold transition-all whitespace-nowrap ${
-                      adminSubView === 'enterpriseLeads' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
-                    }`}
-                  >
-                    <UserPlus size={13} />
-                    Лиды
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => setAdminSubView('diggerConversion')}
-                  className={`shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-semibold transition-all whitespace-nowrap ${
-                    adminSubView === 'diggerConversion' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
-                  }`}
-                >
-                  <Target size={13} />
-                  Лидорубы
-                </button>
-                {canAdminWrite ? (
-                  <button
-                    type="button"
-                    onClick={() => setAdminSubView('meetings')}
-                    className={`shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-semibold transition-all whitespace-nowrap ${
-                      adminSubView === 'meetings' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
-                    }`}
-                  >
-                    <List size={13} />
-                    Встречи
-                  </button>
-                ) : null}
-                {canAdminWrite ? (
-                  <button
-                    type="button"
-                    onClick={() => setAdminSubView('staff')}
-                    className={`shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-semibold transition-all whitespace-nowrap ${
-                      adminSubView === 'staff' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
-                    }`}
-                  >
-                    <UserCog size={13} />
-                    Сотрудники
-                  </button>
-                ) : null}
-                {canAdminWrite ? (
-                  <button
-                    type="button"
-                    onClick={() => setAdminSubView('settings')}
-                    className={`shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-semibold transition-all whitespace-nowrap ${
-                      adminSubView === 'settings' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
-                    }`}
-                  >
-                    <Settings size={13} />
-                    Настройки
-                  </button>
-                ) : null}
-              </div>
-
-              {canAdminWrite ? (
-                <div className="flex flex-wrap items-center gap-1.5 shrink-0 xl:justify-end">
-                  <input
-                    id="telegram-weekly-forecast"
-                    type="text"
-                    inputMode="numeric"
-                    value={telegramWeeklyForecastDraft}
-                    onChange={(e) => setTelegramWeeklyForecastDraft(e.target.value.replace(/[^\d\s]/g, ''))}
-                    disabled={telegramWeeklyForecastSaving || telegramReportSending}
-                    placeholder="Прогноз"
-                    title="Прогноз на неделю"
-                    className="w-[7.5rem] px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-bold disabled:opacity-60 outline-none focus:border-blue-500"
-                  />
-                  <button
-                    type="button"
-                    disabled={telegramWeeklyForecastSaving || telegramReportSending || !forecastDirty}
-                    onClick={() => void saveTelegramWeeklyForecast()}
-                    className="px-2.5 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 text-[10px] font-bold uppercase tracking-wide text-emerald-800 hover:bg-emerald-100 disabled:opacity-40 disabled:pointer-events-none"
-                  >
-                    {telegramWeeklyForecastSaving ? '…' : 'OK'}
-                  </button>
-                  <input
-                    id="telegram-report-date"
-                    type="date"
-                    value={telegramReportDate}
-                    onChange={(e) => setTelegramReportDate(e.target.value)}
-                    disabled={telegramReportSending}
-                    title="Дата отчёта"
-                    className="px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-bold disabled:opacity-60 outline-none focus:border-blue-500"
-                  />
-                  <button
-                    type="button"
-                    disabled={telegramReportSending}
-                    onClick={() => setTelegramReportDate(formatYmdLocal(new Date()))}
-                    className="px-2.5 py-1.5 rounded-lg border border-gray-200 text-[10px] font-bold uppercase tracking-wide text-gray-600 hover:bg-gray-50 disabled:opacity-60"
-                  >
-                    Сегодня
-                  </button>
-                  <button
-                    type="button"
-                    disabled={telegramReportSending}
-                    onClick={() => void handleSendTelegramDailyReport()}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wide border border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-100 disabled:opacity-60 disabled:pointer-events-none transition-colors"
-                    title="Сводка за выбранную дату по данным в базе на текущий момент"
-                  >
-                    {telegramReportSending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
-                    {telegramReportSending ? '…' : 'Telegram'}
-                  </button>
-                </div>
-              ) : null}
-            </div>
             {adminSubView === 'salesDashboard' && canAdminWrite && (
               <SalesComparisonDashboard
                 allReports={allReports}
@@ -1570,25 +1564,21 @@ const App = () => {
         {!isAdmin && currentView === 'ensTru' && <EnsTruCheckPanel />}
 
         {isAdmin && currentView === 'clientsOrders' && (
-          <div className="flex flex-wrap gap-1 bg-gray-50/50 border border-gray-100 rounded-full p-1 w-full md:w-auto">
+          <div className="om-pill-track">
             <button
               type="button"
               onClick={() => setClientsOrdersSubView('clients')}
-              className={`flex-1 min-w-[130px] sm:min-w-[170px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-full text-[11px] sm:text-sm font-semibold transition-all ${
-                clientsOrdersSubView === 'clients' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
-              }`}
+              className={navPill(clientsOrdersSubView === 'clients')}
             >
-              <Users size={14} />
+              <Users size={16} />
               Клиенты
             </button>
             <button
               type="button"
               onClick={() => setClientsOrdersSubView('orders')}
-              className={`flex-1 min-w-[130px] sm:min-w-[170px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-full text-[11px] sm:text-sm font-semibold transition-all ${
-                clientsOrdersSubView === 'orders' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
-              }`}
+              className={navPill(clientsOrdersSubView === 'orders')}
             >
-              <ShoppingBag size={14} />
+              <ShoppingBag size={16} />
               Заказы
             </button>
           </div>
@@ -1638,36 +1628,30 @@ const App = () => {
         {(currentView === 'orders' || (isAdmin && currentView === 'clientsOrders' && clientsOrdersSubView === 'orders')) && (
           <div className="space-y-8">
             {!isAdmin && (
-              <div className="bg-white border border-gray-200 rounded-2xl p-2 shadow-sm flex flex-wrap gap-2 w-full md:w-auto">
+              <div className="om-pill-track">
                 <button
                   type="button"
                   onClick={() => setManagerOrdersSection('calendar')}
-                  className={`flex-1 min-w-[130px] sm:min-w-[170px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-full text-[11px] sm:text-sm font-semibold transition-all ${
-                    managerOrdersSection === 'calendar' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
-                  }`}
+                  className={navPill(managerOrdersSection === 'calendar')}
                 >
-                  <CalendarCheck size={14} />
+                  <CalendarCheck size={16} />
                   Календарь
                 </button>
                 <button
                   type="button"
                   onClick={() => setManagerOrdersSection('meetings')}
-                  className={`flex-1 min-w-[130px] sm:min-w-[170px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-full text-[11px] sm:text-sm font-semibold transition-all ${
-                    managerOrdersSection === 'meetings' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
-                  }`}
+                  className={navPill(managerOrdersSection === 'meetings')}
                 >
-                  <List size={14} />
-                  Все встречи
+                  <List size={16} />
+                  Встречи
                 </button>
                 <button
                   type="button"
                   onClick={() => setManagerOrdersSection('orders')}
-                  className={`flex-1 min-w-[130px] sm:min-w-[170px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-full text-[11px] sm:text-sm font-semibold transition-all ${
-                    managerOrdersSection === 'orders' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
-                  }`}
+                  className={navPill(managerOrdersSection === 'orders')}
                 >
-                  <ShoppingBag size={14} />
-                  Подтвержденные заказы
+                  <ShoppingBag size={16} />
+                  Заказы
                 </button>
               </div>
             )}
@@ -1735,7 +1719,7 @@ const App = () => {
 
       {isClientModalOpen && canManageClients && (
         <div
-          className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm z-[500] flex items-center justify-center p-4 animate-in fade-in duration-200"
+          className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm z-[500] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200"
           onClick={() => {
             setIsClientModalOpen(false);
             setEditingClientBin(null);
@@ -1743,7 +1727,7 @@ const App = () => {
           }}
         >
           <div
-            className="bg-white rounded-2xl shadow-xl border border-gray-100 w-full max-w-lg overflow-hidden"
+            className="bg-white rounded-t-2xl sm:rounded-2xl shadow-xl border border-gray-100 w-full max-w-lg overflow-hidden max-h-[92dvh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between p-5 border-b border-gray-100">
@@ -1766,7 +1750,7 @@ const App = () => {
                 <X size={20} />
               </button>
             </div>
-            <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto om-scroll">
+            <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto om-scroll flex-1">
               <div className="text-left">
                 <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1.5">Наименование Юр. Лица</label>
                 <input
@@ -1914,20 +1898,20 @@ const App = () => {
                 </>
               )}
             </div>
-            <div className="p-5 border-t border-gray-100 bg-gray-50 rounded-b-2xl flex justify-end gap-3">
+            <div className="p-4 sm:p-5 border-t border-gray-100 bg-gray-50 rounded-b-2xl flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3">
               <button
                 onClick={() => {
                   setIsClientModalOpen(false);
                   setEditingClientBin(null);
                   setNewClientData(emptyNewClientForm());
                 }}
-                className="px-5 py-2 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-200 border border-gray-200 transition"
+                className="w-full sm:w-auto px-5 py-2.5 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-200 border border-gray-200 transition min-h-10"
               >
                 Отмена
               </button>
               <button
                 onClick={() => void saveClientModal()}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-semibold shadow-sm transition"
+                className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-sm transition min-h-10"
               >
                 Создать карточку
               </button>
@@ -2342,16 +2326,18 @@ const ManagerDashboard = ({
         />
       ) : null}
       {isLeadDigger ? (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+          <div className="lg:col-span-2 order-2 lg:order-1">
             <LeadDiggerLeadsPanel mode="returns" creatorId={sessionUserId ?? undefined} />
           </div>
-          <LeadDiggerLeadsPanel
-            mode="status"
-            dateFrom={reportDate}
-            dateTo={reportDate}
-            creatorId={sessionUserId ?? undefined}
-          />
+          <div className="order-1 lg:order-2">
+            <LeadDiggerLeadsPanel
+              mode="status"
+              dateFrom={reportDate}
+              dateTo={reportDate}
+              creatorId={sessionUserId ?? undefined}
+            />
+          </div>
         </div>
       ) : null}
       <OrdersBlock
@@ -2495,21 +2481,22 @@ const OrdersBlock = ({
     setData(updated);
   };
   return (
-    <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm">
-      <div className="flex items-center justify-between mb-4 border-b border-gray-100 pb-4">
-        <div className="flex items-center gap-3 text-left">
-          <CheckCircle size={18} className="text-emerald-500" />
-          <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide">Подтвержденные заказы</h2>
+    <div className="bg-white border border-gray-100 rounded-2xl p-4 sm:p-6 shadow-sm">
+      <div className="flex items-center justify-between mb-4 border-b border-gray-100 pb-4 gap-2">
+        <div className="flex items-center gap-2 sm:gap-3 text-left min-w-0">
+          <CheckCircle size={18} className="text-emerald-500 shrink-0" />
+          <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide truncate">Подтвержденные заказы</h2>
         </div>
         <button
           type="button"
           onClick={addOrder}
-          className="bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-600 hover:text-white hover:border-blue-600 font-bold px-4 py-2 rounded-xl text-sm transition shadow-sm"
+          className="shrink-0 bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-600 hover:text-white hover:border-blue-600 font-bold px-3 sm:px-4 py-2 rounded-xl text-sm transition shadow-sm min-h-10"
         >
-          Добавить ЮЛ
+          <span className="sm:hidden">+ ЮЛ</span>
+          <span className="hidden sm:inline">Добавить ЮЛ</span>
         </button>
       </div>
-      <div className="space-y-6 text-left">
+      <div className="space-y-4 sm:space-y-6 text-left">
         {data.map((order, oIdx) => {
           const amountErr =
             order.totalAmount > 0 || order.amounts.some((a) => a > 0)
@@ -2869,23 +2856,23 @@ const MeetingTable = ({
   };
 
   return (
-    <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm">
-      <div className="flex items-center justify-between mb-4 border-b border-gray-100 pb-4">
-        <div className="flex items-center gap-3 text-left">
+    <div className="bg-white border border-gray-100 rounded-2xl p-4 sm:p-6 shadow-sm">
+      <div className="flex items-center justify-between mb-4 border-b border-gray-100 pb-4 gap-2">
+        <div className="flex items-center gap-2 sm:gap-3 text-left min-w-0">
           {icon}
-          <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide">{title}</h2>
+          <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide truncate">{title}</h2>
         </div>
         <button
           type="button"
           onClick={addRow}
-          className="bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-600 hover:text-white hover:border-blue-600 font-bold px-4 py-2 rounded-xl text-sm transition flex items-center shadow-sm"
+          className="shrink-0 bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-600 hover:text-white hover:border-blue-600 font-bold px-3 sm:px-4 py-2 rounded-xl text-sm transition flex items-center shadow-sm min-h-10"
         >
-          <Plus size={16} className="mr-1.5" /> Добавить
+          <Plus size={16} className="sm:mr-1.5" /> <span className="hidden sm:inline">Добавить</span>
         </button>
       </div>
       {data.length > 0 ? (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+        <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 om-scroll">
+          <table className="w-full text-left border-collapse min-w-[640px]">
             <thead>
               <tr className="text-[9px] font-bold text-gray-400 uppercase border-b border-gray-50 tracking-widest">
                 <th className="pb-4">Контрагент / БИН</th>
