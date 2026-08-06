@@ -248,7 +248,7 @@ export function SalesComparisonDashboard({
           </div>
           <div className="flex flex-wrap items-end gap-3">
             <div className="space-y-1">
-              <label className="text-[10px] font-black text-gray-400 uppercase">Менеджер</label>
+              <label className="text-[10px] font-bold text-gray-400 uppercase">Менеджер</label>
               <select
                 className="px-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-sm font-bold min-w-[160px]"
                 value={filterManager}
@@ -319,7 +319,7 @@ export function SalesComparisonDashboard({
         <div className="space-y-6">
           <div>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-black text-gray-700 uppercase tracking-wider">Абсолютные показатели за период</h3>
+              <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider">Абсолютные показатели за период</h3>
               <div className="text-xs text-gray-500 bg-white px-2.5 py-1 rounded-lg border border-gray-200">
                 Зелёный / красный = отклонение относительно прошлого месяца
               </div>
@@ -333,7 +333,7 @@ export function SalesComparisonDashboard({
                   <div key={metric.key} className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex flex-col justify-between">
                     <div>
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-[10px] font-black text-gray-500 uppercase tracking-tight truncate max-w-[120px]" title={metric.label}>
+                        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-tight truncate max-w-[120px]" title={metric.label}>
                           {metric.label}
                         </span>
                         <metric.icon className={`w-4 h-4 ${metric.color}`} />
@@ -357,7 +357,7 @@ export function SalesComparisonDashboard({
           </div>
 
           <div>
-            <h3 className="text-sm font-black text-gray-700 uppercase tracking-wider mb-4">Эффективность воронки (конверсии)</h3>
+            <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider mb-4">Эффективность воронки (конверсии)</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
               {conversionsConfig.map((conv) => {
                 const currVal = pctOrZero(dataCurrent.conversions[conv.key]);
@@ -366,7 +366,7 @@ export function SalesComparisonDashboard({
                 return (
                   <div key={conv.key} className={`p-5 rounded-2xl border border-gray-200 shadow-sm flex flex-col justify-between bg-white ${conv.color}`}>
                     <div>
-                      <div className="text-xs font-black text-gray-500 uppercase tracking-wider mb-1">{conv.label}</div>
+                      <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">{conv.label}</div>
                       <div className="text-3xl font-black text-gray-900 my-2">{formatKpiPercent(dataCurrent.conversions[conv.key])}</div>
                       <div className="text-[10px] text-gray-400 italic mb-4">{conv.formula}</div>
                     </div>
@@ -409,7 +409,7 @@ export function SalesComparisonDashboard({
                 </thead>
                 <tbody className="divide-y divide-gray-100 text-sm">
                   <tr className="bg-gray-50/60">
-                    <td colSpan={5} className="py-2 px-5 text-xs font-black text-blue-600 uppercase tracking-wide">
+                    <td colSpan={5} className="py-2 px-5 text-xs font-bold text-blue-600 uppercase tracking-wide">
                       Абсолютные объёмы
                     </td>
                   </tr>
@@ -433,7 +433,7 @@ export function SalesComparisonDashboard({
                     );
                   })}
                   <tr className="bg-gray-50/60">
-                    <td colSpan={5} className="py-2 px-5 text-xs font-black text-blue-600 uppercase tracking-wide">
+                    <td colSpan={5} className="py-2 px-5 text-xs font-bold text-blue-600 uppercase tracking-wide">
                       Процентные конверсии
                     </td>
                   </tr>
@@ -590,7 +590,7 @@ export function SalesComparisonDashboard({
 
             <div className="lg:col-span-7 flex flex-col justify-between">
               <div>
-                <h4 className="text-xs font-black text-gray-500 uppercase tracking-wider mb-4">Результаты моделирования</h4>
+                <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4">Результаты моделирования</h4>
                 <div className="grid grid-cols-2 gap-4 mb-6">
                   <div className="p-4 bg-gray-50 rounded-xl border border-gray-200">
                     <span className="text-[10px] uppercase font-black text-gray-400">Квалифицировано</span>

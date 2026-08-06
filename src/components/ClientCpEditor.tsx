@@ -181,7 +181,7 @@ export function ClientCpEditor({
           type="button"
           disabled={busy}
           onClick={() => setOpen(true)}
-          className="text-[10px] font-black uppercase text-blue-600 hover:underline disabled:opacity-50"
+          className="text-[10px] font-bold uppercase text-blue-600 hover:underline disabled:opacity-50"
         >
           Изменить
         </button>
@@ -209,7 +209,7 @@ export function ClientCpEditor({
 
       {open && (
         <div
-          className="fixed inset-0 bg-black/50 z-[620] flex items-center justify-center p-4"
+          className="fixed inset-0 bg-gray-900/40 z-[620] flex items-center justify-center p-4"
           onClick={() => {
             if (!busy) setOpen(false);
           }}
@@ -218,14 +218,14 @@ export function ClientCpEditor({
             className="bg-white rounded-2xl shadow-xl border border-gray-200 p-5 max-w-lg w-full text-left max-h-[85vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <h4 className="text-xs font-black text-gray-800 uppercase tracking-widest mb-1">ЦП по клиенту</h4>
+            <h4 className="text-xs font-bold text-gray-800 uppercase tracking-widest mb-1">ЦП по клиенту</h4>
             <p className="text-[11px] text-gray-500 mb-4">
               Всего: <strong>{totalCp >= 1 ? `${totalCp} шт.` : 'нет'}</strong>
               {' '}
               (по встречам <strong>{meetingCp}</strong>, без встречи <strong>{extraCp}</strong>)
             </p>
             <section className="mb-6">
-              <h5 className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">ЦП без встречи</h5>
+              <h5 className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">ЦП без встречи</h5>
               {isAdmin ? (
                 standaloneByManager.length === 0 ? (
                   <p className="text-xs text-gray-500">Нет дополнительных ЦП по менеджерам.</p>
@@ -251,7 +251,7 @@ export function ClientCpEditor({
                           <button
                             type="button"
                             disabled={busy}
-                            className="text-[10px] font-black uppercase text-blue-600 shrink-0"
+                            className="text-[10px] font-bold uppercase text-blue-600 shrink-0"
                             onClick={async () => {
                               const n = parseInt((entryEdits[s.id] ?? '0').trim(), 10);
                               if (!Number.isFinite(n) || n < 0) {
@@ -266,7 +266,7 @@ export function ClientCpEditor({
                           <button
                             type="button"
                             disabled={busy}
-                            className="text-[10px] font-black uppercase text-red-600 shrink-0"
+                            className="text-[10px] font-bold uppercase text-red-600 shrink-0"
                             onClick={async () => {
                               const ok = confirm('Удалить эту запись ЦП без встречи?');
                               if (!ok) return;
@@ -293,7 +293,7 @@ export function ClientCpEditor({
                         <button
                           type="button"
                           disabled={busy}
-                          className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase bg-blue-600 text-white"
+                          className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase bg-blue-600 text-white"
                           onClick={async () => {
                             const n = parseInt(extraInput.trim(), 10);
                             if (!Number.isFinite(n) || n < 1) {
@@ -329,7 +329,7 @@ export function ClientCpEditor({
                         <button
                           type="button"
                           disabled={busy}
-                          className="px-3 py-2 rounded-xl text-[10px] font-black uppercase bg-blue-600 text-white"
+                          className="px-3 py-2 rounded-xl text-[10px] font-bold uppercase bg-blue-600 text-white"
                           onClick={async () => {
                             const n = parseInt((entryEdits[s.id] ?? '0').trim(), 10);
                             if (!Number.isFinite(n) || n < 0) {
@@ -359,7 +359,7 @@ export function ClientCpEditor({
                       <button
                         type="button"
                         disabled={busy}
-                        className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase bg-blue-600 text-white"
+                        className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase bg-blue-600 text-white"
                         onClick={async () => {
                           const n = parseInt(extraInput.trim(), 10);
                           if (!Number.isFinite(n) || n < 1) {
@@ -382,7 +382,7 @@ export function ClientCpEditor({
             </section>
 
             <section>
-              <h5 className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">ЦП по встречам</h5>
+              <h5 className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">ЦП по встречам</h5>
               {meetings.length === 0 ? (
                 <p className="text-sm text-gray-500 py-2">
                   Нет сохранённых проведённых встреч. Добавьте встречу в отчёте и сохраните отчёт.
@@ -419,7 +419,7 @@ export function ClientCpEditor({
                             <button
                               type="button"
                               disabled={busy}
-                              className="text-[10px] font-black uppercase text-blue-600"
+                              className="text-[10px] font-bold uppercase text-blue-600"
                               onClick={() =>
                                 setQtyModal({
                                   meetingId: m.meetingId,
@@ -442,7 +442,7 @@ export function ClientCpEditor({
               <button
                 type="button"
                 disabled={busy}
-                className="px-4 py-2 rounded-xl text-[10px] font-black uppercase border border-gray-200 text-gray-600"
+                className="px-4 py-2 rounded-xl text-[10px] font-bold uppercase border border-gray-200 text-gray-600"
                 onClick={() => setOpen(false)}
               >
                 Закрыть
@@ -460,7 +460,7 @@ export function ClientCpEditor({
           }}
         >
           <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-5 max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
-            <h4 className="text-xs font-black text-gray-800 uppercase tracking-widest mb-2">Количество ЦП (встреча)</h4>
+            <h4 className="text-xs font-bold text-gray-800 uppercase tracking-widest mb-2">Количество ЦП (встреча)</h4>
             <input
               type="number"
               min={1}
@@ -475,7 +475,7 @@ export function ClientCpEditor({
               <button
                 type="button"
                 disabled={busy}
-                className="px-3 py-2 rounded-xl text-[10px] font-black uppercase border border-gray-200"
+                className="px-3 py-2 rounded-xl text-[10px] font-bold uppercase border border-gray-200"
                 onClick={() => setQtyModal(null)}
               >
                 Отмена
@@ -483,7 +483,7 @@ export function ClientCpEditor({
               <button
                 type="button"
                 disabled={busy}
-                className="px-3 py-2 rounded-xl text-[10px] font-black uppercase bg-blue-600 text-white"
+                className="px-3 py-2 rounded-xl text-[10px] font-bold uppercase bg-blue-600 text-white"
                 onClick={async () => {
                   const n = parseInt(qtyModal.input.trim(), 10);
                   if (!Number.isFinite(n) || n < 1) {
@@ -508,10 +508,10 @@ export function ClientCpEditor({
           }}
         >
           <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-5 max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
-            <h4 className="text-xs font-black text-gray-800 uppercase tracking-widest mb-3">Месяц оплаты ЦП</h4>
+            <h4 className="text-xs font-bold text-gray-800 uppercase tracking-widest mb-3">Месяц оплаты ЦП</h4>
             <div className="grid grid-cols-2 gap-3 mb-4">
               <div>
-                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Месяц</label>
+                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Месяц</label>
                 <select
                   disabled={busy}
                   className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm font-bold"
@@ -526,7 +526,7 @@ export function ClientCpEditor({
                 </select>
               </div>
               <div>
-                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Год</label>
+                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Год</label>
                 <select
                   disabled={busy}
                   className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm font-bold"
@@ -545,7 +545,7 @@ export function ClientCpEditor({
               <button
                 type="button"
                 disabled={busy}
-                className="px-3 py-2 rounded-xl text-[10px] font-black uppercase border border-gray-200"
+                className="px-3 py-2 rounded-xl text-[10px] font-bold uppercase border border-gray-200"
                 onClick={() => setPaidAtModal(null)}
               >
                 Отмена
@@ -553,7 +553,7 @@ export function ClientCpEditor({
               <button
                 type="button"
                 disabled={busy}
-                className="px-3 py-2 rounded-xl text-[10px] font-black uppercase bg-blue-600 text-white"
+                className="px-3 py-2 rounded-xl text-[10px] font-bold uppercase bg-blue-600 text-white"
                 onClick={async () => {
                   const ym = `${paidAtModal.year}-${paidAtModal.month}`;
                   if (!/^\d{4}-\d{2}$/.test(ym)) {

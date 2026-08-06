@@ -151,10 +151,10 @@ export function ClientDirectoryPanel({
           </div>
           {isAdmin ? (
             <div
-              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-violet-200 bg-violet-50 text-violet-800 text-sm font-bold whitespace-nowrap"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-blue-200 bg-blue-50 text-blue-800 text-sm font-bold whitespace-nowrap"
               title="Контрагентов с галочкой КТП среди отфильтрованных"
             >
-              <span className="text-[10px] font-black uppercase tracking-widest text-violet-500">КТП</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-violet-500">КТП</span>
               <span>{ktpCount}</span>
               <span className="text-violet-400 font-medium">/ {filtered.length}</span>
             </div>
@@ -163,7 +163,7 @@ export function ClientDirectoryPanel({
             <button
               type="button"
               onClick={onAddClient}
-              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-black uppercase tracking-widest shadow-sm hover:bg-blue-500"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-bold uppercase tracking-widest shadow-sm hover:bg-blue-500"
             >
               <UserPlus size={16} />
               Новый
@@ -176,7 +176,7 @@ export function ClientDirectoryPanel({
         <div className="overflow-auto max-h-[calc(100vh-22rem)]">
           <table className="w-full table-fixed text-left text-sm">
             <thead className="sticky top-0 z-10">
-              <tr className="bg-gray-50 text-[10px] font-black text-gray-500 uppercase tracking-tighter border-b border-gray-100">
+              <tr className="bg-gray-50 text-[10px] font-bold text-gray-500 uppercase tracking-tighter border-b border-gray-100">
                 <th className="p-4 bg-gray-50 w-[30%]">Наименование</th>
                 <th className="p-4 bg-gray-50 w-[14%]">БИН</th>
                 {isAdmin ? <th className="p-4 bg-gray-50 w-[8%] text-center">КТП</th> : null}
@@ -186,7 +186,7 @@ export function ClientDirectoryPanel({
                     <button
                       type="button"
                       onClick={cycleCpSort}
-                      className="inline-flex items-center justify-center gap-1 w-full text-[10px] font-black uppercase tracking-tighter text-gray-500 hover:text-blue-600"
+                      className="inline-flex items-center justify-center gap-1 w-full text-[10px] font-bold uppercase tracking-tighter text-gray-500 hover:text-blue-600"
                       title="Сортировка по количеству ЦП"
                     >
                       ЦП (всего)
@@ -236,13 +236,13 @@ export function ClientDirectoryPanel({
                             type="checkbox"
                             checked={Boolean(c.isKtp)}
                             onChange={(e) => void onToggleKtp?.(c.bin, e.target.checked)}
-                            className="w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                             title="КТП"
                             aria-label={`КТП ${c.name}`}
                           />
                         ) : (
                           <span
-                            className={`inline-flex items-center justify-center w-4 h-4 text-[10px] font-black ${c.isKtp ? 'text-violet-700' : 'text-gray-300'}`}
+                            className={`inline-flex items-center justify-center w-4 h-4 text-[10px] font-bold ${c.isKtp ? 'text-blue-700' : 'text-gray-300'}`}
                             title={c.isKtp ? 'КТП' : 'Не КТП'}
                           >
                             {c.isKtp ? '✓' : '—'}
@@ -290,7 +290,7 @@ export function ClientDirectoryPanel({
                     </td>
                     <td className="p-4 text-right">
                       <div className="inline-flex items-center gap-1">
-                        <span className="text-[10px] font-black text-blue-600 uppercase">История</span>
+                        <span className="text-[10px] font-bold text-blue-600 uppercase">История</span>
                         {canMutate && onEditClient ? (
                           <button
                             type="button"

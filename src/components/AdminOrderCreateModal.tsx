@@ -37,7 +37,7 @@ function ContractorField({
 
   return (
     <div className="space-y-1.5 text-left">
-      <label className="text-[9px] font-black text-gray-400 uppercase ml-2">{label}</label>
+      <label className="text-[9px] font-bold text-gray-400 uppercase ml-2">{label}</label>
       <div className="flex gap-2 items-center">
         <div className="relative flex-grow">
           <input
@@ -75,7 +75,7 @@ function ContractorField({
         </button>
       </div>
       {isNotFound ? (
-        <div className="flex items-center gap-1 text-[10px] text-amber-600 font-black uppercase tracking-tighter ml-2">
+        <div className="flex items-center gap-1 text-[10px] text-amber-600 font-bold uppercase tracking-tighter ml-2">
           <AlertTriangle size={12} />
           <span>Не найдено в базе</span>
         </div>
@@ -199,9 +199,9 @@ export function AdminOrderCreateModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[450] flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm z-[450] flex items-center justify-center p-4" onClick={onClose}>
       <div
-        className="bg-white rounded-[32px] shadow-2xl w-full max-w-2xl max-h-[min(92vh,900px)] overflow-hidden flex flex-col"
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[min(92vh,900px)] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="p-6 border-b border-gray-100 flex justify-between items-start gap-4">
@@ -222,7 +222,7 @@ export function AdminOrderCreateModal({
         <div className="p-6 overflow-y-auto space-y-5 flex-1 min-h-0 text-left">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="text-[9px] font-black text-gray-400 uppercase ml-2">Менеджер</label>
+              <label className="text-[9px] font-bold text-gray-400 uppercase ml-2">Менеджер</label>
               <select
                 className="w-full bg-gray-50 border border-gray-200 p-3 rounded-2xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500/30"
                 value={managerId}
@@ -237,7 +237,7 @@ export function AdminOrderCreateModal({
               </select>
             </div>
             <div className="space-y-1.5">
-              <label className="text-[9px] font-black text-gray-400 uppercase ml-2">Дата отчёта</label>
+              <label className="text-[9px] font-bold text-gray-400 uppercase ml-2">Дата отчёта</label>
               <input
                 type="date"
                 className="w-full bg-gray-50 border border-gray-200 p-3 rounded-2xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500/30"
@@ -265,17 +265,17 @@ export function AdminOrderCreateModal({
               onSelect={(name, bin) => setDraft({ ...draft, viaEntityName: name, viaBin: bin })}
               onOpenAddClient={onOpenAddClient}
             />
-            <p className="text-[9px] text-violet-700/80 ml-2 leading-snug">
+            <p className="text-[9px] text-blue-700/80 ml-2 leading-snug">
               Если заполнено — КТП и комиссия считаются по этому юрлицу, не по контрагенту
             </p>
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-[9px] font-black text-gray-400 uppercase ml-2">К-во заказов</label>
+            <label className="text-[9px] font-bold text-gray-400 uppercase ml-2">К-во заказов</label>
             <input
               type="number"
               min={1}
-              className="w-full max-w-[140px] bg-gray-50 border border-gray-200 p-3 rounded-2xl text-sm font-black"
+              className="w-full max-w-[140px] bg-gray-50 border border-gray-200 p-3 rounded-2xl text-sm font-bold"
               value={draft.orderCount}
               onFocus={(e) => e.currentTarget.select()}
               onChange={(e) => updateCount(e.target.value)}
@@ -288,7 +288,7 @@ export function AdminOrderCreateModal({
                 <label className="text-[8px] font-bold text-gray-500 uppercase ml-1">Сумма #{idx + 1}</label>
                 <input
                   type="text"
-                  className="w-full bg-gray-50 border border-gray-200 p-2 rounded-xl text-xs font-black text-right"
+                  className="w-full bg-gray-50 border border-gray-200 p-2 rounded-xl text-xs font-bold text-right"
                   value={sum || ''}
                   placeholder="0"
                   onChange={(e) => updateAmount(idx, e.target.value)}
@@ -298,7 +298,7 @@ export function AdminOrderCreateModal({
           </div>
 
           <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4">
-            <p className="text-[10px] font-black text-emerald-700 uppercase">Итого сумма</p>
+            <p className="text-[10px] font-bold text-emerald-700 uppercase">Итого сумма</p>
             <p className="text-xl font-black text-emerald-700">{formatMoneyKzt(draft.totalAmount)} ₸</p>
           </div>
 
@@ -321,7 +321,7 @@ export function AdminOrderCreateModal({
           <button
             type="button"
             onClick={onClose}
-            className="px-5 py-2.5 rounded-xl text-xs font-black uppercase text-gray-600 border border-gray-200 hover:bg-white"
+            className="px-5 py-2.5 rounded-xl text-xs font-bold uppercase text-gray-600 border border-gray-200 hover:bg-white"
           >
             Отмена
           </button>
@@ -329,7 +329,7 @@ export function AdminOrderCreateModal({
             type="button"
             onClick={save}
             disabled={!canSave || saving}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black uppercase bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-40"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold uppercase bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-40"
           >
             <Save size={14} />
             {saving ? 'Создание…' : 'Создать'}

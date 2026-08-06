@@ -108,11 +108,11 @@ export function ClientHistoryModal({
 
   return (
     <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-md z-[500] flex items-center justify-center p-4 animate-in fade-in duration-200"
+      className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm z-[500] flex items-center justify-center p-4 animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl max-h-[min(90vh,900px)] overflow-hidden flex flex-col"
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[min(90vh,900px)] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="p-5 border-b border-gray-100 flex justify-between items-start bg-gray-50/80 shrink-0">
@@ -128,7 +128,7 @@ export function ClientHistoryModal({
               <>
                 <div className="mt-3 grid gap-2 text-xs text-gray-700 sm:grid-cols-3">
                   <div className="space-y-1">
-                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Категория</span>
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Категория</span>
                     <select
                       className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm font-bold"
                       value={categoryId}
@@ -153,7 +153,7 @@ export function ClientHistoryModal({
                     )}
                   </div>
                   <div className="space-y-1">
-                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
                       Обороты ГЗ (прошлый год)
                     </span>
                     <input
@@ -166,7 +166,7 @@ export function ClientHistoryModal({
                     />
                   </div>
                   <div className="space-y-1">
-                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
                       Месяц привлечения
                     </span>
                     <div className="flex gap-2">
@@ -199,7 +199,7 @@ export function ClientHistoryModal({
                   type="button"
                   disabled={profileSaving}
                   onClick={() => void saveProfile()}
-                  className="mt-3 px-4 py-2 rounded-xl bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest disabled:opacity-60"
+                  className="mt-3 px-4 py-2 rounded-xl bg-blue-600 text-white text-[10px] font-bold uppercase tracking-widest disabled:opacity-60"
                 >
                   {profileSaving ? 'Сохранение…' : 'Сохранить профиль'}
                 </button>
@@ -239,13 +239,13 @@ export function ClientHistoryModal({
             <section className="text-left">
               <div className="flex items-center gap-2 mb-3 text-emerald-700">
                 <CalendarCheck size={18} />
-                <h4 className="text-xs font-black uppercase tracking-widest">Проведённые встречи</h4>
+                <h4 className="text-xs font-bold uppercase tracking-widest">Проведённые встречи</h4>
                 <span className="text-[10px] text-gray-400 font-mono">({conducted.length})</span>
               </div>
               <div className="overflow-x-auto rounded-2xl border border-gray-200">
                 <table className="w-full text-left text-sm">
                   <thead>
-                    <tr className="bg-gray-50 text-[10px] font-black text-gray-500 uppercase tracking-tighter">
+                    <tr className="bg-gray-50 text-[10px] font-bold text-gray-500 uppercase tracking-tighter">
                       <th className="p-3">Дата отчёта</th>
                       <th className="p-3">Менеджер</th>
                       <th className="p-3">Дата встречи</th>
@@ -263,7 +263,7 @@ export function ClientHistoryModal({
                         <td className="p-3 font-mono text-xs">{formatDisplayDate(row.date)}</td>
                         <td className="p-3 text-xs">{row.type}</td>
                         <td className="p-3 text-xs font-medium">{row.entityName}</td>
-                        <td className="p-3 text-center text-xs font-black">{row.cpQuantity > 0 ? row.cpQuantity : '—'}</td>
+                        <td className="p-3 text-center text-xs font-bold">{row.cpQuantity > 0 ? row.cpQuantity : '—'}</td>
                         <td className="p-3 text-xs text-gray-600">{row.result || '—'}</td>
                       </tr>
                     ))}
@@ -277,13 +277,13 @@ export function ClientHistoryModal({
             <section className="text-left">
               <div className="flex items-center gap-2 mb-3 text-blue-700">
                 <ShoppingBag size={18} />
-                <h4 className="text-xs font-black uppercase tracking-widest">Подтверждённые заказы</h4>
+                <h4 className="text-xs font-bold uppercase tracking-widest">Подтверждённые заказы</h4>
                 <span className="text-[10px] text-gray-400 font-mono">({orders.length})</span>
               </div>
               <div className="overflow-x-auto rounded-2xl border border-gray-200">
                 <table className="w-full text-left text-sm">
                   <thead>
-                    <tr className="bg-gray-50 text-[10px] font-black text-gray-500 uppercase tracking-tighter">
+                    <tr className="bg-gray-50 text-[10px] font-bold text-gray-500 uppercase tracking-tighter">
                       <th className="p-3">Дата отчёта</th>
                       <th className="p-3">Менеджер</th>
                       <th className="p-3">Сущность</th>
@@ -298,7 +298,7 @@ export function ClientHistoryModal({
                         <td className="p-3 text-xs font-bold">{row.manager}</td>
                         <td className="p-3 text-xs font-medium">{row.entityName}</td>
                         <td className="p-3 text-xs text-gray-600">{row.viaEntityName || '—'}</td>
-                        <td className="p-3 text-right text-xs font-black">{formatMoneyKzt(row.totalAmount)} ₸</td>
+                        <td className="p-3 text-right text-xs font-bold">{formatMoneyKzt(row.totalAmount)} ₸</td>
                       </tr>
                     ))}
                   </tbody>

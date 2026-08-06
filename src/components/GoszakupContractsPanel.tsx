@@ -102,7 +102,7 @@ export function GoszakupContractsPanel() {
             type="button"
             onClick={() => void runExport()}
             disabled={running || digits.length !== 12}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-black uppercase tracking-widest shadow-sm hover:bg-blue-500 disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-bold uppercase tracking-widest shadow-sm hover:bg-blue-500 disabled:opacity-50"
           >
             {running ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
             {running ? 'Выгрузка…' : 'Выгрузить в Excel'}

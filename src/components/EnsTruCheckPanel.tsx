@@ -60,7 +60,7 @@ export function EnsTruCheckPanel() {
 
       <section className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm space-y-4 max-w-3xl">
         <label className="block space-y-1.5">
-          <span className="text-[10px] font-black text-gray-400 uppercase">Коды для проверки</span>
+          <span className="text-[10px] font-bold text-gray-400 uppercase">Коды для проверки</span>
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -74,7 +74,7 @@ export function EnsTruCheckPanel() {
           type="button"
           disabled={checking}
           onClick={() => void handleCheck()}
-          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-black uppercase tracking-wider hover:bg-blue-500 disabled:opacity-60"
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-bold uppercase tracking-wider hover:bg-blue-500 disabled:opacity-60"
         >
           {checking ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
           {checking ? 'Проверка…' : 'Проверить'}
@@ -94,7 +94,7 @@ export function EnsTruCheckPanel() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <section className="bg-white border border-emerald-200 rounded-2xl shadow-sm overflow-hidden">
               <div className="px-5 py-3 bg-emerald-50 border-b border-emerald-100">
-                <h3 className="text-xs font-black text-emerald-800 uppercase tracking-wider">Есть</h3>
+                <h3 className="text-xs font-bold text-emerald-800 uppercase tracking-wider">Есть</h3>
               </div>
               <ul className="divide-y divide-gray-50 max-h-[420px] overflow-y-auto">
                 {found.length === 0 ? (
@@ -118,7 +118,7 @@ export function EnsTruCheckPanel() {
 
             <section className="bg-white border border-rose-200 rounded-2xl shadow-sm overflow-hidden">
               <div className="px-5 py-3 bg-rose-50 border-b border-rose-100">
-                <h3 className="text-xs font-black text-rose-800 uppercase tracking-wider">Нет</h3>
+                <h3 className="text-xs font-bold text-rose-800 uppercase tracking-wider">Нет</h3>
               </div>
               <ul className="divide-y divide-gray-50 max-h-[420px] overflow-y-auto">
                 {notFound.length === 0 ? (

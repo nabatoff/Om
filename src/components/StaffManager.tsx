@@ -171,7 +171,7 @@ export function StaffManager() {
         </div>
       )}
 
-      <form onSubmit={submit} className="bg-white border border-gray-200 rounded-3xl p-8 space-y-4 shadow-sm">
+      <form onSubmit={submit} className="bg-white border border-gray-200 rounded-2xl p-8 space-y-4 shadow-sm">
         <h2 className="font-black text-gray-800 text-xs uppercase tracking-widest flex items-center gap-2">
           <UserPlus size={16} className="text-blue-500" />
           Новый сотрудник
@@ -179,7 +179,7 @@ export function StaffManager() {
         {formErr && <div className="text-sm text-red-600 bg-red-50 p-2 rounded-lg">{formErr}</div>}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-1">
-            <label className="text-[10px] font-black text-gray-400 uppercase">Логин</label>
+            <label className="text-[10px] font-bold text-gray-400 uppercase">Логин</label>
             <input
               className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-4 py-2.5 text-sm font-bold"
               value={form.login_code}
@@ -192,7 +192,7 @@ export function StaffManager() {
             />
           </div>
           <div className="space-y-1">
-            <label className="text-[10px] font-black text-gray-400 uppercase">Пароль</label>
+            <label className="text-[10px] font-bold text-gray-400 uppercase">Пароль</label>
             <input
               type="password"
               className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-4 py-2.5 text-sm"
@@ -205,7 +205,7 @@ export function StaffManager() {
           </div>
         </div>
         <div className="space-y-1">
-          <label className="text-[10px] font-black text-gray-400 uppercase">ФИО</label>
+          <label className="text-[10px] font-bold text-gray-400 uppercase">ФИО</label>
           <input
             className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-4 py-2.5 text-sm font-bold"
             value={form.full_name}
@@ -217,7 +217,7 @@ export function StaffManager() {
           />
         </div>
         <div className="space-y-1 max-w-xs">
-          <label className="text-[10px] font-black text-gray-400 uppercase">Роль</label>
+          <label className="text-[10px] font-bold text-gray-400 uppercase">Роль</label>
           <select
             className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-4 py-2.5 text-sm font-bold"
             value={form.role}
@@ -231,13 +231,13 @@ export function StaffManager() {
         <button
           type="submit"
           disabled={saving}
-          className="bg-blue-600 text-white px-8 py-3 rounded-2xl text-xs font-black uppercase tracking-widest disabled:opacity-50"
+          className="bg-blue-600 text-white px-8 py-3 rounded-2xl text-xs font-bold uppercase tracking-widest disabled:opacity-50"
         >
           {saving ? '…' : 'Создать'}
         </button>
       </form>
 
-      <div className="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm overflow-x-auto">
+      <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm overflow-x-auto">
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-black text-gray-800 text-xs uppercase tracking-widest">Сотрудники</h2>
           <button
@@ -254,7 +254,7 @@ export function StaffManager() {
         ) : (
           <table className="w-full text-sm border-collapse min-w-[720px]">
             <thead>
-              <tr className="text-[10px] font-black text-gray-400 uppercase border-b">
+              <tr className="text-[10px] font-bold text-gray-400 uppercase border-b">
                 <th className="text-left py-2">Логин</th>
                 <th className="text-left py-2">ФИО</th>
                 <th className="text-left py-2">Роль</th>
@@ -277,7 +277,7 @@ export function StaffManager() {
                           admin
                         </span>
                       ) : r.role === 'lead_digger' ? (
-                        <span className="inline-flex items-center gap-1 text-violet-700 text-xs">
+                        <span className="inline-flex items-center gap-1 text-blue-700 text-xs">
                           <Briefcase size={12} />
                           лидоруб
                         </span>
@@ -335,7 +335,7 @@ export function StaffManager() {
           aria-modal="true"
           aria-labelledby="pwd-modal-title"
         >
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-xl border border-gray-200">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-gray-200">
             <div className="flex items-start justify-between gap-2 mb-4">
               <h3 id="pwd-modal-title" className="font-black text-gray-800 text-sm uppercase tracking-widest">
                 Новый пароль
@@ -351,7 +351,7 @@ export function StaffManager() {
             <form onSubmit={submitPwd} className="space-y-3">
               {pwdErr && <div className="text-sm text-red-600 bg-red-50 p-2 rounded-lg">{pwdErr}</div>}
               <div className="space-y-1">
-                <label className="text-[10px] font-black text-gray-400 uppercase">Пароль</label>
+                <label className="text-[10px] font-bold text-gray-400 uppercase">Пароль</label>
                 <input
                   type="password"
                   className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-4 py-2.5 text-sm"
@@ -363,7 +363,7 @@ export function StaffManager() {
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-[10px] font-black text-gray-400 uppercase">Повтор</label>
+                <label className="text-[10px] font-bold text-gray-400 uppercase">Повтор</label>
                 <input
                   type="password"
                   className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-4 py-2.5 text-sm"
@@ -386,7 +386,7 @@ export function StaffManager() {
                 <button
                   type="submit"
                   disabled={pwdSaving}
-                  className="flex-1 bg-blue-600 text-white py-2.5 rounded-2xl text-xs font-black uppercase tracking-widest disabled:opacity-50"
+                  className="flex-1 bg-blue-600 text-white py-2.5 rounded-2xl text-xs font-bold uppercase tracking-widest disabled:opacity-50"
                 >
                   {pwdSaving ? '…' : 'Сохранить'}
                 </button>
@@ -403,7 +403,7 @@ export function StaffManager() {
           aria-modal="true"
           aria-labelledby="revoke-modal-title"
         >
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-xl border border-gray-200">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-gray-200">
             <div className="flex items-start justify-between gap-2 mb-4">
               <h3 id="revoke-modal-title" className="font-black text-gray-800 text-sm uppercase tracking-widest">
                 Отозвать доступ
@@ -430,7 +430,7 @@ export function StaffManager() {
                 type="button"
                 onClick={() => void submitRevoke()}
                 disabled={revokeSaving}
-                className="flex-1 bg-rose-600 text-white py-2.5 rounded-2xl text-xs font-black uppercase tracking-widest disabled:opacity-50"
+                className="flex-1 bg-rose-600 text-white py-2.5 rounded-2xl text-xs font-bold uppercase tracking-widest disabled:opacity-50"
               >
                 {revokeSaving ? '…' : 'Отозвать'}
               </button>

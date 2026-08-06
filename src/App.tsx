@@ -2,8 +2,6 @@ import { useState, useEffect, useMemo, useCallback, type ReactNode, type Dispatc
 import {
   Plus,
   Trash2,
-  Briefcase,
-  Phone,
   CheckCircle,
   Users,
   FileText,
@@ -1188,7 +1186,7 @@ const App = () => {
 
   if (supabaseOk && !authReady) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-500 text-sm">Сессия…</div>
+      <div className="min-h-screen flex items-center justify-center bg-[#f4f6f8] text-gray-500 text-sm">Сессия…</div>
     );
   }
   if (supabaseOk && !session) {
@@ -1196,13 +1194,98 @@ const App = () => {
   }
   if (booting) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-500 text-sm">Загрузка…</div>
+      <div className="min-h-screen flex items-center justify-center bg-[#f4f6f8] text-gray-500 text-sm">Загрузка…</div>
     );
   }
 
+  const navPill = (active: boolean) =>
+    `om-pill ${active ? 'om-pill-active' : ''}`;
+
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900 p-4 md:p-8 font-sans text-sm">
-      <div className="max-w-[1800px] mx-auto space-y-6">
+    <div className="om-page min-h-screen flex flex-col">
+      <header className="om-header">
+        <div className="om-header-inner">
+          <div className="flex items-center justify-between h-16 border-b border-gray-100 gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="bg-blue-600 text-white p-2 rounded-lg shrink-0">
+                <ShieldCheck size={20} />
+              </div>
+              <span className="text-lg font-bold text-gray-900 truncate">Модуль отчетов</span>
+            </div>
+            <div className="flex items-center gap-3 sm:gap-6 shrink-0">
+              <div className="text-right hidden sm:flex flex-col">
+                <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Менеджер (Отчёт)</span>
+                <span className="text-sm font-bold text-gray-800">{managerName}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => void signOut()}
+                className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-900 transition font-medium border border-gray-200 px-3 py-1.5 rounded-lg"
+              >
+                <LogOut size={16} />
+                <span className="hidden sm:inline">Выйти</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between py-3 sm:py-4 gap-3 overflow-x-auto om-scroll">
+            <div className="om-pill-track">
+              {(!isAdmin || canAdminWrite) && (
+                <button type="button" onClick={() => setCurrentView('manager')} className={navPill(currentView === 'manager')}>
+                  <FileText size={16} /> Отчёт
+                </button>
+              )}
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCurrentView('admin');
+                    setAdminSubView(canAdminWrite ? 'salesDashboard' : 'kpi');
+                  }}
+                  className={navPill(currentView === 'admin')}
+                >
+                  <List size={16} /> Админка
+                </button>
+              )}
+              {isAdmin ? (
+                <button type="button" onClick={() => setCurrentView('clientsOrders')} className={navPill(currentView === 'clientsOrders')}>
+                  <Users size={16} /> Клиенты и заказы
+                </button>
+              ) : null}
+              {isAdmin && (
+                <button type="button" onClick={() => setCurrentView('registry')} className={navPill(currentView === 'registry')}>
+                  <BookOpen size={16} /> Реестр
+                </button>
+              )}
+              {isAdmin && canAdminWrite && (
+                <button
+                  type="button"
+                  onClick={() => setCurrentView('goszakupContracts')}
+                  className={navPill(currentView === 'goszakupContracts')}
+                >
+                  <FileSpreadsheet size={16} /> Госзакуп
+                </button>
+              )}
+              {!isAdmin && (
+                <>
+                  <button type="button" onClick={() => setCurrentView('clients')} className={navPill(currentView === 'clients')}>
+                    <Users size={16} /> Клиенты
+                  </button>
+                  <button type="button" onClick={() => setCurrentView('orders')} className={navPill(currentView === 'orders')}>
+                    <ShoppingBag size={16} /> Заказы
+                  </button>
+                  <button type="button" onClick={() => setCurrentView('ensTru')} className={navPill(currentView === 'ensTru')}>
+                    <ClipboardCheck size={16} /> Проверка ЕНС ТРУ
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main className="om-main om-scroll flex-1">
+        <div className="om-main-inner">
         {(!supabaseOk || loadError) && (
           <div
             className={`rounded-2xl p-4 text-xs font-bold ${loadError ? 'bg-amber-50 text-amber-900 border border-amber-200' : 'bg-red-50 text-red-800 border border-red-200'}`}
@@ -1220,109 +1303,6 @@ const App = () => {
             </option>
           ))}
         </datalist>
-
-        <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div className="flex items-center gap-3 sm:gap-4 text-left w-full md:w-auto">
-            <div className="p-3 bg-blue-600 rounded-xl text-white shadow-inner">
-              <ShieldCheck size={24} />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-gray-800 tracking-tight">Модуль отчетов</h1>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap w-full md:w-auto">
-            <div className="text-left px-2 sm:px-3 py-2 w-full sm:w-auto">
-              <p className="text-[10px] font-black text-gray-400 uppercase">Менеджер (отчёт)</p>
-              <p className="text-sm font-bold text-gray-800">{managerName}</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => void signOut()}
-              className="px-3 py-2 border border-gray-200 rounded-xl text-gray-500 hover:text-red-600 hover:border-red-200 text-xs font-bold flex items-center gap-1.5 w-full sm:w-auto justify-center"
-            >
-              <LogOut size={16} />
-              Выйти
-            </button>
-            <div className="flex flex-wrap bg-gray-100 p-1 rounded-xl flex-1 md:flex-none min-w-0 w-full sm:w-auto">
-              {(!isAdmin || canAdminWrite) && (
-              <button
-                type="button"
-                onClick={() => setCurrentView('manager')}
-                className={`flex-1 md:flex-none min-w-[120px] sm:min-w-0 flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all ${currentView === 'manager' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-              >
-                <FileText size={14} /> ОТЧЕТ
-              </button>
-              )}
-              {isAdmin && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCurrentView('admin');
-                    setAdminSubView(canAdminWrite ? 'salesDashboard' : 'kpi');
-                  }}
-                  className={`flex-1 md:flex-none min-w-[120px] sm:min-w-0 flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all ${currentView === 'admin' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                >
-                  <List size={14} /> АДМИНКА
-                </button>
-              )}
-              {isAdmin ? (
-                <button
-                  type="button"
-                  onClick={() => setCurrentView('clientsOrders')}
-                  className={`flex-1 md:flex-none min-w-[120px] sm:min-w-0 flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all ${currentView === 'clientsOrders' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                >
-                  <Users size={14} />
-                  <ShoppingBag size={14} /> КЛИЕНТЫ И ЗАКАЗЫ
-                </button>
-              ) : null}
-              {isAdmin && (
-                <button
-                  type="button"
-                  onClick={() => setCurrentView('registry')}
-                  className={`flex-1 md:flex-none min-w-[120px] sm:min-w-0 flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all ${currentView === 'registry' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                >
-                  <BookOpen size={14} /> РЕЕСТР
-                </button>
-              )}
-              {isAdmin && canAdminWrite && (
-                <button
-                  type="button"
-                  onClick={() => setCurrentView('goszakupContracts')}
-                  className={`flex-1 md:flex-none min-w-[120px] sm:min-w-0 flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all ${currentView === 'goszakupContracts' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                >
-                  <FileSpreadsheet size={14} /> ГОСЗАКУП
-                </button>
-              )}
-              {!isAdmin && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setCurrentView('clients')}
-                    className={`flex-1 md:flex-none min-w-[120px] sm:min-w-0 flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all ${currentView === 'clients' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                  >
-                    <Users size={14} /> КЛИЕНТЫ
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCurrentView('orders')}
-                    className={`flex-1 md:flex-none min-w-[120px] sm:min-w-0 flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all ${currentView === 'orders' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                  >
-                    <ShoppingBag size={14} /> ЗАКАЗЫ
-                  </button>
-                </>
-              )}
-              {!isAdmin && (
-                <button
-                  type="button"
-                  onClick={() => setCurrentView('ensTru')}
-                  className={`flex-1 md:flex-none min-w-[120px] sm:min-w-0 flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all ${currentView === 'ensTru' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                >
-                  <ClipboardCheck size={14} /> ПРОВЕРКА ЕНСТРУ
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
 
         {currentView === 'manager' && (
           <ManagerDashboard
@@ -1367,13 +1347,13 @@ const App = () => {
         {isAdmin && currentView === 'admin' && (
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div className="flex flex-wrap gap-2 bg-white border border-gray-200 rounded-2xl p-2 w-full md:w-auto">
+            <div className="flex flex-wrap gap-1 bg-gray-50/50 border border-gray-100 rounded-full p-1 w-full md:w-auto">
               {canAdminWrite ? (
               <button
                 type="button"
                 onClick={() => setAdminSubView('salesDashboard')}
-                className={`flex-1 min-w-[110px] sm:min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all ${
-                  adminSubView === 'salesDashboard' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
+                className={`flex-1 min-w-[110px] sm:min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-5 py-2 rounded-full text-[11px] sm:text-sm font-semibold transition-all ${
+                  adminSubView === 'salesDashboard' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
                 }`}
               >
                 <BarChart2 size={14} />
@@ -1384,8 +1364,8 @@ const App = () => {
                 <button
                   type="button"
                   onClick={() => setAdminSubView('dashboard')}
-                  className={`flex-1 min-w-[110px] sm:min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all ${
-                    adminSubView === 'dashboard' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
+                  className={`flex-1 min-w-[110px] sm:min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-full text-[11px] sm:text-sm font-semibold transition-all ${
+                    adminSubView === 'dashboard' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
                   }`}
                 >
                   <LayoutGrid size={14} />
@@ -1395,8 +1375,8 @@ const App = () => {
               <button
                 type="button"
                 onClick={() => setAdminSubView('kpi')}
-                className={`flex-1 min-w-[110px] sm:min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all ${
-                  adminSubView === 'kpi' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
+                className={`flex-1 min-w-[110px] sm:min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-full text-[11px] sm:text-sm font-semibold transition-all ${
+                  adminSubView === 'kpi' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
                 }`}
               >
                 <FileText size={14} />
@@ -1406,8 +1386,8 @@ const App = () => {
                 <button
                   type="button"
                   onClick={() => setAdminSubView('enterpriseLeads')}
-                  className={`flex-1 min-w-[110px] sm:min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all ${
-                    adminSubView === 'enterpriseLeads' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
+                  className={`flex-1 min-w-[110px] sm:min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-full text-[11px] sm:text-sm font-semibold transition-all ${
+                    adminSubView === 'enterpriseLeads' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
                   }`}
                 >
                   <UserPlus size={14} />
@@ -1417,8 +1397,8 @@ const App = () => {
               <button
                 type="button"
                 onClick={() => setAdminSubView('diggerConversion')}
-                className={`flex-1 min-w-[110px] sm:min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all ${
-                  adminSubView === 'diggerConversion' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
+                className={`flex-1 min-w-[110px] sm:min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-full text-[11px] sm:text-sm font-semibold transition-all ${
+                  adminSubView === 'diggerConversion' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
                 }`}
               >
                 <Target size={14} />
@@ -1428,8 +1408,8 @@ const App = () => {
               <button
                 type="button"
                 onClick={() => setAdminSubView('meetings')}
-                className={`flex-1 min-w-[110px] sm:min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all ${
-                  adminSubView === 'meetings' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
+                className={`flex-1 min-w-[110px] sm:min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-full text-[11px] sm:text-sm font-semibold transition-all ${
+                  adminSubView === 'meetings' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
                 }`}
               >
                 <List size={14} />
@@ -1440,8 +1420,8 @@ const App = () => {
               <button
                 type="button"
                 onClick={() => setAdminSubView('staff')}
-                className={`flex-1 min-w-[110px] sm:min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all ${
-                  adminSubView === 'staff' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
+                className={`flex-1 min-w-[110px] sm:min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-full text-[11px] sm:text-sm font-semibold transition-all ${
+                  adminSubView === 'staff' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
                 }`}
               >
                 <UserCog size={14} />
@@ -1452,8 +1432,8 @@ const App = () => {
               <button
                 type="button"
                 onClick={() => setAdminSubView('settings')}
-                className={`flex-1 min-w-[110px] sm:min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all ${
-                  adminSubView === 'settings' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
+                className={`flex-1 min-w-[110px] sm:min-w-[140px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-full text-[11px] sm:text-sm font-semibold transition-all ${
+                  adminSubView === 'settings' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
                 }`}
               >
                 <Settings size={14} />
@@ -1467,7 +1447,7 @@ const App = () => {
                 <div className="space-y-1 flex-1 min-w-[140px] sm:flex-none">
                   <label
                     htmlFor="telegram-weekly-forecast"
-                    className="text-[10px] font-black text-gray-400 uppercase tracking-widest"
+                    className="text-[10px] font-bold text-gray-400 uppercase tracking-widest"
                   >
                     Прогноз на неделю
                   </label>
@@ -1486,7 +1466,7 @@ const App = () => {
                       type="button"
                       disabled={telegramWeeklyForecastSaving || telegramReportSending || !forecastDirty}
                       onClick={() => void saveTelegramWeeklyForecast()}
-                      className="shrink-0 px-3 py-2.5 rounded-xl border border-emerald-200 bg-emerald-50 text-[10px] font-black uppercase tracking-wider text-emerald-800 hover:bg-emerald-100 disabled:opacity-50 disabled:pointer-events-none"
+                      className="shrink-0 px-3 py-2.5 rounded-xl border border-emerald-200 bg-emerald-50 text-[10px] font-bold uppercase tracking-wider text-emerald-800 hover:bg-emerald-100 disabled:opacity-50 disabled:pointer-events-none"
                     >
                       {telegramWeeklyForecastSaving ? '…' : 'Сохранить'}
                     </button>
@@ -1495,7 +1475,7 @@ const App = () => {
                 <div className="space-y-1 flex-1 min-w-[140px] sm:flex-none">
                   <label
                     htmlFor="telegram-report-date"
-                    className="text-[10px] font-black text-gray-400 uppercase tracking-widest"
+                    className="text-[10px] font-bold text-gray-400 uppercase tracking-widest"
                   >
                     Дата отчёта
                   </label>
@@ -1512,7 +1492,7 @@ const App = () => {
                   type="button"
                   disabled={telegramReportSending}
                   onClick={() => setTelegramReportDate(formatYmdLocal(new Date()))}
-                  className="px-3 py-2.5 rounded-xl border border-gray-200 text-[10px] font-black uppercase tracking-wider text-gray-600 hover:bg-gray-50 disabled:opacity-60"
+                  className="px-3 py-2.5 rounded-xl border border-gray-200 text-[10px] font-bold uppercase tracking-wider text-gray-600 hover:bg-gray-50 disabled:opacity-60"
                 >
                   Сегодня
                 </button>
@@ -1521,7 +1501,7 @@ const App = () => {
                 type="button"
                 disabled={telegramReportSending}
                 onClick={() => void handleSendTelegramDailyReport()}
-                className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-[11px] sm:text-xs font-black uppercase tracking-wide border border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-100 disabled:opacity-60 disabled:pointer-events-none transition-colors"
+                className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-[11px] sm:text-xs font-bold uppercase tracking-wide border border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-100 disabled:opacity-60 disabled:pointer-events-none transition-colors"
                 title="Сводка за выбранную дату по данным в базе на текущий момент"
               >
                 {telegramReportSending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
@@ -1607,12 +1587,12 @@ const App = () => {
         {!isAdmin && currentView === 'ensTru' && <EnsTruCheckPanel />}
 
         {isAdmin && currentView === 'clientsOrders' && (
-          <div className="flex flex-wrap gap-2 bg-white border border-gray-200 rounded-2xl p-2 w-full md:w-auto">
+          <div className="flex flex-wrap gap-1 bg-gray-50/50 border border-gray-100 rounded-full p-1 w-full md:w-auto">
             <button
               type="button"
               onClick={() => setClientsOrdersSubView('clients')}
-              className={`flex-1 min-w-[130px] sm:min-w-[170px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all ${
-                clientsOrdersSubView === 'clients' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
+              className={`flex-1 min-w-[130px] sm:min-w-[170px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-full text-[11px] sm:text-sm font-semibold transition-all ${
+                clientsOrdersSubView === 'clients' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
               }`}
             >
               <Users size={14} />
@@ -1621,8 +1601,8 @@ const App = () => {
             <button
               type="button"
               onClick={() => setClientsOrdersSubView('orders')}
-              className={`flex-1 min-w-[130px] sm:min-w-[170px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all ${
-                clientsOrdersSubView === 'orders' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
+              className={`flex-1 min-w-[130px] sm:min-w-[170px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-full text-[11px] sm:text-sm font-semibold transition-all ${
+                clientsOrdersSubView === 'orders' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
               }`}
             >
               <ShoppingBag size={14} />
@@ -1679,8 +1659,8 @@ const App = () => {
                 <button
                   type="button"
                   onClick={() => setManagerOrdersSection('calendar')}
-                  className={`flex-1 min-w-[130px] sm:min-w-[170px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all ${
-                    managerOrdersSection === 'calendar' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
+                  className={`flex-1 min-w-[130px] sm:min-w-[170px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-full text-[11px] sm:text-sm font-semibold transition-all ${
+                    managerOrdersSection === 'calendar' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
                   }`}
                 >
                   <CalendarCheck size={14} />
@@ -1689,8 +1669,8 @@ const App = () => {
                 <button
                   type="button"
                   onClick={() => setManagerOrdersSection('meetings')}
-                  className={`flex-1 min-w-[130px] sm:min-w-[170px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all ${
-                    managerOrdersSection === 'meetings' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
+                  className={`flex-1 min-w-[130px] sm:min-w-[170px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-full text-[11px] sm:text-sm font-semibold transition-all ${
+                    managerOrdersSection === 'meetings' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
                   }`}
                 >
                   <List size={14} />
@@ -1699,8 +1679,8 @@ const App = () => {
                 <button
                   type="button"
                   onClick={() => setManagerOrdersSection('orders')}
-                  className={`flex-1 min-w-[130px] sm:min-w-[170px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all ${
-                    managerOrdersSection === 'orders' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
+                  className={`flex-1 min-w-[130px] sm:min-w-[170px] flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-full text-[11px] sm:text-sm font-semibold transition-all ${
+                    managerOrdersSection === 'orders' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
                   }`}
                 >
                   <ShoppingBag size={14} />
@@ -1767,11 +1747,12 @@ const App = () => {
             )}
           </div>
         )}
-      </div>
+        </div>
+      </main>
 
       {isClientModalOpen && canManageClients && (
         <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-md z-[500] flex items-center justify-center p-4 animate-in fade-in duration-200"
+          className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm z-[500] flex items-center justify-center p-4 animate-in fade-in duration-200"
           onClick={() => {
             setIsClientModalOpen(false);
             setEditingClientBin(null);
@@ -1779,13 +1760,15 @@ const App = () => {
           }}
         >
           <div
-            className="bg-white rounded-[32px] shadow-2xl w-full max-w-md overflow-hidden"
+            className="bg-white rounded-2xl shadow-xl border border-gray-100 w-full max-w-lg overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="p-8 border-b flex justify-between items-center bg-gray-50/50">
-              <div className="flex items-center gap-3 text-blue-600">
-                <UserPlus size={24} />
-                <h3 className="font-black text-gray-800 text-sm uppercase tracking-widest">
+            <div className="flex items-center justify-between p-5 border-b border-gray-100">
+              <div className="flex items-center gap-3">
+                <div className="bg-blue-100 text-blue-700 p-2 rounded-lg">
+                  <UserPlus size={20} />
+                </div>
+                <h3 className="font-extrabold text-gray-900 text-lg">
                   {editingClientBin ? 'Редактировать контрагента' : 'Новый контрагент'}
                 </h3>
               </div>
@@ -1795,30 +1778,30 @@ const App = () => {
                   setEditingClientBin(null);
                   setNewClientData(emptyNewClientForm());
                 }}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-gray-600 transition"
               >
-                <X size={24} />
+                <X size={20} />
               </button>
             </div>
-            <div className="p-8 space-y-6">
-              <div className="space-y-2 text-left">
-                <label className="text-[10px] font-black text-gray-400 uppercase ml-2 tracking-tighter">Наименование Юр. Лица</label>
+            <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto om-scroll">
+              <div className="text-left">
+                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1.5">Наименование Юр. Лица</label>
                 <input
                   type="text"
-                  className="w-full bg-gray-50 border-none p-4 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all outline-none"
+                  className="w-full border border-gray-200 text-sm font-medium rounded-lg px-4 py-2.5 outline-none focus:border-blue-500 transition"
                   placeholder="ТОО Прогресс..."
                   value={newClientData.name}
                   onChange={(e) => setNewClientData({ ...newClientData, name: e.target.value })}
                 />
               </div>
-              <div className="space-y-2 text-left">
-                <label className="text-[10px] font-black text-gray-400 uppercase ml-2 tracking-tighter">БИН / ИИН (12 цифр)</label>
+              <div className="text-left">
+                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1.5">БИН / ИИН (12 цифр)</label>
                 <div className="relative">
                   <Fingerprint size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" />
                   <input
                     type="text"
                     maxLength={12}
-                    className="w-full bg-gray-50 border-none p-4 pl-12 rounded-2xl text-sm font-black focus:ring-2 focus:ring-blue-500 transition-all outline-none tracking-widest"
+                    className="w-full border border-gray-200 text-sm font-bold rounded-lg px-4 py-2.5 pl-12 outline-none focus:border-blue-500 transition tracking-widest"
                     placeholder="000000000000"
                     value={newClientData.bin}
                     onChange={(e) => setNewClientData({ ...newClientData, bin: e.target.value.replace(/\D/g, '') })}
@@ -1831,10 +1814,10 @@ const App = () => {
                 )}
               </div>
               {isAdmin && (
-                <div className="space-y-2 text-left">
-                  <label className="text-[10px] font-black text-gray-400 uppercase ml-2 tracking-tighter">Менеджер клиента</label>
+                <div className="text-left">
+                  <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1.5">Менеджер клиента</label>
                   <select
-                    className="w-full bg-gray-50 border-none p-4 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all outline-none"
+                    className="w-full border border-gray-200 text-sm font-bold rounded-lg px-4 py-2.5 outline-none focus:border-blue-500 transition cursor-pointer"
                     value={newClientData.managerId}
                     onChange={(e) => setNewClientData({ ...newClientData, managerId: e.target.value })}
                   >
@@ -1875,7 +1858,7 @@ const App = () => {
               {isAdmin && (
                 <>
                   <div className="space-y-2 text-left">
-                    <label className="text-[10px] font-black text-gray-400 uppercase ml-2 tracking-tighter">Категория</label>
+                    <label className="text-[10px] font-bold text-gray-400 uppercase ml-2 tracking-tighter">Категория</label>
                     <select
                       className="w-full bg-gray-50 border-none p-4 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all outline-none"
                       value={newClientData.categoryId}
@@ -1900,7 +1883,7 @@ const App = () => {
                     )}
                   </div>
                   <div className="space-y-2 text-left">
-                    <label className="text-[10px] font-black text-gray-400 uppercase ml-2 tracking-tighter">
+                    <label className="text-[10px] font-bold text-gray-400 uppercase ml-2 tracking-tighter">
                       Обороты ГЗ (прошлый год), ₸
                     </label>
                     <input
@@ -1915,7 +1898,7 @@ const App = () => {
                     />
                   </div>
                   <div className="space-y-2 text-left">
-                    <label className="text-[10px] font-black text-gray-400 uppercase ml-2 tracking-tighter">
+                    <label className="text-[10px] font-bold text-gray-400 uppercase ml-2 tracking-tighter">
                       Месяц привлечения
                     </label>
                     <div className="flex gap-2">
@@ -1948,22 +1931,22 @@ const App = () => {
                 </>
               )}
             </div>
-            <div className="p-8 bg-gray-50 flex gap-4">
+            <div className="p-5 border-t border-gray-100 bg-gray-50 rounded-b-2xl flex justify-end gap-3">
               <button
                 onClick={() => {
                   setIsClientModalOpen(false);
                   setEditingClientBin(null);
                   setNewClientData(emptyNewClientForm());
                 }}
-                className="flex-1 px-6 py-4 text-xs font-black text-gray-400 uppercase tracking-widest"
+                className="px-5 py-2 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-200 border border-gray-200 transition"
               >
                 Отмена
               </button>
               <button
                 onClick={() => void saveClientModal()}
-                className="flex-1 bg-blue-600 text-white px-6 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg"
+                className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-semibold shadow-sm transition"
               >
-                Сохранить
+                Создать карточку
               </button>
             </div>
           </div>
@@ -1999,10 +1982,10 @@ const App = () => {
 
       {adminRealizationModal.isOpen && (
         <div
-          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[120] flex items-center justify-center p-4"
+          className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm z-[120] flex items-center justify-center p-4"
           onClick={() => setAdminRealizationModal({ ...adminRealizationModal, isOpen: false })}
         >
-          <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-5xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="p-8 border-b flex justify-between items-center bg-gray-50/50 text-left">
               <div>
                 <h3 className="font-black text-gray-900 text-lg uppercase">{adminRealizationModal.title}</h3>
@@ -2019,7 +2002,7 @@ const App = () => {
             <div className="p-8 overflow-y-auto max-h-[60vh] text-left">
               <table className="w-full border-collapse text-left">
                 <thead>
-                  <tr className="text-[10px] font-black text-gray-400 border-b">
+                  <tr className="text-[10px] font-bold text-gray-400 border-b">
                     <th className="pb-4">Менеджер</th>
                     <th className="pb-4">Дата отчета</th>
                     <th className="pb-4">Дата встречи</th>
@@ -2047,7 +2030,7 @@ const App = () => {
               <button
                 type="button"
                 onClick={() => setAdminRealizationModal({ ...adminRealizationModal, isOpen: false })}
-                className="bg-gray-900 text-white px-12 py-3 rounded-2xl font-black text-xs uppercase"
+                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-2xl font-bold text-xs uppercase"
               >
                 Закрыть
               </button>
@@ -2244,13 +2227,13 @@ const ManagerDashboard = ({
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm flex flex-wrap items-end gap-3 text-left">
+    <div className="space-y-6 animate-in fade-in duration-300">
+      <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm flex flex-wrap items-end gap-3 text-left">
         <div className="space-y-1.5">
-          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Отчет за</label>
+          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Отчет за</label>
           <input
             type="date"
-            className="px-4 py-2.5 bg-gray-50 border rounded-xl text-sm font-bold"
+            className="px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm font-bold outline-none focus:border-blue-500"
             value={reportDate}
             onChange={(e) => setReportDate(e.target.value)}
           />
@@ -2258,63 +2241,80 @@ const ManagerDashboard = ({
         <button
           type="button"
           onClick={() => setReportDate(new Date().toISOString().split('T')[0])}
-          className="px-4 py-2.5 rounded-xl border border-gray-200 text-xs font-black uppercase tracking-wider text-gray-600 hover:bg-gray-50"
+          className="px-4 py-2.5 rounded-xl border border-gray-200 text-xs font-bold uppercase tracking-wider text-gray-600 hover:bg-gray-50"
         >
           Сегодня
         </button>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatInput
-          icon={<Briefcase size={20} className="text-blue-500" />}
-          label="Отработано"
-          value={statDraft.processedTotal}
-          onChange={(v) => handleStatChange('processedTotal', v)}
-          onBlur={async () => {
-            handleStatBlur('processedTotal');
-            await commitKpi('processedTotal');
-          }}
-        />
-        <StatInput
-          icon={<Users size={20} className="text-emerald-500" />}
-          label="Взято новых"
-          value={statDraft.newInWork}
-          onChange={(v) => handleStatChange('newInWork', v)}
-          onBlur={async () => {
-            handleStatBlur('newInWork');
-            await commitKpi('newInWork');
-          }}
-        />
-        <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm space-y-3 text-left">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-gray-500">
-              <Phone size={18} className="text-indigo-500" />
-              <span className="text-[10px] font-black uppercase tracking-widest">Звонки</span>
-            </div>
-            <span className="text-[10px] font-black text-gray-300">ЦЕЛЬ: {DAILY_CALL_GOAL}</span>
+
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+        <div className="text-xs uppercase font-bold tracking-wider text-gray-400 mb-4">Общая сводка за период</div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-[#f3f4f6] p-4 rounded-xl text-left">
+            <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Отработано</div>
+            <input
+              type="number"
+              min={0}
+              className="w-full text-2xl font-black text-gray-800 outline-none bg-transparent"
+              value={statDraft.processedTotal}
+              onChange={(e) => handleStatChange('processedTotal', e.target.value)}
+              onFocus={(e) => e.target.value === '0' && handleStatChange('processedTotal', '')}
+              onBlur={async () => {
+                handleStatBlur('processedTotal');
+                await commitKpi('processedTotal');
+              }}
+            />
           </div>
-          <input
-            type="number"
-            className="w-full text-3xl font-black text-gray-800 outline-none bg-transparent"
-            value={statDraft.callsTotal}
-            onChange={(e) => handleStatChange('callsTotal', e.target.value)}
-            onFocus={(e) => e.target.value === '0' && handleStatChange('callsTotal', '')}
-            onBlur={async () => {
-              handleStatBlur('callsTotal');
-              await commitKpi('callsTotal');
-            }}
-          />
-          <p className="text-[10px] text-gray-400">{kpiSaving ? 'Сохранение KPI...' : 'KPI сохраняется при смене поля'}</p>
+          <div className="bg-[#ecfdf5] p-4 rounded-xl border border-green-50 text-left">
+            <div className="text-[10px] font-bold text-green-700 uppercase tracking-widest mb-1">Взято новых</div>
+            <input
+              type="number"
+              min={0}
+              className="w-full text-2xl font-black text-green-800 outline-none bg-transparent"
+              value={statDraft.newInWork}
+              onChange={(e) => handleStatChange('newInWork', e.target.value)}
+              onFocus={(e) => e.target.value === '0' && handleStatChange('newInWork', '')}
+              onBlur={async () => {
+                handleStatBlur('newInWork');
+                await commitKpi('newInWork');
+              }}
+            />
+          </div>
+          <div className="bg-[#eff6ff] p-4 rounded-xl border border-blue-50 text-left">
+            <div className="flex items-center justify-between mb-1">
+              <div className="text-[10px] font-bold text-blue-700 uppercase tracking-widest">Звонки</div>
+              <span className="text-[10px] font-bold text-blue-300">Цель: {DAILY_CALL_GOAL}</span>
+            </div>
+            <input
+              type="number"
+              min={0}
+              className="w-full text-2xl font-black text-blue-800 outline-none bg-transparent"
+              value={statDraft.callsTotal}
+              onChange={(e) => handleStatChange('callsTotal', e.target.value)}
+              onFocus={(e) => e.target.value === '0' && handleStatChange('callsTotal', '')}
+              onBlur={async () => {
+                handleStatBlur('callsTotal');
+                await commitKpi('callsTotal');
+              }}
+            />
+            <p className="text-[10px] text-blue-400/80 mt-1">{kpiSaving ? 'Сохранение…' : 'KPI при уходе с поля'}</p>
+          </div>
+          <div className="bg-[#fffbeb] p-4 rounded-xl border border-yellow-50 text-left">
+            <div className="text-[10px] font-bold text-yellow-700 uppercase tracking-widest mb-1">Квалификация</div>
+            <input
+              type="number"
+              min={0}
+              className="w-full text-2xl font-black text-yellow-800 outline-none bg-transparent"
+              value={statDraft.validatedTotal}
+              onChange={(e) => handleStatChange('validatedTotal', e.target.value)}
+              onFocus={(e) => e.target.value === '0' && handleStatChange('validatedTotal', '')}
+              onBlur={async () => {
+                handleStatBlur('validatedTotal');
+                await commitKpi('validatedTotal');
+              }}
+            />
+          </div>
         </div>
-        <StatInput
-          icon={<CheckCircle size={20} className="text-amber-500" />}
-          label="Квалификация"
-          value={statDraft.validatedTotal}
-          onChange={(v) => handleStatChange('validatedTotal', v)}
-          onBlur={async () => {
-            handleStatBlur('validatedTotal');
-            await commitKpi('validatedTotal');
-          }}
-        />
       </div>
       <MeetingTable
         title="Назначено встреч (План)"
@@ -2446,7 +2446,7 @@ const ContractorLookup = ({
         </button>
       </div>
       {isNotFound && (
-        <div className="flex items-center gap-1 text-[10px] text-amber-600 font-black uppercase tracking-tighter ml-2">
+        <div className="flex items-center gap-1 text-[10px] text-amber-600 font-bold uppercase tracking-tighter ml-2">
           <AlertTriangle size={12} />
           <span>Не найдено в базе — Создайте карточку</span>
         </div>
@@ -2512,13 +2512,17 @@ const OrdersBlock = ({
     setData(updated);
   };
   return (
-    <div className="bg-white border border-gray-200 rounded-[32px] p-8 shadow-sm">
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-4 text-left">
-          <CheckCircle size={20} className="text-emerald-500" />
-          <h2 className="font-black text-gray-800 text-xs uppercase tracking-widest">Заказы</h2>
+    <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm">
+      <div className="flex items-center justify-between mb-4 border-b border-gray-100 pb-4">
+        <div className="flex items-center gap-3 text-left">
+          <CheckCircle size={18} className="text-emerald-500" />
+          <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide">Подтвержденные заказы</h2>
         </div>
-        <button type="button" onClick={addOrder} className="text-[10px] font-black text-blue-600 hover:underline uppercase">
+        <button
+          type="button"
+          onClick={addOrder}
+          className="bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-600 hover:text-white hover:border-blue-600 font-bold px-4 py-2 rounded-xl text-sm transition shadow-sm"
+        >
           Добавить ЮЛ
         </button>
       </div>
@@ -2531,7 +2535,7 @@ const OrdersBlock = ({
           const viaErr = orderViaError(order.viaEntityName, order.viaBin);
           const canSaveOrder = Boolean(order.entityName.trim() && order.bin.trim() && !amountErr && !viaErr);
           return (
-          <div key={oIdx} className="bg-gray-50/50 p-6 rounded-[32px] border border-gray-100 space-y-4 relative">
+          <div key={oIdx} className="bg-gray-50/50 p-6 rounded-2xl border border-gray-100 space-y-4 relative">
             <button
               type="button"
               onClick={() => setData(data.filter((_, i) => i !== oIdx))}
@@ -2541,7 +2545,7 @@ const OrdersBlock = ({
             </button>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1.5 text-left">
-                <label className="text-[9px] font-black text-gray-400 uppercase ml-2">Контрагент</label>
+                <label className="text-[9px] font-bold text-gray-400 uppercase ml-2">Контрагент</label>
                 <ContractorLookup
                   value={order.entityName}
                   onSelect={(name, bin) => {
@@ -2554,19 +2558,19 @@ const OrdersBlock = ({
                 />
               </div>
               <div className="space-y-1.5 text-left">
-                <label className="text-[9px] font-black text-gray-400 uppercase ml-2">К-во заказов</label>
+                <label className="text-[9px] font-bold text-gray-400 uppercase ml-2">К-во заказов</label>
                 <input
                   type="number"
                   min={1}
-                  className="w-full bg-white border-none p-3 rounded-2xl text-sm font-black shadow-sm h-[46px]"
+                  className="w-full bg-white border-none p-3 rounded-2xl text-sm font-bold shadow-sm h-[46px]"
                   value={order.orderCount}
                   onFocus={(e) => e.currentTarget.select()}
                   onChange={(e) => updateOrder(oIdx, 'orderCount', e.target.value)}
                 />
               </div>
               <div className="space-y-1.5 text-left md:col-span-2">
-                <label className="text-[9px] font-black text-gray-400 uppercase ml-2">Юр. лицо через которое был заказ</label>
-                <p className="text-[9px] text-violet-700/80 ml-2 leading-snug">
+                <label className="text-[9px] font-bold text-gray-400 uppercase ml-2">Юр. лицо через которое был заказ</label>
+                <p className="text-[9px] text-blue-700/80 ml-2 leading-snug">
                   Если заполнено — КТП и комиссия считаются по этому юрлицу, не по контрагенту
                 </p>
                 <ContractorLookup
@@ -2587,7 +2591,7 @@ const OrdersBlock = ({
                   <label className="text-[8px] font-bold text-gray-500 uppercase ml-1">Сумма #{sIdx + 1}</label>
                   <input
                     type="text"
-                    className="w-full bg-gray-50 border border-gray-200 p-2 rounded-xl text-xs font-black text-right text-gray-900 shadow-sm outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-300"
+                    className="w-full bg-gray-50 border border-gray-200 p-2 rounded-xl text-xs font-bold text-right text-gray-900 shadow-sm outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-300"
                     value={sum || ''}
                     placeholder="0"
                     onChange={(e) => {
@@ -2614,7 +2618,7 @@ const OrdersBlock = ({
             ) : null}
             <div className="flex justify-end">
               {savedOrders.has(orderSig(order)) ? (
-                <span className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-100">
+                <span className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-100">
                   Сохранено
                 </span>
               ) : (
@@ -2636,7 +2640,7 @@ const OrdersBlock = ({
                       });
                     }
                   }}
-                  className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider text-blue-700 bg-blue-50 border border-blue-100 hover:bg-blue-100 disabled:opacity-40 disabled:pointer-events-none"
+                  className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider text-blue-700 bg-blue-50 border border-blue-100 hover:bg-blue-100 disabled:opacity-40 disabled:pointer-events-none"
                 >
                   Сохранить
                 </button>
@@ -2882,29 +2886,29 @@ const MeetingTable = ({
   };
 
   return (
-    <div className="bg-white border border-gray-200 rounded-[32px] p-8 shadow-sm">
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-4 text-left">
+    <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm">
+      <div className="flex items-center justify-between mb-4 border-b border-gray-100 pb-4">
+        <div className="flex items-center gap-3 text-left">
           {icon}
-          <h2 className="font-black text-gray-800 text-xs uppercase tracking-widest">{title}</h2>
+          <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide">{title}</h2>
         </div>
         <button
           type="button"
           onClick={addRow}
-          className="p-2.5 bg-gray-50 text-gray-400 rounded-2xl hover:bg-blue-600 hover:text-white"
+          className="bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-600 hover:text-white hover:border-blue-600 font-bold px-4 py-2 rounded-xl text-sm transition flex items-center shadow-sm"
         >
-          <Plus size={20} />
+          <Plus size={16} className="mr-1.5" /> Добавить
         </button>
       </div>
       {data.length > 0 ? (
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="text-[9px] font-black text-gray-400 uppercase border-b border-gray-50 tracking-widest">
+              <tr className="text-[9px] font-bold text-gray-400 uppercase border-b border-gray-50 tracking-widest">
                 <th className="pb-4">Контрагент / БИН</th>
                 <th className="pb-4 w-36 px-4 text-center">Тип</th>
                 {type === 'conducted' && (
-                  <th className="pb-4 w-44 px-2 text-center text-[9px] font-black text-gray-400 uppercase tracking-widest">
+                  <th className="pb-4 w-44 px-2 text-center text-[9px] font-bold text-gray-400 uppercase tracking-widest">
                     ЦП
                   </th>
                 )}
@@ -2931,7 +2935,7 @@ const MeetingTable = ({
                       {type === 'conducted' && (() => {
                         const forcedType = getForcedConductedTypeForCounterparty(row.entityName, row.bin, idx);
                         return forcedType ? (
-                          <p className="pointer-events-none absolute -top-4 left-1 text-[9px] font-black uppercase tracking-wide text-blue-600 whitespace-nowrap">
+                          <p className="pointer-events-none absolute -top-4 left-1 text-[9px] font-bold uppercase tracking-wide text-blue-600 whitespace-nowrap">
                             Только «{forcedType}»
                           </p>
                         ) : null;
@@ -2939,7 +2943,7 @@ const MeetingTable = ({
                       {type === 'assigned' &&
                         hasAnyNewMeetingForCounterparty(row.entityName, row.bin, idx) &&
                         isNewMeetingType(row.type) && (
-                          <p className="pointer-events-none absolute -top-4 left-1 text-[9px] font-black uppercase tracking-wide text-amber-600 whitespace-nowrap">
+                          <p className="pointer-events-none absolute -top-4 left-1 text-[9px] font-bold uppercase tracking-wide text-amber-600 whitespace-nowrap">
                             Только «Повторная»
                           </p>
                         )}
@@ -3017,7 +3021,7 @@ const MeetingTable = ({
                               input: String((row as UiConducted).cpQuantity),
                             })
                           }
-                          className="mt-1.5 w-full text-[9px] font-black uppercase text-blue-600 hover:underline"
+                          className="mt-1.5 w-full text-[9px] font-bold uppercase text-blue-600 hover:underline"
                         >
                           Изменить кол-во
                         </button>
@@ -3041,14 +3045,14 @@ const MeetingTable = ({
                             {(row as UiConducted).result}
                           </span>
                         ) : (
-                          <span className="text-[9px] font-black text-gray-400 uppercase tracking-wide">Нажмите, чтобы ввести итог</span>
+                          <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">Нажмите, чтобы ввести итог</span>
                         )}
                       </button>
                     </td>
                   )}
                   <td className="py-4 px-2 text-center">
                     {savedRows.has(rowSig(row as UiAssigned | UiConducted)) ? (
-                      <span className="px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-100">
+                      <span className="px-2.5 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-100">
                         Сохранено
                       </span>
                     ) : (
@@ -3081,7 +3085,7 @@ const MeetingTable = ({
                             });
                           }
                         }}
-                        className="px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider text-blue-700 bg-blue-50 border border-blue-100 hover:bg-blue-100"
+                        className="px-2.5 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-wider text-blue-700 bg-blue-50 border border-blue-100 hover:bg-blue-100"
                       >
                         Сохранить
                       </button>
@@ -3098,13 +3102,13 @@ const MeetingTable = ({
           </table>
         </div>
       ) : (
-        <div className="py-12 text-center text-gray-300 text-[10px] font-black uppercase border-2 border-dashed border-gray-50 rounded-[24px]">
+        <div className="py-12 text-center text-gray-300 text-[10px] font-bold uppercase border-2 border-dashed border-gray-50 rounded-2xl">
           Нет записей
         </div>
       )}
       {cpQtyModal && type === 'conducted' && (
         <div
-          className="fixed inset-0 bg-black/50 z-[550] flex items-center justify-center p-4"
+          className="fixed inset-0 bg-gray-900/40 z-[550] flex items-center justify-center p-4"
           onClick={() => {
             const r = (data as UiConducted[])[cpQtyModal.idx];
             if (!(r.cpSent && r.cpQuantity >= 1)) {
@@ -3117,7 +3121,7 @@ const MeetingTable = ({
             className="bg-white rounded-2xl shadow-xl border border-gray-200 p-6 max-w-sm w-full text-left"
             onClick={(e) => e.stopPropagation()}
           >
-            <h4 className="text-xs font-black text-gray-800 uppercase tracking-widest mb-2">Количество ЦП</h4>
+            <h4 className="text-xs font-bold text-gray-800 uppercase tracking-widest mb-2">Количество ЦП</h4>
             <p className="text-[11px] text-gray-500 mb-3">Укажите, сколько единиц ЦП отправлено.</p>
             <input
               type="number"
@@ -3131,7 +3135,7 @@ const MeetingTable = ({
             <div className="flex gap-2 justify-end">
               <button
                 type="button"
-                className="px-3 py-2 rounded-xl text-[10px] font-black uppercase border border-gray-200 text-gray-600"
+                className="px-3 py-2 rounded-xl text-[10px] font-bold uppercase border border-gray-200 text-gray-600"
                 onClick={() => {
                   const r = (data as UiConducted[])[cpQtyModal.idx];
                   if (!(r.cpSent && r.cpQuantity >= 1)) {
@@ -3144,7 +3148,7 @@ const MeetingTable = ({
               </button>
               <button
                 type="button"
-                className="px-3 py-2 rounded-xl text-[10px] font-black uppercase bg-blue-600 text-white"
+                className="px-3 py-2 rounded-xl text-[10px] font-bold uppercase bg-blue-600 text-white"
                 onClick={() => {
                   const n = parseInt(cpQtyModal.input.trim(), 10);
                   if (!Number.isFinite(n) || n < 1) {
@@ -3346,7 +3350,7 @@ const AdminDashboard = ({
         }}
       />
       <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 text-left">
-        <p className="text-[11px] font-black text-blue-900 uppercase tracking-wider mb-1">Как читать таблицу</p>
+        <p className="text-[11px] font-bold text-blue-900 uppercase tracking-wider mb-1">Как читать таблицу</p>
         <p className="text-xs text-blue-800">
           Сверху показан общий итог по отфильтрованным отчётам. Ниже — детализация по каждому контрагенту.
           <span className="font-bold"> План</span> — назначенные, <span className="font-bold">Факт</span> — проведённые,
@@ -3354,33 +3358,33 @@ const AdminDashboard = ({
         </p>
       </div>
       <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
-        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Общая сводка</p>
+        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Общая сводка</p>
         <p className="text-[10px] text-gray-500 mb-3">{analyticsPeriodLabel}</p>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="rounded-xl border border-indigo-100 bg-indigo-50/70 p-3">
-            <p className="text-[10px] text-indigo-700 font-black uppercase">План</p>
+            <p className="text-[10px] text-indigo-700 font-bold uppercase">План</p>
             <p className="text-xl font-black text-indigo-900">{summaryTotals.plan}</p>
           </div>
           <div className="rounded-xl border border-blue-100 bg-blue-50/70 p-3">
-            <p className="text-[10px] text-blue-700 font-black uppercase">Факт</p>
+            <p className="text-[10px] text-blue-700 font-bold uppercase">Факт</p>
             <p className="text-xl font-black text-blue-900">{summaryTotals.fact}</p>
           </div>
           <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 p-3">
-            <p className="text-[10px] text-emerald-700 font-black uppercase">Реализация</p>
+            <p className="text-[10px] text-emerald-700 font-bold uppercase">Реализация</p>
             <p className="text-xl font-black text-emerald-900">
               {summaryTotals.realized} <span className="text-sm opacity-60">/ {summaryTotals.plan}</span>
             </p>
           </div>
           <div className="rounded-xl border border-amber-100 bg-amber-50/70 p-3">
-            <p className="text-[10px] text-amber-700 font-black uppercase">Выручка</p>
+            <p className="text-[10px] text-amber-700 font-bold uppercase">Выручка</p>
             <p className="text-xl font-black text-amber-900 whitespace-nowrap">{new Intl.NumberFormat('ru-RU').format(summaryTotals.revenue)} ₸</p>
           </div>
         </div>
       </div>
-      <div className="bg-white border border-gray-200 rounded-3xl shadow-sm overflow-x-auto text-left">
+      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-x-auto text-left">
         <table className="w-full text-left border-collapse min-w-[1100px]">
           <thead>
-            <tr className="bg-gray-50/50 text-[10px] font-black text-gray-400 uppercase border-b border-gray-100">
+            <tr className="bg-gray-50/50 text-[10px] font-bold text-gray-400 uppercase border-b border-gray-100">
               <th className="py-6 px-4">Контрагент</th>
               <th className="py-6 px-4">Менеджер(ы)</th>
               <th className="py-6 px-4">Период</th>
@@ -3563,7 +3567,7 @@ const KpiDashboard = ({
       />
       <section className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-5 shadow-sm">
         <div className="mb-3 text-left">
-          <h3 className="text-[11px] font-black text-gray-700 uppercase tracking-widest">
+          <h3 className="text-[11px] font-bold text-gray-700 uppercase tracking-widest">
             {monthlyManagerSummary.isDefaultMonth
               ? `Общая сводка за месяц (${monthlyManagerSummary.monthPrefix})`
               : 'Общая сводка за период'}
@@ -3576,39 +3580,39 @@ const KpiDashboard = ({
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-2">
           <div className="rounded-xl bg-gray-50 border border-gray-100 p-3 text-left">
-            <p className="text-[10px] text-gray-500 font-black uppercase">Отработано</p>
+            <p className="text-[10px] text-gray-500 font-bold uppercase">Отработано</p>
             <p className="text-lg font-black text-gray-900">{monthlyManagerSummary.processedTotal}</p>
           </div>
           <div className="rounded-xl bg-emerald-50 border border-emerald-100 p-3 text-left">
-            <p className="text-[10px] text-emerald-700 font-black uppercase">Взято новых</p>
+            <p className="text-[10px] text-emerald-700 font-bold uppercase">Взято новых</p>
             <p className="text-lg font-black text-emerald-800">{monthlyManagerSummary.newInWork}</p>
           </div>
           <div className="rounded-xl bg-indigo-50 border border-indigo-100 p-3 text-left">
-            <p className="text-[10px] text-indigo-700 font-black uppercase">Звонки</p>
+            <p className="text-[10px] text-indigo-700 font-bold uppercase">Звонки</p>
             <p className="text-lg font-black text-indigo-800">{monthlyManagerSummary.callsTotal}</p>
           </div>
           <div className="rounded-xl bg-amber-50 border border-amber-100 p-3 text-left">
-            <p className="text-[10px] text-amber-700 font-black uppercase">Квалификация</p>
+            <p className="text-[10px] text-amber-700 font-bold uppercase">Квалификация</p>
             <p className="text-lg font-black text-amber-800">{monthlyManagerSummary.validatedTotal}</p>
           </div>
           <div className="rounded-xl bg-slate-50 border border-slate-100 p-3 text-left">
-            <p className="text-[10px] text-slate-700 font-black uppercase">Назначено новых</p>
+            <p className="text-[10px] text-slate-700 font-bold uppercase">Назначено новых</p>
             <p className="text-lg font-black text-slate-900">{monthlyManagerSummary.assignedNew}</p>
           </div>
           <div className="rounded-xl bg-teal-50 border border-teal-100 p-3 text-left">
-            <p className="text-[10px] text-teal-700 font-black uppercase">Проведено новых</p>
+            <p className="text-[10px] text-teal-700 font-bold uppercase">Проведено новых</p>
             <p className="text-lg font-black text-teal-800">{monthlyManagerSummary.conductedNew}</p>
           </div>
-          <div className="rounded-xl bg-violet-50 border border-violet-100 p-3 text-left">
-            <p className="text-[10px] text-violet-700 font-black uppercase">Проведено повторных</p>
-            <p className="text-lg font-black text-violet-800">{monthlyManagerSummary.conductedRepeat}</p>
+          <div className="rounded-xl bg-blue-50 border border-blue-100 p-3 text-left">
+            <p className="text-[10px] text-blue-700 font-bold uppercase">Проведено повторных</p>
+            <p className="text-lg font-black text-blue-800">{monthlyManagerSummary.conductedRepeat}</p>
           </div>
         </div>
         <div className="mt-4 pt-4 border-t border-gray-100 text-left">
-          <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Конверсия</p>
+          <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Конверсия</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <div className="rounded-xl bg-amber-50/60 border border-amber-100 p-3">
-              <p className="text-[10px] text-amber-800 font-black uppercase leading-snug">Прошли квалификацию</p>
+              <p className="text-[10px] text-amber-800 font-bold uppercase leading-snug">Прошли квалификацию</p>
               <p className="text-xl font-black text-amber-950 mt-1">
                 {formatKpiPercent(monthlyManagerSummary.passedQualificationPct)}
               </p>
@@ -3617,7 +3621,7 @@ const KpiDashboard = ({
               </p>
             </div>
             <div className="rounded-xl bg-slate-50/80 border border-slate-200 p-3">
-              <p className="text-[10px] text-slate-700 font-black uppercase leading-snug">Назначено ГЭП</p>
+              <p className="text-[10px] text-slate-700 font-bold uppercase leading-snug">Назначено ГЭП</p>
               <p className="text-xl font-black text-slate-900 mt-1">
                 {formatKpiPercent(monthlyManagerSummary.assignedGepPct)}
               </p>
@@ -3626,7 +3630,7 @@ const KpiDashboard = ({
               </p>
             </div>
             <div className="rounded-xl bg-teal-50/60 border border-teal-100 p-3">
-              <p className="text-[10px] text-teal-800 font-black uppercase leading-snug">Проведен ГЭП</p>
+              <p className="text-[10px] text-teal-800 font-bold uppercase leading-snug">Проведен ГЭП</p>
               <p className="text-xl font-black text-teal-950 mt-1">
                 {formatKpiPercent(monthlyManagerSummary.conductedGepPct)}
               </p>
@@ -3635,7 +3639,7 @@ const KpiDashboard = ({
               </p>
             </div>
             <div className="rounded-xl bg-orange-50/70 border border-orange-100 p-3">
-              <p className="text-[10px] text-orange-900 font-black uppercase leading-snug">Подтвержден заказ</p>
+              <p className="text-[10px] text-orange-900 font-bold uppercase leading-snug">Подтвержден заказ</p>
               <p className="text-xl font-black text-orange-950 mt-1">
                 {formatKpiPercent(monthlyManagerSummary.confirmedOrderConvPct)}
               </p>
@@ -3649,9 +3653,9 @@ const KpiDashboard = ({
           </div>
         </div>
       </section>
-      <section className="bg-white border border-gray-200 rounded-3xl shadow-sm overflow-x-auto text-left">
+      <section className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-x-auto text-left">
         <div className="px-6 pt-5 pb-2 space-y-1">
-          <h3 className="text-xs font-black text-gray-700 uppercase tracking-widest">Отдельный отчёт по KPI менеджеров</h3>
+          <h3 className="text-xs font-bold text-gray-700 uppercase tracking-widest">Отдельный отчёт по KPI менеджеров</h3>
           <p className="text-[10px] text-gray-500">{kpiTablePeriodLabel}</p>
           <p className="text-[10px] text-gray-500 leading-relaxed">
             Столбцы встреч считаются автоматически из назначенных и проведённых встреч отчёта (тип «Новая» / «Повторная» по полю типа встречи).
@@ -3659,7 +3663,7 @@ const KpiDashboard = ({
         </div>
         <table className="w-full text-left border-collapse min-w-[1180px]">
           <thead>
-            <tr className="bg-gray-50/50 text-[10px] font-black text-gray-400 uppercase border-y border-gray-100">
+            <tr className="bg-gray-50/50 text-[10px] font-bold text-gray-400 uppercase border-y border-gray-100">
               <th className="py-4 px-6">Дата отчета</th>
               <th className="py-4 px-4">Менеджер</th>
               <th className="py-4 px-4 text-center">Отработано</th>
@@ -3685,13 +3689,13 @@ const KpiDashboard = ({
                 <td className="py-3.5 px-4 text-center font-black text-sky-700">{report.conductedMeetings.length}</td>
                 <td className="py-3.5 px-4 text-center font-black text-slate-800">{countAssignedNewMeetings(report)}</td>
                 <td className="py-3.5 px-4 text-center font-black text-teal-700">{countConductedNewMeetings(report, allReports)}</td>
-                <td className="py-3.5 px-4 text-center font-black text-violet-700">{countConductedRepeatMeetings(report)}</td>
+                <td className="py-3.5 px-4 text-center font-black text-blue-700">{countConductedRepeatMeetings(report)}</td>
                 {onDeleteReport ? (
                 <td className="py-3.5 px-4 text-right">
                   <button
                     type="button"
                     onClick={() => onDeleteReport(report.id)}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase text-red-600 border border-red-100 hover:bg-red-50"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase text-red-600 border border-red-100 hover:bg-red-50"
                     title="Удалить KPI-отчёт"
                   >
                     <Trash2 size={12} /> Удалить
@@ -3737,7 +3741,7 @@ const OrderSumCell = ({
       {new Intl.NumberFormat('ru-RU').format(amount)} ₸
     </span>
     {showCommission && commission != null ? (
-      <span className="text-[10px] font-bold text-violet-700 mt-0.5 block">
+      <span className="text-[10px] font-bold text-blue-700 mt-0.5 block">
         Итого комиссия: {new Intl.NumberFormat('ru-RU').format(commission)} ₸
       </span>
     ) : null}
@@ -3921,7 +3925,7 @@ const OrdersHistoryDashboard = ({
                 setFilterDateTo(b.to);
                 setFilterCounterparty('');
               }}
-              className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-gray-200 text-xs font-black uppercase tracking-wider text-gray-600 hover:bg-gray-50"
+              className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-gray-200 text-xs font-bold uppercase tracking-wider text-gray-600 hover:bg-gray-50"
             >
               Сбросить фильтр
             </button>
@@ -3930,7 +3934,7 @@ const OrdersHistoryDashboard = ({
       )}
       <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm flex flex-wrap gap-3 items-end">
         <div className="w-full sm:flex-1 sm:min-w-[220px] space-y-1.5 text-left">
-          <label className="text-[10px] font-black text-gray-400 uppercase">Контрагент (название или БИН)</label>
+          <label className="text-[10px] font-bold text-gray-400 uppercase">Контрагент (название или БИН)</label>
           <input
             list="orders-counterparty-options"
             type="text"
@@ -3948,32 +3952,32 @@ const OrdersHistoryDashboard = ({
         <button
           type="button"
           onClick={() => setFilterCounterparty('')}
-          className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-gray-200 text-xs font-black uppercase tracking-wider text-gray-600 hover:bg-gray-50"
+          className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-gray-200 text-xs font-bold uppercase tracking-wider text-gray-600 hover:bg-gray-50"
         >
           Очистить контрагента
         </button>
       </div>
       <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm flex flex-wrap gap-6 items-center">
         <div>
-          <p className="text-[10px] font-black text-gray-400 uppercase">Количество записей</p>
+          <p className="text-[10px] font-bold text-gray-400 uppercase">Количество записей</p>
           <p className="text-lg font-black text-gray-900">{displayRowCount}</p>
         </div>
         <div>
-          <p className="text-[10px] font-black text-gray-400 uppercase">Количество заказов</p>
+          <p className="text-[10px] font-bold text-gray-400 uppercase">Количество заказов</p>
           <p className="text-lg font-black text-gray-900">{totalOrdersCount}</p>
         </div>
         <div>
-          <p className="text-[10px] font-black text-gray-400 uppercase">Уникальных контрагентов</p>
+          <p className="text-[10px] font-bold text-gray-400 uppercase">Уникальных контрагентов</p>
           <p className="text-lg font-black text-gray-900">{uniqueCounterpartiesCount}</p>
         </div>
         <div>
-          <p className="text-[10px] font-black text-gray-400 uppercase">Итого сумма по заказам</p>
+          <p className="text-[10px] font-bold text-gray-400 uppercase">Итого сумма по заказам</p>
           <p className="text-lg font-black text-emerald-700 whitespace-nowrap">{new Intl.NumberFormat('ru-RU').format(ordersTotalAmount)} ₸</p>
         </div>
         {isAdmin ? (
           <div>
-            <p className="text-[10px] font-black text-gray-400 uppercase">Итого комиссия</p>
-            <p className="text-lg font-black text-violet-700 whitespace-nowrap">
+            <p className="text-[10px] font-bold text-gray-400 uppercase">Итого комиссия</p>
+            <p className="text-lg font-black text-blue-700 whitespace-nowrap">
               {new Intl.NumberFormat('ru-RU').format(ordersCommissionTotal)} ₸
             </p>
             {ordersWithoutCommissionCount > 0 ? (
@@ -3985,13 +3989,13 @@ const OrdersHistoryDashboard = ({
         ) : null}
       </div>
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest">Подтверждённые заказы</h2>
+        <h2 className="text-sm font-bold text-gray-400 uppercase tracking-widest">Подтверждённые заказы</h2>
         <div className="flex flex-wrap items-center gap-2">
           {onCreateOrder ? (
             <button
               type="button"
               onClick={onCreateOrder}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 text-white text-[10px] font-black uppercase tracking-wider hover:bg-blue-500"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 text-white text-[10px] font-bold uppercase tracking-wider hover:bg-blue-500"
             >
               <Plus size={14} />
               Создать заказ
@@ -4007,7 +4011,7 @@ const OrdersHistoryDashboard = ({
                 })
               }
               disabled={orders.length === 0}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 bg-white text-[10px] font-black uppercase tracking-wider text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 bg-white text-[10px] font-bold uppercase tracking-wider text-gray-700 hover:bg-gray-50 disabled:opacity-50"
             >
               <Download size={14} />
               Выгрузить в Excel
@@ -4018,7 +4022,7 @@ const OrdersHistoryDashboard = ({
             <button
               type="button"
               onClick={() => setViewMode('records')}
-              className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors ${
+              className={`px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors ${
                 viewMode === 'records' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
               }`}
             >
@@ -4027,7 +4031,7 @@ const OrdersHistoryDashboard = ({
             <button
               type="button"
               onClick={() => setViewMode('byCounterparty')}
-              className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors ${
+              className={`px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors ${
                 viewMode === 'byCounterparty' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
               }`}
             >
@@ -4037,10 +4041,10 @@ const OrdersHistoryDashboard = ({
           ) : null}
         </div>
       </div>
-      <div className="bg-white border border-gray-200 rounded-3xl shadow-sm overflow-x-auto text-left">
+      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-x-auto text-left">
         <table className="w-full text-left border-collapse min-w-[1120px]">
           <thead>
-            <tr className="bg-gray-50/50 text-[10px] font-black text-gray-400 border-b border-gray-100">
+            <tr className="bg-gray-50/50 text-[10px] font-bold text-gray-400 border-b border-gray-100">
               <th className="py-6 px-8">Дата</th>
               {isAdmin && <th className="py-6 px-4">Менеджер</th>}
               <th className="py-6 px-4">БИН/ИИН</th>
@@ -4082,7 +4086,7 @@ const OrdersHistoryDashboard = ({
                       <button
                         type="button"
                         onClick={() => openGroupedOrderDetails(group)}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-xl font-black text-xs border border-blue-100"
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-xl font-bold text-xs border border-blue-100"
                       >
                         <List size={14} /> {group.orderCount}
                       </button>
@@ -4118,7 +4122,7 @@ const OrdersHistoryDashboard = ({
                       <button
                         type="button"
                         onClick={() => openOrderDetails(order)}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-xl font-black text-xs border border-blue-100"
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-xl font-bold text-xs border border-blue-100"
                       >
                         <List size={14} /> {order.orderCount}
                       </button>
@@ -4171,7 +4175,7 @@ const AdminFilters = ({
   <div className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4">
     <div className="flex flex-wrap gap-4 sm:gap-6 items-end justify-between">
       <div className="w-full sm:flex-1 sm:min-w-[200px] space-y-1.5 text-left">
-        <label className="text-[10px] font-black text-gray-400 uppercase">Менеджер</label>
+        <label className="text-[10px] font-bold text-gray-400 uppercase">Менеджер</label>
         <select
           className="w-full px-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-sm font-bold"
           value={manager}
@@ -4188,43 +4192,13 @@ const AdminFilters = ({
         <button
           type="button"
           onClick={onReset}
-          className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-gray-200 text-xs font-black uppercase tracking-wider text-gray-600 hover:bg-gray-50"
+          className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-gray-200 text-xs font-bold uppercase tracking-wider text-gray-600 hover:bg-gray-50"
         >
           Сбросить фильтр
         </button>
       </div>
     </div>
     <PeriodFilterFields from={from} to={to} setFrom={setFrom} setTo={setTo} />
-  </div>
-);
-
-const StatInput = ({
-  icon,
-  label,
-  value,
-  onChange,
-  onBlur,
-}: {
-  icon: ReactNode;
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  onBlur: () => void;
-}) => (
-  <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm space-y-3 text-left">
-    <div className="flex items-center gap-2 text-gray-500">
-      {icon}
-      <span className="text-[10px] font-black uppercase tracking-widest leading-none">{label}</span>
-    </div>
-    <input
-      type="number"
-      min={0}
-      className="w-full text-3xl font-black text-gray-800 outline-none bg-transparent"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      onFocus={(e) => e.target.value === '0' && onChange('')}
-      onBlur={onBlur}
-    />
   </div>
 );
 
@@ -4243,34 +4217,47 @@ const MeetingModal = ({
   onSave: () => void;
   entityName?: string;
 }) => (
-  <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[300] flex items-center justify-center p-4" onClick={onClose}>
+  <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm z-[300] flex items-center justify-center p-4" onClick={onClose}>
     <div
-      className="bg-white rounded-[48px] shadow-2xl w-full max-w-lg overflow-hidden border border-white/20"
+      className="bg-white rounded-2xl shadow-xl border border-gray-100 w-full max-w-md overflow-hidden"
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="p-10 border-b flex justify-between items-center bg-gray-50/50">
+      <div className="flex items-center justify-between p-5 border-b border-gray-100">
         <div>
-          <h3 className="font-black text-gray-900 text-sm uppercase">{entityName}</h3>
-          <p className="text-[9px] text-gray-400 font-bold uppercase mt-1">Итог встречи</p>
+          <h3 className="text-lg font-extrabold text-gray-900">{entityName}</h3>
+          <p className="text-[10px] text-gray-400 font-bold uppercase mt-0.5">Итоги встречи</p>
         </div>
-        <button type="button" onClick={onClose} className="text-gray-300 hover:text-gray-500">
-          <X size={24} />
+        <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 transition">
+          <X size={20} />
         </button>
       </div>
-      <div className="p-10 space-y-6 text-left">
-        <textarea
-          className="w-full h-56 p-6 bg-gray-50/50 border border-gray-100 rounded-[32px] outline-none text-sm font-bold"
-          placeholder="О чем договорились?"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-        />
+      <div className="p-5 space-y-4 text-left">
+        <div>
+          <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1.5">
+            Комментарий (обязательно)
+          </label>
+          <textarea
+            className="w-full h-40 p-4 bg-white border border-gray-200 rounded-lg outline-none text-sm font-medium focus:border-green-500 transition om-scroll"
+            placeholder="О чем договорились? Следующие шаги?"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+          />
+        </div>
       </div>
-      <div className="p-10 bg-gray-50 flex justify-end gap-6">
-        <button type="button" onClick={onClose} className="px-6 py-2 text-[10px] font-black text-gray-400 uppercase">
+      <div className="p-5 border-t border-gray-100 bg-gray-50 rounded-b-2xl flex justify-end gap-3">
+        <button
+          type="button"
+          onClick={onClose}
+          className="px-5 py-2 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-200 border border-gray-200 transition"
+        >
           Отмена
         </button>
-        <button type="button" onClick={onSave} className="bg-gray-900 text-white px-12 py-4 rounded-[20px] font-black text-[10px] uppercase">
-          Сохранить
+        <button
+          type="button"
+          onClick={onSave}
+          className="bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded-lg text-sm font-semibold shadow-sm transition"
+        >
+          Сохранить итог
         </button>
       </div>
     </div>
@@ -4286,8 +4273,8 @@ const DetailsListModal = ({
   onClose: () => void;
   findEvidence: (a: UiAssigned, m: string) => { evidence: UiConducted; reportDate: string } | null;
 }) => (
-  <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4" onClick={onClose}>
-    <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-4xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+  <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4" onClick={onClose}>
+    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
       <div className="p-8 border-b flex justify-between items-center bg-gray-50/50 text-left">
         <div>
           <h3 className="font-black text-gray-900 text-lg uppercase">{modal.title}</h3>
@@ -4300,7 +4287,7 @@ const DetailsListModal = ({
       <div className="p-10 overflow-y-auto max-h-[60vh] text-left">
         <table className="w-full border-collapse text-left">
           <thead>
-            <tr className="text-[10px] font-black text-gray-400 border-b">
+            <tr className="text-[10px] font-bold text-gray-400 border-b">
               <th className="pb-5">Контрагент / БИН</th>
               <th className="pb-5 px-4 text-center">Тип</th>
               <th className="pb-5 px-4 text-center">Дата</th>
@@ -4319,7 +4306,7 @@ const DetailsListModal = ({
                   </td>
                   <td className="py-5 px-4 text-center">
                     <span
-                      className={`px-2 py-1 rounded text-[9px] font-black uppercase ${item.type === 'Новая' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}
+                      className={`px-2 py-1 rounded text-[9px] font-bold uppercase ${item.type === 'Новая' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}
                     >
                       {item.type}
                     </span>
@@ -4348,7 +4335,7 @@ const DetailsListModal = ({
         </table>
       </div>
       <div className="p-8 bg-gray-50 flex justify-end">
-        <button type="button" onClick={onClose} className="bg-gray-900 text-white px-12 py-3 rounded-2xl font-black text-xs uppercase">
+        <button type="button" onClick={onClose} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-2xl font-bold text-xs uppercase">
           Закрыть
         </button>
       </div>
@@ -4401,14 +4388,14 @@ const OrderItemsModal = ({
   })();
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[400] flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm z-[400] flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <div className="p-8 border-b flex justify-between items-center bg-gray-50/50 text-left">
           <div>
             <h3 className="font-black text-gray-900 text-lg uppercase">{modal.entity}</h3>
             <p className="text-[10px] text-gray-400 font-bold uppercase mt-1">БИН: {modal.bin}</p>
             {isAdmin && ktpHint ? (
-              <p className="text-[10px] font-bold text-violet-700 mt-1 normal-case">{ktpHint}</p>
+              <p className="text-[10px] font-bold text-blue-700 mt-1 normal-case">{ktpHint}</p>
             ) : null}
           </div>
           <button type="button" onClick={onClose} className="p-3 hover:bg-gray-100 rounded-full text-gray-400">
@@ -4418,11 +4405,11 @@ const OrderItemsModal = ({
         <div className="p-8 space-y-4 max-h-[50vh] overflow-y-auto text-left">
           {lineAmounts.map((amt, idx) => (
             <div key={idx} className="flex justify-between items-start gap-4 p-4 bg-gray-50 rounded-2xl border border-gray-100">
-              <span className="text-[10px] font-black text-gray-400 uppercase pt-1">Заказ №{idx + 1}</span>
+              <span className="text-[10px] font-bold text-gray-400 uppercase pt-1">Заказ №{idx + 1}</span>
               <div className="text-right">
                 <span className="text-lg font-black text-gray-800 block">{formatMoneyKzt(amt)} ₸</span>
                 {isAdmin ? (
-                  <span className="text-[10px] font-bold text-violet-700 mt-1 block">
+                  <span className="text-[10px] font-bold text-blue-700 mt-1 block">
                     {commission.lines[idx] != null
                       ? `Комиссия: ${formatMoneyKzt(commission.lines[idx])} ₸`
                       : 'Комиссия: —'}
@@ -4434,12 +4421,12 @@ const OrderItemsModal = ({
         </div>
         <div className="p-8 bg-gray-50 flex flex-col sm:flex-row justify-between sm:items-center gap-3 text-right">
           <div className="text-left sm:text-right">
-            <p className="text-[10px] font-black text-gray-400 uppercase">Итого сумма</p>
+            <p className="text-[10px] font-bold text-gray-400 uppercase">Итого сумма</p>
             <span className="text-xl font-black text-emerald-600">
               {formatMoneyKzt(lineAmounts.reduce((a, b) => a + b, 0))} ₸
             </span>
             {isAdmin && commission.total != null ? (
-              <p className="text-[10px] font-bold text-violet-700 mt-1">
+              <p className="text-[10px] font-bold text-blue-700 mt-1">
                 Итого комиссия: {formatMoneyKzt(commission.total)} ₸
               </p>
             ) : null}
@@ -4449,13 +4436,13 @@ const OrderItemsModal = ({
               <button
                 type="button"
                 onClick={onEdit}
-                className="inline-flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-2xl text-xs font-black uppercase shrink-0 hover:bg-blue-500"
+                className="inline-flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-2xl text-xs font-bold uppercase shrink-0 hover:bg-blue-500"
               >
                 <Edit2 size={14} />
                 Редактировать
               </button>
             ) : null}
-            <button type="button" onClick={onClose} className="bg-gray-900 text-white px-8 py-3 rounded-2xl text-xs font-black uppercase shrink-0">
+            <button type="button" onClick={onClose} className="bg-gray-900 text-white px-8 py-3 rounded-2xl text-xs font-bold uppercase shrink-0">
               Ок
             </button>
           </div>

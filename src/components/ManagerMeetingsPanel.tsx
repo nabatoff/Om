@@ -272,7 +272,7 @@ function MeetingsTableCpCell({
             type="button"
             disabled={busy}
             onClick={() => setModal({ conductedId: conductedId!, input: String(qty) })}
-            className="text-[9px] font-black uppercase text-blue-600 hover:underline disabled:opacity-50"
+            className="text-[9px] font-bold uppercase text-blue-600 hover:underline disabled:opacity-50"
           >
             Кол-во
           </button>
@@ -280,7 +280,7 @@ function MeetingsTableCpCell({
       </div>
       {modal && (
         <div
-          className="fixed inset-0 bg-black/50 z-[620] flex items-center justify-center p-4"
+          className="fixed inset-0 bg-gray-900/40 z-[620] flex items-center justify-center p-4"
           onClick={() => {
             setModal(null);
           }}
@@ -289,7 +289,7 @@ function MeetingsTableCpCell({
             className="bg-white rounded-2xl shadow-xl border border-gray-200 p-5 max-w-sm w-full text-left"
             onClick={(e) => e.stopPropagation()}
           >
-            <h4 className="text-xs font-black text-gray-800 uppercase tracking-widest mb-2">Количество ЦП</h4>
+            <h4 className="text-xs font-bold text-gray-800 uppercase tracking-widest mb-2">Количество ЦП</h4>
             <input
               type="number"
               min={1}
@@ -304,7 +304,7 @@ function MeetingsTableCpCell({
               <button
                 type="button"
                 disabled={busy}
-                className="px-3 py-2 rounded-xl text-[10px] font-black uppercase border border-gray-200 text-gray-600"
+                className="px-3 py-2 rounded-xl text-[10px] font-bold uppercase border border-gray-200 text-gray-600"
                 onClick={() => setModal(null)}
               >
                 Отмена
@@ -312,7 +312,7 @@ function MeetingsTableCpCell({
               <button
                 type="button"
                 disabled={busy}
-                className="px-3 py-2 rounded-xl text-[10px] font-black uppercase bg-blue-600 text-white"
+                className="px-3 py-2 rounded-xl text-[10px] font-bold uppercase bg-blue-600 text-white"
                 onClick={async () => {
                   const n = parseInt(modal.input.trim(), 10);
                   if (!Number.isFinite(n) || n < 1) {
@@ -746,15 +746,15 @@ export function ManagerMeetingsPanel({
     const opts = managerOptions?.length ? managerOptions : ['Все'];
     return (
       <div className="space-y-4 sm:space-y-6 text-left animate-in fade-in slide-in-from-top-4 duration-500">
-        <section className="bg-white border border-gray-200 rounded-3xl p-4 sm:p-6 shadow-sm overflow-x-auto">
-          <h3 className="text-xs font-black text-gray-800 uppercase tracking-widest flex items-center gap-2 mb-4">
+        <section className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-6 shadow-sm overflow-x-auto">
+          <h3 className="text-xs font-bold text-gray-800 uppercase tracking-widest flex items-center gap-2 mb-4">
             <CalendarDays size={16} className="text-blue-500" />
             Все встречи (все менеджеры)
           </h3>
           <div className="bg-gray-50/70 border border-gray-100 rounded-2xl p-3 sm:p-4 mb-4 flex flex-col gap-4">
             <div className="flex flex-wrap gap-3 items-end">
             <div className="space-y-1.5 w-full sm:w-auto sm:min-w-[200px]">
-              <label className="text-[10px] font-black text-gray-400 uppercase">Менеджер</label>
+              <label className="text-[10px] font-bold text-gray-400 uppercase">Менеджер</label>
               <select
                 className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm font-semibold"
                 value={adminMeetingsManager}
@@ -768,7 +768,7 @@ export function ManagerMeetingsPanel({
               </select>
             </div>
             <div className="space-y-1.5 w-full sm:w-auto sm:min-w-[200px]">
-              <label className="text-[10px] font-black text-gray-400 uppercase">Контрагент / БИН</label>
+              <label className="text-[10px] font-bold text-gray-400 uppercase">Контрагент / БИН</label>
               <input
                 type="text"
                 className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm"
@@ -778,7 +778,7 @@ export function ManagerMeetingsPanel({
               />
             </div>
             <div className="space-y-1.5 w-full sm:w-auto sm:min-w-[200px]">
-              <label className="text-[10px] font-black text-gray-400 uppercase">Тип встречи</label>
+              <label className="text-[10px] font-bold text-gray-400 uppercase">Тип встречи</label>
               <select
                 className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm font-semibold"
                 value={assignedTypeFilter}
@@ -790,7 +790,7 @@ export function ManagerMeetingsPanel({
               </select>
             </div>
             <div className="space-y-1.5 w-full sm:w-auto sm:min-w-[200px]">
-              <label className="text-[10px] font-black text-gray-400 uppercase">Статус</label>
+              <label className="text-[10px] font-bold text-gray-400 uppercase">Статус</label>
               <select
                 className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm font-semibold"
                 value={assignedStatusFilter}
@@ -815,14 +815,14 @@ export function ManagerMeetingsPanel({
                 setAssignedTypeFilter('all');
                 setAssignedCounterpartyFilter('');
               }}
-              className="w-full sm:w-auto px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider border border-gray-200 text-gray-600 hover:bg-white"
+              className="w-full sm:w-auto px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider border border-gray-200 text-gray-600 hover:bg-white"
             >
               Сбросить фильтр
             </button>
             </div>
             <div className="w-full flex flex-col gap-3">
               <div className="space-y-1.5 w-full sm:max-w-md">
-                <label className="text-[10px] font-black text-gray-400 uppercase">Фильтр по дате</label>
+                <label className="text-[10px] font-bold text-gray-400 uppercase">Фильтр по дате</label>
                 <select
                   className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm font-semibold"
                   value={adminPeriodMode}
@@ -847,7 +847,7 @@ export function ManagerMeetingsPanel({
           </div>
           <table className="w-full text-sm border-collapse min-w-[1020px]">
             <thead>
-              <tr className="text-[10px] font-black text-gray-400 border-b">
+              <tr className="text-[10px] font-bold text-gray-400 border-b">
                 <th className="text-left py-2">Дата назначения встречи</th>
                 <th className="text-left py-2">Контрагент</th>
                 <th className="text-left py-2">Менеджер</th>
@@ -880,7 +880,7 @@ export function ManagerMeetingsPanel({
                       <td className="py-3 text-sm font-bold text-gray-800 whitespace-nowrap">{a.manager}</td>
                       <td className="py-3 text-center">
                         <span
-                          className={`px-2 py-1 rounded text-[10px] font-black uppercase ${
+                          className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
                             a.type === 'Новая' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'
                           }`}
                         >
@@ -943,14 +943,14 @@ export function ManagerMeetingsPanel({
             </tbody>
           </table>
         </section>
-        <section className="bg-white border border-red-100 rounded-3xl p-4 sm:p-6 shadow-sm overflow-x-auto">
-          <h3 className="text-xs font-black text-red-700 uppercase tracking-widest flex items-center gap-2 mb-4">
+        <section className="bg-white border border-red-100 rounded-2xl p-4 sm:p-6 shadow-sm overflow-x-auto">
+          <h3 className="text-xs font-bold text-red-700 uppercase tracking-widest flex items-center gap-2 mb-4">
             <Trash2 size={16} className="text-red-500" />
             Корзина встреч (только админ)
           </h3>
           <div className="bg-red-50/60 border border-red-100 rounded-2xl p-3 sm:p-4 mb-4 flex flex-wrap gap-3 items-end">
             <div className="space-y-1.5 w-full sm:w-auto sm:min-w-[240px]">
-              <label className="text-[10px] font-black text-gray-500 uppercase">Поиск</label>
+              <label className="text-[10px] font-bold text-gray-500 uppercase">Поиск</label>
               <input
                 type="text"
                 className="w-full px-3 py-2 bg-white border border-red-200 rounded-xl text-sm"
@@ -962,7 +962,7 @@ export function ManagerMeetingsPanel({
           </div>
           <table className="w-full text-sm border-collapse min-w-[980px]">
             <thead>
-              <tr className="text-[10px] font-black text-gray-400 border-b">
+              <tr className="text-[10px] font-bold text-gray-400 border-b">
                 <th className="text-left py-2">Удалено</th>
                 <th className="text-left py-2">Дата встречи</th>
                 <th className="text-left py-2">Контрагент</th>
@@ -991,14 +991,14 @@ export function ManagerMeetingsPanel({
                     <td className="py-3 text-sm font-bold text-gray-800 whitespace-nowrap">{row.manager || '—'}</td>
                     <td className="py-3 text-center">{row.type}</td>
                     <td className="py-3 text-center">
-                      <span className="text-[10px] font-black uppercase text-gray-500">{row.source === 'assigned' ? 'Назначено' : 'Проведено'}</span>
+                      <span className="text-[10px] font-bold uppercase text-gray-500">{row.source === 'assigned' ? 'Назначено' : 'Проведено'}</span>
                     </td>
                     <td className="py-3 text-right">
                       <div className="inline-flex items-center gap-2">
                         <button
                           type="button"
                           onClick={() => onAdminRestoreMeeting?.(row)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-emerald-700 border border-emerald-100 bg-emerald-50 hover:bg-emerald-100 text-[10px] font-black uppercase"
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-emerald-700 border border-emerald-100 bg-emerald-50 hover:bg-emerald-100 text-[10px] font-bold uppercase"
                         >
                           <RotateCcw size={12} />
                           Вернуть
@@ -1006,7 +1006,7 @@ export function ManagerMeetingsPanel({
                         <button
                           type="button"
                           onClick={() => onAdminHardDeleteMeeting?.(row)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-red-700 border border-red-100 bg-red-50 hover:bg-red-100 text-[10px] font-black uppercase"
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-red-700 border border-red-100 bg-red-50 hover:bg-red-100 text-[10px] font-bold uppercase"
                         >
                           <Trash2 size={12} />
                           Навсегда
@@ -1025,15 +1025,15 @@ export function ManagerMeetingsPanel({
             onClick={() => setResultPreviewText(null)}
           >
             <div
-              className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-gray-100 p-6 sm:p-8 text-left"
+              className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-gray-100 p-6 sm:p-8 text-left"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between mb-4">
-                <h4 className="text-xs font-black text-gray-700 uppercase tracking-widest">Итог встречи</h4>
+                <h4 className="text-xs font-bold text-gray-700 uppercase tracking-widest">Итог встречи</h4>
                 <button
                   type="button"
                   onClick={() => setResultPreviewText(null)}
-                  className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase border border-gray-200 text-gray-600 hover:bg-gray-50"
+                  className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase border border-gray-200 text-gray-600 hover:bg-gray-50"
                 >
                   Закрыть
                 </button>
@@ -1052,13 +1052,13 @@ export function ManagerMeetingsPanel({
             }}
           >
             <div
-              className="w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-gray-100 overflow-hidden text-left"
+              className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden text-left"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="p-5 sm:p-6 border-b border-gray-100 flex items-center justify-between bg-gray-50/60">
                 <div className="flex items-center gap-2 text-blue-600">
                   <Pencil size={18} />
-                  <h4 className="text-xs font-black text-gray-800 uppercase tracking-widest">Редактировать встречу</h4>
+                  <h4 className="text-xs font-bold text-gray-800 uppercase tracking-widest">Редактировать встречу</h4>
                 </div>
                 <button
                   type="button"
@@ -1071,7 +1071,7 @@ export function ManagerMeetingsPanel({
               </div>
               <div className="p-5 sm:p-6 space-y-4">
                 <label className="block space-y-1.5">
-                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Контрагент</span>
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Контрагент</span>
                   <input
                     type="text"
                     disabled={editBusy}
@@ -1081,7 +1081,7 @@ export function ManagerMeetingsPanel({
                   />
                 </label>
                 <label className="block space-y-1.5">
-                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">БИН</span>
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">БИН</span>
                   <input
                     type="text"
                     inputMode="numeric"
@@ -1095,7 +1095,7 @@ export function ManagerMeetingsPanel({
                   />
                 </label>
                 <label className="block space-y-1.5">
-                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Тип</span>
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Тип</span>
                   <select
                     disabled={editBusy}
                     value={editMeeting.type}
@@ -1111,7 +1111,7 @@ export function ManagerMeetingsPanel({
                   </select>
                 </label>
                 <label className="block space-y-1.5">
-                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
                     Дата назначения
                     {!editMeeting.assignedId ? (
                       <span className="normal-case font-bold text-amber-600"> · не была указана</span>
@@ -1128,7 +1128,7 @@ export function ManagerMeetingsPanel({
                 {editMeeting.conductedId ? (
                   <>
                     <label className="block space-y-1.5">
-                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Дата проведения</span>
+                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Дата проведения</span>
                       <input
                         type="date"
                         disabled={editBusy}
@@ -1138,7 +1138,7 @@ export function ManagerMeetingsPanel({
                       />
                     </label>
                     <label className="block space-y-1.5">
-                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Итог</span>
+                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Итог</span>
                       <textarea
                         disabled={editBusy}
                         rows={12}
@@ -1155,7 +1155,7 @@ export function ManagerMeetingsPanel({
                   type="button"
                   disabled={editBusy}
                   onClick={() => setEditMeeting(null)}
-                  className="flex-1 px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest text-gray-500 border border-gray-200 hover:bg-white disabled:opacity-50"
+                  className="flex-1 px-4 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest text-gray-500 border border-gray-200 hover:bg-white disabled:opacity-50"
                 >
                   Отмена
                 </button>
@@ -1163,7 +1163,7 @@ export function ManagerMeetingsPanel({
                   type="button"
                   disabled={editBusy}
                   onClick={() => void saveAdminEditMeeting()}
-                  className="flex-1 px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-50"
+                  className="flex-1 px-4 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-50"
                 >
                   {editBusy ? 'Сохранение…' : 'Сохранить'}
                 </button>
@@ -1180,14 +1180,14 @@ export function ManagerMeetingsPanel({
       {mode !== 'assigned' && (
         <>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <section className="bg-white border border-amber-100 rounded-3xl p-4 sm:p-6 shadow-sm">
-              <h3 className="text-xs font-black text-amber-800 uppercase tracking-widest flex items-center gap-2 mb-4">
+            <section className="bg-white border border-amber-100 rounded-2xl p-4 sm:p-6 shadow-sm">
+              <h3 className="text-xs font-bold text-amber-800 uppercase tracking-widest flex items-center gap-2 mb-4">
                 <Clock size={16} className="text-amber-500" />
                 Сегодня · завтра
               </h3>
               <div className="space-y-4">
                 <div>
-                  <p className="text-[10px] font-black text-gray-400 uppercase mb-2">Сегодня</p>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase mb-2">Сегодня</p>
                   {today.length === 0 ? (
                     <p className="text-xs sm:text-sm text-gray-400">Нет назначенных встреч</p>
                   ) : (
@@ -1199,7 +1199,7 @@ export function ManagerMeetingsPanel({
                   )}
                 </div>
                 <div>
-                  <p className="text-[10px] font-black text-gray-400 uppercase mb-2">Завтра</p>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase mb-2">Завтра</p>
                   {tomorrow.length === 0 ? (
                     <p className="text-xs sm:text-sm text-gray-400">Нет назначенных встреч</p>
                   ) : (
@@ -1213,9 +1213,9 @@ export function ManagerMeetingsPanel({
               </div>
             </section>
 
-            <section className="bg-white border border-gray-200 rounded-3xl p-4 shadow-sm">
+            <section className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
               <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-                <h3 className="text-xs font-black text-gray-800 uppercase tracking-widest flex items-center gap-2">
+                <h3 className="text-xs font-bold text-gray-800 uppercase tracking-widest flex items-center gap-2">
                   <Calendar size={16} className="text-blue-500" />
                   Календарь
                 </h3>
@@ -1234,14 +1234,14 @@ export function ManagerMeetingsPanel({
                       setView({ y: d.getFullYear(), m: d.getMonth() });
                       setSelectedYmd(todayYmd);
                     }}
-                    className="px-2 py-1 rounded-lg border border-gray-200 text-[10px] font-black uppercase tracking-wider text-gray-600 hover:bg-gray-50"
+                    className="px-2 py-1 rounded-lg border border-gray-200 text-[10px] font-bold uppercase tracking-wider text-gray-600 hover:bg-gray-50"
                   >
                     Сегодня
                   </button>
                 </div>
               </div>
               <div className="max-w-[340px] sm:max-w-[380px] mx-auto">
-                <div className="grid grid-cols-7 gap-1 text-center text-[9px] font-black text-gray-400 mb-1">
+                <div className="grid grid-cols-7 gap-1 text-center text-[9px] font-bold text-gray-400 mb-1">
                   {['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'].map((d) => (
                     <div key={d}>
                       {d}
@@ -1279,8 +1279,8 @@ export function ManagerMeetingsPanel({
             </section>
           </div>
 
-          <section className="bg-white border border-indigo-100 rounded-3xl p-4 sm:p-6 shadow-sm">
-            <h3 className="text-xs font-black text-indigo-800 uppercase tracking-widest flex items-center gap-2 mb-4">
+          <section className="bg-white border border-indigo-100 rounded-2xl p-4 sm:p-6 shadow-sm">
+            <h3 className="text-xs font-bold text-indigo-800 uppercase tracking-widest flex items-center gap-2 mb-4">
               <CalendarDays size={16} className="text-indigo-500" />
               Встречи на {selectedDateLabel}
             </h3>
@@ -1298,8 +1298,8 @@ export function ManagerMeetingsPanel({
       )}
 
       {mode !== 'calendar' && (
-        <section className="bg-white border border-gray-200 rounded-3xl p-4 sm:p-6 shadow-sm overflow-x-auto">
-          <h3 className="text-xs font-black text-gray-800 uppercase tracking-widest flex items-center gap-2 mb-4">
+        <section className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-6 shadow-sm overflow-x-auto">
+          <h3 className="text-xs font-bold text-gray-800 uppercase tracking-widest flex items-center gap-2 mb-4">
             <CalendarDays size={16} className="text-blue-500" />
             Все встречи
           </h3>
@@ -1314,7 +1314,7 @@ export function ManagerMeetingsPanel({
             </div>
             <div className="flex flex-wrap gap-3 items-end">
             <div className="space-y-1.5 w-full sm:w-auto sm:min-w-[200px]">
-              <label className="text-[10px] font-black text-gray-400 uppercase">Контрагент / БИН</label>
+              <label className="text-[10px] font-bold text-gray-400 uppercase">Контрагент / БИН</label>
               <input
                 type="text"
                 className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm"
@@ -1324,7 +1324,7 @@ export function ManagerMeetingsPanel({
               />
             </div>
             <div className="space-y-1.5 w-full sm:w-auto sm:min-w-[200px]">
-              <label className="text-[10px] font-black text-gray-400 uppercase">Тип встречи</label>
+              <label className="text-[10px] font-bold text-gray-400 uppercase">Тип встречи</label>
               <select
                 className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm font-semibold"
                 value={assignedTypeFilter}
@@ -1336,7 +1336,7 @@ export function ManagerMeetingsPanel({
               </select>
             </div>
             <div className="space-y-1.5 w-full sm:w-auto sm:min-w-[200px]">
-              <label className="text-[10px] font-black text-gray-400 uppercase">Статус</label>
+              <label className="text-[10px] font-bold text-gray-400 uppercase">Статус</label>
               <select
                 className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm font-semibold"
                 value={assignedStatusFilter}
@@ -1357,7 +1357,7 @@ export function ManagerMeetingsPanel({
                 setAssignedTypeFilter('all');
                 setAssignedCounterpartyFilter('');
               }}
-              className="w-full sm:w-auto px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider border border-gray-200 text-gray-600 hover:bg-white"
+              className="w-full sm:w-auto px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider border border-gray-200 text-gray-600 hover:bg-white"
             >
               Сбросить фильтр
             </button>
@@ -1365,7 +1365,7 @@ export function ManagerMeetingsPanel({
           </div>
           <table className="w-full text-sm border-collapse min-w-[900px]">
           <thead>
-            <tr className="text-[10px] font-black text-gray-400 border-b">
+            <tr className="text-[10px] font-bold text-gray-400 border-b">
               <th className="text-left py-2">Дата назначения встречи</th>
               <th className="text-left py-2">Контрагент</th>
               <th className="text-center py-2">Тип</th>
@@ -1395,7 +1395,7 @@ export function ManagerMeetingsPanel({
                     </td>
                     <td className="py-3 text-center">
                       <span
-                        className={`px-2 py-1 rounded text-[10px] font-black uppercase ${
+                        className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
                           a.type === 'Новая' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'
                         }`}
                       >
@@ -1441,15 +1441,15 @@ export function ManagerMeetingsPanel({
           onClick={() => setResultPreviewText(null)}
         >
           <div
-            className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-gray-100 p-6 sm:p-8 text-left"
+            className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-gray-100 p-6 sm:p-8 text-left"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-4">
-              <h4 className="text-xs font-black text-gray-700 uppercase tracking-widest">Итог встречи</h4>
+              <h4 className="text-xs font-bold text-gray-700 uppercase tracking-widest">Итог встречи</h4>
               <button
                 type="button"
                 onClick={() => setResultPreviewText(null)}
-                className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase border border-gray-200 text-gray-600 hover:bg-gray-50"
+                className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase border border-gray-200 text-gray-600 hover:bg-gray-50"
               >
                 Закрыть
               </button>

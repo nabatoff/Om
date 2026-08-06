@@ -36,63 +36,70 @@ export function LoginView() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-[#f4f6f8] text-gray-800 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        <div className="flex items-center gap-3 mb-10 justify-center text-blue-400">
-          <div className="p-3 bg-blue-600/20 rounded-xl">
-            <ShieldCheck size={28} />
+        <div className="flex items-center gap-3 mb-8 justify-center">
+          <div className="bg-blue-600 text-white p-2.5 rounded-lg">
+            <ShieldCheck size={22} />
           </div>
           <div className="text-left">
-            <h1 className="text-lg font-bold tracking-tight">CRM</h1>
-            <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Вход</p>
+            <h1 className="text-lg font-bold text-gray-900 tracking-tight">Модуль отчетов</h1>
+            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Вход в CRM</p>
           </div>
         </div>
-        <p className="text-xs text-slate-500 text-center mb-4">
-          Войти по <strong>логину</strong> и паролю, которые выдал администратор.
-        </p>
-        <form onSubmit={submit} className="space-y-4 text-left">
-          {err && (
-            <div className="rounded-2xl px-4 py-3 text-sm bg-red-500/10 text-red-200 border border-red-500/20">{err}</div>
-          )}
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-black text-slate-500 uppercase flex items-center gap-1.5">
-              <User size={12} />
-              Логин
-            </label>
-            <input
-              type="text"
-              name="username"
-              autoComplete="username"
-              required
-              minLength={2}
-              maxLength={32}
-              className="w-full font-mono bg-slate-900/80 border border-slate-800 rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500/50"
-              value={login}
-              onChange={(e) => setLogin(e.target.value)}
-              placeholder="например ivan_01"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-black text-slate-500 uppercase">Пароль</label>
-            <input
-              type="password"
-              autoComplete="current-password"
-              required
-              minLength={6}
-              className="w-full bg-slate-900/80 border border-slate-800 rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500/50"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={pending}
-            className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-black text-xs uppercase tracking-widest py-4 rounded-2xl mt-6"
-          >
-            <LogIn size={18} />
-            {pending ? '…' : 'Войти'}
-          </button>
-        </form>
+
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sm:p-8">
+          <p className="text-xs text-gray-500 text-center mb-5">
+            Войти по <strong className="text-gray-800">логину</strong> и паролю, которые выдал администратор.
+          </p>
+          <form onSubmit={submit} className="space-y-4 text-left">
+            {err && (
+              <div className="rounded-xl px-4 py-3 text-sm bg-red-50 text-red-700 border border-red-100 font-medium">
+                {err}
+              </div>
+            )}
+            <div>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                <User size={12} />
+                Логин
+              </label>
+              <input
+                type="text"
+                name="username"
+                autoComplete="username"
+                required
+                minLength={2}
+                maxLength={32}
+                className="w-full font-mono bg-white border border-gray-200 rounded-lg px-4 py-2.5 text-sm font-medium outline-none focus:border-blue-500 transition"
+                value={login}
+                onChange={(e) => setLogin(e.target.value)}
+                placeholder="например ivan_01"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1.5">
+                Пароль
+              </label>
+              <input
+                type="password"
+                autoComplete="current-password"
+                required
+                minLength={6}
+                className="w-full bg-white border border-gray-200 rounded-lg px-4 py-2.5 text-sm font-medium outline-none focus:border-blue-500 transition"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={pending}
+              className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-sm py-3 rounded-xl mt-2 shadow-sm transition"
+            >
+              <LogIn size={18} />
+              {pending ? '…' : 'Войти'}
+            </button>
+          </form>
+        </div>
       </div>
     </div>
   );

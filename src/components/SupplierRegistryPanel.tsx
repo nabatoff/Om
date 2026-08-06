@@ -77,7 +77,7 @@ function FilterField({
 }) {
   return (
     <div className={className}>
-      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">{label}</p>
+      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">{label}</p>
       {children}
     </div>
   );
@@ -237,11 +237,11 @@ function RegistryOrderModal({
 
   return (
     <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-md z-[500] flex items-center justify-center p-4"
+      className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm z-[500] flex items-center justify-center p-4"
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-3xl w-full max-w-lg overflow-hidden flex flex-col shadow-2xl"
+        className="bg-white rounded-2xl w-full max-w-lg overflow-hidden flex flex-col shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="p-6 pb-4 relative border-b border-gray-100">
@@ -260,7 +260,7 @@ function RegistryOrderModal({
               className="bg-gray-50 rounded-2xl p-4 flex justify-between items-center"
             >
               <div>
-                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
                   Заказ №{line.index}
                 </span>
                 <p className="text-xs font-semibold text-gray-500 mt-1">
@@ -282,7 +282,7 @@ function RegistryOrderModal({
 
         <div className="p-6 border-t border-gray-100 flex justify-between items-end bg-gray-50/80">
           <div>
-            <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Итого сумма</div>
+            <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Итого сумма</div>
             <div className="text-xl font-extrabold text-emerald-600">{formatRegistryMoney(totalAmount)}</div>
             <div className="text-[11px] font-bold text-purple-700 mt-1">
               Итого комиссия: {formatRegistryMoney(totalCommission)}
@@ -291,7 +291,7 @@ function RegistryOrderModal({
           <button
             type="button"
             onClick={onClose}
-            className="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-blue-500"
+            className="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-blue-500"
           >
             OK
           </button>
@@ -626,7 +626,7 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
         </FilterField>
         {viewMode === 'cohort' && cohortMilestones ? (
           <div className="shrink-0 w-full xl:w-auto">
-            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 text-center">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 text-center">
               Показатели за период
             </p>
             <div className="flex items-stretch gap-2 justify-end xl:justify-start">
@@ -655,7 +655,7 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th
-                  className="p-4 text-xs font-black text-gray-500 uppercase tracking-tight cursor-pointer hover:bg-gray-100 w-1/4"
+                  className="p-4 text-xs font-bold text-gray-500 uppercase tracking-tight cursor-pointer hover:bg-gray-100 w-1/4"
                   onClick={() => handleSort('name')}
                 >
                   <div className="flex items-center">
@@ -664,7 +664,7 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
                   </div>
                 </th>
                 <th
-                  className="p-4 text-xs font-black text-gray-500 uppercase tracking-tight cursor-pointer hover:bg-gray-100"
+                  className="p-4 text-xs font-bold text-gray-500 uppercase tracking-tight cursor-pointer hover:bg-gray-100"
                   onClick={() => handleSort('managerName')}
                 >
                   <div className="flex items-center">
@@ -673,7 +673,7 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
                   </div>
                 </th>
                 <th
-                  className="p-4 text-xs font-black text-gray-500 uppercase tracking-tight cursor-pointer hover:bg-gray-100"
+                  className="p-4 text-xs font-bold text-gray-500 uppercase tracking-tight cursor-pointer hover:bg-gray-100"
                   onClick={() => handleSort('monthsWithUs')}
                 >
                   <div className="flex items-center">
@@ -684,7 +684,7 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
                 {displayedMonths.map((month) => (
                   <th
                     key={month}
-                    className="p-4 text-xs font-black text-blue-800 text-right bg-blue-50/50 border-l border-gray-100 whitespace-nowrap pr-6 cursor-pointer hover:bg-blue-100/50"
+                    className="p-4 text-xs font-bold text-blue-800 text-right bg-blue-50/50 border-l border-gray-100 whitespace-nowrap pr-6 cursor-pointer hover:bg-blue-100/50"
                     onClick={() => handleSort(monthSortKey(month))}
                   >
                     <div className="flex items-center justify-end">
@@ -694,7 +694,7 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
                   </th>
                 ))}
                 <th
-                  className="p-4 text-xs font-black text-gray-500 uppercase text-center border-l border-gray-200 bg-gray-50 cursor-pointer hover:bg-gray-100"
+                  className="p-4 text-xs font-bold text-gray-500 uppercase text-center border-l border-gray-200 bg-gray-50 cursor-pointer hover:bg-gray-100"
                   onClick={() => handleSort('totalOrders')}
                 >
                   <div className="flex items-center justify-center">
@@ -703,7 +703,7 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
                   </div>
                 </th>
                 <th
-                  className="p-4 text-xs font-black text-gray-500 uppercase text-right bg-gray-50 cursor-pointer hover:bg-gray-100"
+                  className="p-4 text-xs font-bold text-gray-500 uppercase text-right bg-gray-50 cursor-pointer hover:bg-gray-100"
                   onClick={() => handleSort('totalTurnover')}
                 >
                   <div className="flex items-center justify-end">

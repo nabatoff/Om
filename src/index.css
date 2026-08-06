@@ -1,3 +1,158 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --om-bg: #f4f6f8;
+  --om-surface: #ffffff;
+  --om-border: #e5e7eb;
+  --om-border-soft: #f3f4f6;
+  --om-text: #1f2937;
+  --om-muted: #9ca3af;
+  --om-accent: #2563eb;
+  --om-accent-hover: #1d4ed8;
+  --om-radius: 1rem;
+  --om-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+    background-color: var(--om-bg);
+    color: var(--om-text);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  #root {
+    min-height: 100dvh;
+  }
+
+  input,
+  select,
+  textarea,
+  button {
+    font-family: inherit;
+  }
+}
+
+@layer components {
+  .om-page {
+    @apply min-h-screen text-gray-800 text-sm;
+    background-color: var(--om-bg);
+  }
+
+  .om-header {
+    @apply bg-white border-b border-gray-200 shrink-0 z-20 sticky top-0;
+  }
+
+  .om-header-inner {
+    @apply max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8;
+  }
+
+  .om-main {
+    @apply flex-1 p-4 sm:p-6 lg:p-8;
+  }
+
+  .om-main-inner {
+    @apply max-w-[1600px] mx-auto space-y-6;
+  }
+
+  .om-card {
+    @apply bg-white p-6 rounded-2xl shadow-sm border border-gray-100;
+  }
+
+  .om-card-sm {
+    @apply bg-white p-4 rounded-2xl shadow-sm border border-gray-100;
+  }
+
+  .om-section-title {
+    @apply text-sm font-bold text-gray-800 uppercase tracking-wide;
+  }
+
+  .om-label {
+    @apply text-[10px] font-bold text-gray-500 uppercase tracking-widest;
+  }
+
+  .om-pill-track {
+    @apply flex items-center gap-1 bg-gray-50/50 p-1 rounded-full border border-gray-100 overflow-x-auto;
+  }
+
+  .om-pill {
+    @apply flex items-center justify-center gap-2 px-4 sm:px-5 py-2 rounded-full text-xs sm:text-sm font-semibold transition-all whitespace-nowrap text-gray-500 hover:text-gray-900;
+  }
+
+  .om-pill-active {
+    @apply bg-blue-600 text-white shadow-sm hover:text-white;
+  }
+
+  .om-btn {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition border shadow-sm disabled:opacity-40;
+  }
+
+  .om-btn-primary {
+    @apply om-btn bg-blue-600 border-blue-600 text-white hover:bg-blue-700 hover:border-blue-700;
+  }
+
+  .om-btn-secondary {
+    @apply om-btn bg-white border-gray-200 text-gray-700 hover:bg-gray-50;
+  }
+
+  .om-btn-ghost {
+    @apply om-btn bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-600 hover:text-white hover:border-blue-600;
+  }
+
+  .om-input {
+    @apply w-full bg-white border border-gray-200 text-sm font-medium rounded-lg px-4 py-2.5 outline-none focus:border-blue-500 transition;
+  }
+
+  .om-stat {
+    @apply p-4 rounded-xl;
+  }
+
+  .om-stat-label {
+    @apply text-[10px] font-bold uppercase tracking-widest mb-1;
+  }
+
+  .om-stat-value {
+    @apply text-2xl font-black;
+  }
+
+  .om-table-head {
+    @apply text-[10px] uppercase text-gray-400 font-bold bg-gray-50;
+  }
+
+  .om-modal-overlay {
+    @apply fixed inset-0 bg-gray-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4;
+  }
+
+  .om-modal {
+    @apply bg-white rounded-2xl shadow-xl border border-gray-100 w-full overflow-hidden;
+  }
+
+  .om-modal-footer {
+    @apply p-5 border-t border-gray-100 bg-gray-50 rounded-b-2xl flex justify-end gap-3;
+  }
+}
+
+/* Scrollbar like prototype */
+.custom-scrollbar::-webkit-scrollbar,
+.om-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track,
+.om-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb,
+.om-scroll::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 10px;
+}

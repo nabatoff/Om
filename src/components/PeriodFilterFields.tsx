@@ -13,7 +13,7 @@ import {
 } from '../lib/periodBounds';
 
 const quickBtn =
-  'px-3 py-1.5 rounded-lg text-xs font-black border border-gray-200 text-gray-700 bg-white hover:bg-gray-50 uppercase tracking-wide';
+  'px-3 py-1.5 rounded-lg text-xs font-bold border border-gray-200 text-gray-700 bg-white hover:bg-gray-50 uppercase tracking-wide';
 
 type Props = {
   from: string;
@@ -72,10 +72,10 @@ export function PeriodFilterFields({ from, to, setFrom, setTo, sectionTitle }: P
   return (
     <div className="w-full space-y-3 text-left">
       {sectionTitle ? (
-        <p className="text-[10px] font-black text-gray-500 uppercase tracking-wide">{sectionTitle}</p>
+        <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">{sectionTitle}</p>
       ) : null}
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[10px] font-black text-gray-400 uppercase shrink-0">Быстрый период</span>
+        <span className="text-[10px] font-bold text-gray-400 uppercase shrink-0">Быстрый период</span>
         <button
           type="button"
           className={quickBtn}
@@ -122,7 +122,7 @@ export function PeriodFilterFields({ from, to, setFrom, setTo, sectionTitle }: P
       </div>
       <div className="flex flex-wrap gap-3 sm:gap-4 items-end">
         <div className="w-full sm:flex-1 sm:min-w-[200px] space-y-1.5">
-          <label className="text-[10px] font-black text-gray-400 uppercase">Тип периода</label>
+          <label className="text-[10px] font-bold text-gray-400 uppercase">Тип периода</label>
           <select
             className="w-full px-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-sm font-bold"
             value={kind}
@@ -137,7 +137,7 @@ export function PeriodFilterFields({ from, to, setFrom, setTo, sectionTitle }: P
         </div>
         {kind === 'month' && (
           <div className="w-full sm:flex-1 sm:min-w-[200px] space-y-1.5">
-            <label className="text-[10px] font-black text-gray-400 uppercase">Месяц</label>
+            <label className="text-[10px] font-bold text-gray-400 uppercase">Месяц</label>
             <select
               className="w-full px-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-sm font-bold"
               value={monthYm}
@@ -158,7 +158,7 @@ export function PeriodFilterFields({ from, to, setFrom, setTo, sectionTitle }: P
         {kind === 'range' && (
           <>
             <div className="w-full sm:flex-1 sm:min-w-[150px] space-y-1.5">
-              <label className="text-[10px] font-black text-gray-400 uppercase">Дата с</label>
+              <label className="text-[10px] font-bold text-gray-400 uppercase">Дата с</label>
               <input
                 type="date"
                 className="w-full px-4 py-2.5 bg-gray-50 border rounded-xl text-sm"
@@ -170,7 +170,7 @@ export function PeriodFilterFields({ from, to, setFrom, setTo, sectionTitle }: P
               />
             </div>
             <div className="w-full sm:flex-1 sm:min-w-[150px] space-y-1.5">
-              <label className="text-[10px] font-black text-gray-400 uppercase">Дата по</label>
+              <label className="text-[10px] font-bold text-gray-400 uppercase">Дата по</label>
               <input
                 type="date"
                 className="w-full px-4 py-2.5 bg-gray-50 border rounded-xl text-sm"

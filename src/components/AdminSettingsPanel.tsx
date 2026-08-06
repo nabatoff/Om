@@ -175,23 +175,23 @@ export function AdminSettingsPanel({ onRefreshReports, onMrpUpdated, onAnalytics
       </div>
 
       <section className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm space-y-4 max-w-xl">
-        <h3 className="text-xs font-black text-gray-500 uppercase tracking-widest">МРП (₸)</h3>
+        <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest">МРП (₸)</h3>
         <div className="flex flex-wrap gap-3 items-end">
           <div className="space-y-1 flex-1 min-w-[140px]">
-            <label className="text-[10px] font-black text-gray-400 uppercase">Значение</label>
+            <label className="text-[10px] font-bold text-gray-400 uppercase">Значение</label>
             <input
               type="text"
               inputMode="numeric"
               value={mrp}
               onChange={(e) => setMrp(e.target.value.replace(/[^\d]/g, ''))}
-              className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-black"
+              className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold"
             />
           </div>
           <button
             type="button"
             disabled={saving}
             onClick={() => void saveMrp()}
-            className="px-4 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-black uppercase tracking-wider hover:bg-blue-500 disabled:opacity-60"
+            className="px-4 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-bold uppercase tracking-wider hover:bg-blue-500 disabled:opacity-60"
           >
             {saving ? 'Сохранение…' : 'Сохранить'}
           </button>
@@ -208,7 +208,7 @@ export function AdminSettingsPanel({ onRefreshReports, onMrpUpdated, onAnalytics
       </section>
 
       <section className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm space-y-4 max-w-xl">
-        <h3 className="text-xs font-black text-gray-500 uppercase tracking-widest">Категории клиентов</h3>
+        <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest">Категории клиентов</h3>
         {categories.length === 0 ? (
           <p className="text-sm text-gray-500">Категорий пока нет.</p>
         ) : (
@@ -223,7 +223,7 @@ export function AdminSettingsPanel({ onRefreshReports, onMrpUpdated, onAnalytics
                   type="button"
                   disabled={categorySaving}
                   onClick={() => void removeCategory(cat.id, cat.name)}
-                  className="text-[10px] font-black uppercase tracking-wider text-rose-600 hover:text-rose-800 disabled:opacity-50"
+                  className="text-[10px] font-bold uppercase tracking-wider text-rose-600 hover:text-rose-800 disabled:opacity-50"
                 >
                   Удалить
                 </button>
@@ -233,7 +233,7 @@ export function AdminSettingsPanel({ onRefreshReports, onMrpUpdated, onAnalytics
         )}
         <div className="flex flex-wrap gap-3 items-end">
           <div className="space-y-1 flex-1 min-w-[180px]">
-            <label className="text-[10px] font-black text-gray-400 uppercase">Новая категория</label>
+            <label className="text-[10px] font-bold text-gray-400 uppercase">Новая категория</label>
             <input
               type="text"
               value={newCategoryName}
@@ -246,7 +246,7 @@ export function AdminSettingsPanel({ onRefreshReports, onMrpUpdated, onAnalytics
             type="button"
             disabled={categorySaving}
             onClick={() => void addCategory()}
-            className="px-4 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-black uppercase tracking-wider hover:bg-blue-500 disabled:opacity-60"
+            className="px-4 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-bold uppercase tracking-wider hover:bg-blue-500 disabled:opacity-60"
           >
             {categorySaving ? 'Сохранение…' : 'Добавить'}
           </button>
@@ -257,7 +257,7 @@ export function AdminSettingsPanel({ onRefreshReports, onMrpUpdated, onAnalytics
       </section>
 
       <section className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm space-y-4 max-w-xl">
-        <h3 className="text-xs font-black text-gray-500 uppercase tracking-widest">Интерфейс админки</h3>
+        <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest">Интерфейс админки</h3>
         <p className="text-sm text-gray-700">
           Вкладка «Аналитика» (таблица контрагентов):{' '}
           <span className="font-black">{analyticsTabEnabled ? 'включена' : 'отключена'}</span>
@@ -266,7 +266,7 @@ export function AdminSettingsPanel({ onRefreshReports, onMrpUpdated, onAnalytics
           type="button"
           disabled={analyticsTabSaving}
           onClick={() => void toggleAnalyticsTab()}
-          className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider border disabled:opacity-60 ${
+          className={`px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider border disabled:opacity-60 ${
             analyticsTabEnabled
               ? 'border-rose-200 bg-rose-50 text-rose-800 hover:bg-rose-100'
               : 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
@@ -284,7 +284,7 @@ export function AdminSettingsPanel({ onRefreshReports, onMrpUpdated, onAnalytics
       </section>
 
       <section className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm space-y-4 max-w-xl">
-        <h3 className="text-xs font-black text-gray-500 uppercase tracking-widest">Архив заказов</h3>
+        <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest">Архив заказов</h3>
         <p className="text-sm text-gray-700">
           Заказов без комиссии:{' '}
           <span className="font-black">{pendingWithout ?? '—'}</span>
@@ -296,7 +296,7 @@ export function AdminSettingsPanel({ onRefreshReports, onMrpUpdated, onAnalytics
           type="button"
           disabled={backfilling || (pendingWithout ?? 0) === 0}
           onClick={() => void runBackfill()}
-          className="px-4 py-2.5 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 text-xs font-black uppercase tracking-wider hover:bg-amber-100 disabled:opacity-50"
+          className="px-4 py-2.5 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 text-xs font-bold uppercase tracking-wider hover:bg-amber-100 disabled:opacity-50"
         >
           {backfilling ? (
             <span className="inline-flex items-center gap-2">
