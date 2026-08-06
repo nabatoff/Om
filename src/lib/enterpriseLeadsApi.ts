@@ -156,7 +156,12 @@ export async function diggerTransferEnterpriseBatchApi(
 }
 
 export async function adminDeleteReturnedLeadApi(leadId: string): Promise<void> {
-  const { error } = await getSupabase().rpc('admin_delete_returned_lead', { p_lead_id: leadId });
+  const { error } = await getSupabase().rpc('admin_delete_enterprise_lead', { p_lead_id: leadId });
+  if (error) throw error;
+}
+
+export async function adminDeleteEnterpriseLeadApi(leadId: string): Promise<void> {
+  const { error } = await getSupabase().rpc('admin_delete_enterprise_lead', { p_lead_id: leadId });
   if (error) throw error;
 }
 

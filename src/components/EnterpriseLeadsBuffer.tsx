@@ -4,7 +4,7 @@ import type { UiManagerProfile } from '../lib/crmApi';
 import {
   adminAssignEnterpriseLeadApi,
   adminClearReturnedLeadsApi,
-  adminDeleteReturnedLeadApi,
+  adminDeleteEnterpriseLeadApi,
   formatLeadDate,
   listEnterpriseLeadsApi,
   listLeadEventsApi,
@@ -84,13 +84,20 @@ export function EnterpriseLeadsBuffer({ managers, onAssigned }: Props) {
     }
   };
 
-  const deleteReturned = async (leadId: string) => {
-    if (!confirm('Удалить этот возврат из истории?')) return;
+  const deleteLead = async (leadId: string) => {
+    const msg =
+      tab === 'returned'
+        ? 'Удалить этот возврат? У лидоруба он тоже исчезнет.'
+        : tab === 'assigned'
+          ? 'Удалить лид? Исчезнет у лидоруба и у менеджера (включая назначенную встречу).'
+          : 'Удалить лид из очереди? У лидоруба он тоже исчезнет.';
+    if (!confirm(msg)) return;
     setDeletingId(leadId);
     setErr(null);
     try {
-      await adminDeleteReturnedLeadApi(leadId);
+      await adminDeleteEnterpriseLeadApi(leadId);
       await load();
+      await onAssigned?.();
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Не удалось удалить');
     } finally {
@@ -238,7 +245,7 @@ export function EnterpriseLeadsBuffer({ managers, onAssigned }: Props) {
                             <button
                               type="button"
                               disabled={deletingId === r.id}
-                              onClick={() => void deleteReturned(r.id)}
+                              onClick={() => void deleteLead(r.id)}
                               className="inline-flex items-center gap-1.5 bg-red-50 hover:bg-red-100 text-red-700 px-3 py-2 rounded-lg text-xs font-bold transition disabled:opacity-40 border border-red-100"
                             >
                               <Trash2 size={14} />
@@ -275,6 +282,16 @@ export function EnterpriseLeadsBuffer({ managers, onAssigned }: Props) {
                               className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-xs font-bold transition disabled:opacity-40"
                             >
                               {assigningId === r.id ? '…' : 'OK'}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={deletingId === r.id}
+                              onClick={() => void deleteLead(r.id)}
+                              className="inline-flex items-center gap-1.5 bg-red-50 hover:bg-red-100 text-red-700 px-3 py-2 rounded-lg text-xs font-bold transition disabled:opacity-40 border border-red-100"
+                              title="Удалить лид"
+                            >
+                              <Trash2 size={14} />
+                              {deletingId === r.id ? '…' : 'Удалить'}
                             </button>
                             <button
                               type="button"
