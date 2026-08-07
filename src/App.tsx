@@ -84,11 +84,17 @@ import { GoszakupContractsPanel } from './components/GoszakupContractsPanel';
 import { AdminOrderEditModal } from './components/AdminOrderEditModal';
 import { AdminOrderCreateModal } from './components/AdminOrderCreateModal';
 import { EnterpriseLeadsBuffer } from './components/EnterpriseLeadsBuffer';
+import { EnterpriseLeadsAllPanel } from './components/EnterpriseLeadsAllPanel';
 import { LeadDiggerLeadsPanel } from './components/LeadDiggerLeadsPanel';
 import { LeadDiggerConversionDashboard } from './components/LeadDiggerConversionDashboard';
 import { ManagerEnterpriseLeadsPanel } from './components/ManagerEnterpriseLeadsPanel';
 import { DiggerTransferModal } from './components/DiggerTransferModal';
-import { setClientBusinessScaleApi, listEnterpriseLeadsApi, type EnterpriseLead } from './lib/enterpriseLeadsApi';
+import {
+  setClientBusinessScaleApi,
+  listEnterpriseLeadsApi,
+  leadTransferredDay,
+  type EnterpriseLead,
+} from './lib/enterpriseLeadsApi';
 import { notifyEnterpriseLeadTelegram } from './lib/telegramEnterpriseLead';
 import {
   STAFF_DEPT_OPTIONS,
@@ -212,6 +218,7 @@ function getSavedAdminSubView():
   | 'meetings'
   | 'settings'
   | 'enterpriseLeads'
+  | 'enterpriseLeadsAll'
   | 'diggerConversion' {
   const raw = localStorage.getItem(LS_ADMIN_SUBVIEW);
   return raw === 'salesDashboard' ||
@@ -221,6 +228,7 @@ function getSavedAdminSubView():
     raw === 'meetings' ||
     raw === 'settings' ||
     raw === 'enterpriseLeads' ||
+    raw === 'enterpriseLeadsAll' ||
     raw === 'diggerConversion'
     ? raw
     : 'salesDashboard';
@@ -316,6 +324,7 @@ const App = () => {
     | 'meetings'
     | 'settings'
     | 'enterpriseLeads'
+    | 'enterpriseLeadsAll'
     | 'diggerConversion'
   >(() => getSavedAdminSubView());
   const [clientsOrdersSubView, setClientsOrdersSubView] = useState<ClientsOrdersSubView>(() =>
@@ -472,7 +481,7 @@ const App = () => {
       if (!canAdminWrite) setAdminSubView('kpi');
     }
     if (isAdmin && !canAdminWrite && currentView === 'admin') {
-      const allowed: typeof adminSubView[] = ['kpi', 'diggerConversion'];
+      const allowed: typeof adminSubView[] = ['kpi', 'diggerConversion', 'enterpriseLeadsAll'];
       if (!allowed.includes(adminSubView)) {
         setAdminSubView('kpi');
       }
@@ -628,7 +637,19 @@ const App = () => {
       if (refreshAfterSave || webhook) latestReports = await loadReports();
       if (webhook) {
         try {
-          await postTelegramDailyDigestIfConfigured(latestReports, managerReportDate);
+          const dayLeads = await listEnterpriseLeadsApi('all').catch(() => [] as EnterpriseLead[]);
+          const transferMap = new Map<string, number>();
+          for (const l of dayLeads) {
+            if (leadTransferredDay(l) !== managerReportDate) continue;
+            const name = (l.creatorName || '').trim() || '—';
+            transferMap.set(name, (transferMap.get(name) || 0) + 1);
+          }
+          await postTelegramDailyDigestIfConfigured(
+            latestReports,
+            managerReportDate,
+            assigneeProfiles,
+            Array.from(transferMap.entries()).map(([diggerName, count]) => ({ diggerName, count })),
+          );
         } catch (err) {
           console.error('[telegram digest]', err);
         }
@@ -1436,6 +1457,14 @@ const App = () => {
                 ) : null}
                 <button
                   type="button"
+                  onClick={() => setAdminSubView('enterpriseLeadsAll')}
+                  className={`om-subpill ${adminSubView === 'enterpriseLeadsAll' ? 'om-subpill-active' : 'om-subpill-idle'}`}
+                >
+                  <ClipboardCheck size={16} />
+                  Переданные в круп
+                </button>
+                <button
+                  type="button"
                   onClick={() => setAdminSubView('diggerConversion')}
                   className={`om-subpill ${adminSubView === 'diggerConversion' ? 'om-subpill-active' : 'om-subpill-idle'}`}
                 >
@@ -1556,6 +1585,8 @@ const App = () => {
             isSalesManager={!isAdmin && !isLeadDigger}
             sessionUserId={sessionUserId}
             creatorName={managerName}
+            diggerProfiles={assigneeProfiles.filter((p) => p.role === 'lead_digger')}
+            canSetDigger={canAdminWrite}
             onOpenAddClient={(inputValue, callback) => {
               const isBin = /^\d{12}$/.test(inputValue.trim());
               setEditingClientBin(null);
@@ -1625,6 +1656,7 @@ const App = () => {
             {adminSubView === 'enterpriseLeads' && canAdminWrite && (
               <EnterpriseLeadsBuffer managers={managerProfiles} onAssigned={refresh} />
             )}
+            {adminSubView === 'enterpriseLeadsAll' && <EnterpriseLeadsAllPanel />}
             {adminSubView === 'diggerConversion' && <LeadDiggerConversionDashboard />}
             {adminSubView === 'staff' && canAdminWrite && <StaffManager />}
             {adminSubView === 'meetings' && canAdminWrite && (
@@ -1638,6 +1670,7 @@ const App = () => {
                 onAdminRestoreMeeting={restoreAdminMeeting}
                 onAdminHardDeleteMeeting={hardDeleteAdminMeeting}
                 onRefreshReports={refresh}
+                diggerProfiles={assigneeProfiles.filter((p) => p.role === 'lead_digger')}
               />
             )}
             {adminSubView === 'settings' && canAdminWrite && (
@@ -2227,6 +2260,8 @@ const ManagerDashboard = ({
   isSalesManager = false,
   sessionUserId = null,
   creatorName = '',
+  diggerProfiles = [],
+  canSetDigger = false,
 }: {
   stats: FormStats;
   setStats: SetState<FormStats>;
@@ -2254,6 +2289,8 @@ const ManagerDashboard = ({
   isSalesManager?: boolean;
   sessionUserId?: string | null;
   creatorName?: string;
+  diggerProfiles?: Array<{ id: string; fullName: string; role: string }>;
+  canSetDigger?: boolean;
 }) => {
   const [statDraft, setStatDraft] = useState<Record<keyof FormStats, string>>({
     processedTotal: String(stats.processedTotal),
@@ -2278,9 +2315,7 @@ const ManagerDashboard = ({
   const refreshTransferredCount = useCallback(async () => {
     try {
       const data = await listEnterpriseLeadsApi('all');
-      setTransferredToEnterprise(
-        data.filter((r) => (r.transferredAt || '').slice(0, 10) === reportDate).length,
-      );
+      setTransferredToEnterprise(data.filter((r) => leadTransferredDay(r) === reportDate).length);
     } catch {
       setTransferredToEnterprise(0);
     }
@@ -2296,9 +2331,7 @@ const ManagerDashboard = ({
       try {
         const data = await listEnterpriseLeadsApi('all');
         if (cancelled) return;
-        setTransferredToEnterprise(
-          data.filter((r) => (r.transferredAt || '').slice(0, 10) === reportDate).length,
-        );
+        setTransferredToEnterprise(data.filter((r) => leadTransferredDay(r) === reportDate).length);
       } catch {
         if (!cancelled) setTransferredToEnterprise(0);
       }
@@ -2505,6 +2538,8 @@ const ManagerDashboard = ({
         onOpenAddClient={onOpenAddClient}
         seedKey={`assigned-${reportDate}`}
         onSaveItem={() => onSaveAction({ refreshAfterSave: false })}
+        diggerProfiles={diggerProfiles}
+        canSetDigger={canSetDigger}
       />
       <MeetingTable
         title="Проведено встреч (Факт)"
@@ -2516,6 +2551,8 @@ const ManagerDashboard = ({
         allReports={allReports}
         currentAssignedMeetings={assignedMeetings}
         currentConductedMeetings={conductedMeetings}
+        diggerProfiles={diggerProfiles}
+        canSetDigger={canSetDigger}
         onResultClick={(idx) => {
           setActiveMeetingIndex(idx);
           setMeetingResultTemp(conductedMeetings[idx]?.result ?? '');
@@ -2580,7 +2617,7 @@ const ManagerDashboard = ({
             setTransferModalOpen(false);
             setTransferDraft('');
           }}
-          onSuccess={async ({ items, meetingRows }) => {
+          onSuccess={async ({ items, meetingRows, skippedExisting }) => {
             for (const item of items) {
               if (!item.created || item.skipped_existing) continue;
               void notifyEnterpriseLeadTelegram({
@@ -2599,7 +2636,7 @@ const ManagerDashboard = ({
                 entityName: r.name,
                 bin: r.bin,
                 date: reportDate,
-                type: 'Новая',
+                type: 'Крупный лид',
               }));
             const merged = extras.length > 0 ? [...assignedMeetings, ...extras] : assignedMeetings;
             if (extras.length > 0) {
@@ -2612,6 +2649,9 @@ const ManagerDashboard = ({
 
             setTransferDraft('');
             await refreshTransferredCount();
+            if (skippedExisting > 0) {
+              alert(`${skippedExisting} уже в воронке, пропущено`);
+            }
           }}
         />
       ) : null}
@@ -2898,6 +2938,8 @@ const MeetingTable = ({
   onOpenAddClient,
   seedKey,
   onSaveItem,
+  diggerProfiles = [],
+  canSetDigger = false,
 }: {
   title: string;
   icon: ReactNode;
@@ -2913,9 +2955,13 @@ const MeetingTable = ({
   onOpenAddClient: (input: string, cb: (c: UiClient) => void) => void;
   seedKey: string;
   onSaveItem: () => Promise<boolean>;
+  diggerProfiles?: Array<{ id: string; fullName: string; role: string }>;
+  canSetDigger?: boolean;
 }) => {
   const normalizeText = (value: string) => value.trim().toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ');
   const normalizeBin = (value: string) => value.replace(/\D/g, '');
+  const isKrupType = (t: string) => normalizeKpiMeetingType(t).includes('крупн');
+  const [diggerPickByIdx, setDiggerPickByIdx] = useState<Record<number, string>>({});
 
   const hasAnyNewMeetingForCounterparty = (entityName: string, bin: string, selfIdx?: number): boolean => {
     const targetBin = normalizeBin(bin);
@@ -3183,7 +3229,7 @@ const MeetingTable = ({
                         const nextType = e.target.value;
                         if (type === 'conducted') {
                           const forcedType = getForcedConductedTypeForCounterparty(row.entityName, row.bin, idx);
-                          if (forcedType && nextType !== forcedType) {
+                          if (forcedType && nextType !== forcedType && !isKrupType(nextType)) {
                             alert(`С этим контрагентом есть непроведенная назначенная «${forcedType}». Доступен только этот тип.`);
                             updateRow(idx, 'type', forcedType);
                             return;
@@ -3199,16 +3245,37 @@ const MeetingTable = ({
                           return;
                         }
                         updateRow(idx, 'type', nextType);
+                        if (!isKrupType(nextType)) {
+                          setDiggerPickByIdx((prev) => {
+                            const n = { ...prev };
+                            delete n[idx];
+                            return n;
+                          });
+                        } else if (canSetDigger) {
+                          const bin = normalizeBin(row.bin);
+                          const existing = clients.find((c) => normalizeBin(c.bin) === bin)?.diggerId;
+                          if (existing) {
+                            setDiggerPickByIdx((prev) => ({ ...prev, [idx]: existing }));
+                          }
+                        }
                       }}
                     >
                       {type === 'conducted'
                         ? (() => {
                             const forcedType = getForcedConductedTypeForCounterparty(row.entityName, row.bin, idx);
-                            if (forcedType) return <option>{forcedType}</option>;
+                            if (forcedType) {
+                              return (
+                                <>
+                                  <option>{forcedType}</option>
+                                  <option>Крупный лид</option>
+                                </>
+                              );
+                            }
                             return (
                               <>
                                 <option>Новая</option>
                                 <option>Повторная</option>
+                                <option>Крупный лид</option>
                               </>
                             );
                           })()
@@ -3218,7 +3285,28 @@ const MeetingTable = ({
                           <option>Новая</option>
                         )}
                       {type !== 'conducted' && <option>Повторная</option>}
+                      {type !== 'conducted' && <option>Крупный лид</option>}
                     </select>
+                    {canSetDigger && isKrupType(row.type) && diggerProfiles.length > 0 ? (
+                      <select
+                        className="mt-1.5 w-full bg-white border border-gray-200 p-2 rounded-xl text-[11px] font-bold outline-none"
+                        value={
+                          diggerPickByIdx[idx] ||
+                          clients.find((c) => normalizeBin(c.bin) === normalizeBin(row.bin))?.diggerId ||
+                          ''
+                        }
+                        onChange={(e) =>
+                          setDiggerPickByIdx((prev) => ({ ...prev, [idx]: e.target.value }))
+                        }
+                      >
+                        <option value="">Лидоруб…</option>
+                        {diggerProfiles.map((d) => (
+                          <option key={d.id} value={d.id}>
+                            {d.fullName || d.id.slice(0, 8)}
+                          </option>
+                        ))}
+                      </select>
+                    ) : null}
                     </div>
                   </td>
                   {type === 'conducted' && (
@@ -3302,6 +3390,17 @@ const MeetingTable = ({
                           const currentSig = rowSig(row as UiAssigned | UiConducted);
                           const ok = await onSaveItem();
                           if (ok) {
+                            if (canSetDigger && isKrupType(row.type)) {
+                              const diggerId = diggerPickByIdx[idx];
+                              const bin = normalizeBin(row.bin);
+                              if (diggerId && bin.length === 12) {
+                                try {
+                                  await setClientDigger(bin, diggerId);
+                                } catch (e) {
+                                  alert(e instanceof Error ? e.message : 'Не удалось сохранить лидоруба');
+                                }
+                              }
+                            }
                             setSavedRows((prev) => {
                               const n = new Set(prev);
                               n.add(currentSig);
@@ -3749,7 +3848,7 @@ const KpiDashboard = ({
     const bounds = adminDateFilterBounds(filterDateFrom, filterDateTo);
     return enterpriseLeads.filter((l) => {
       if (l.routingStatus === 'returned_to_smb') return false;
-      const day = (l.transferredAt || '').slice(0, 10);
+      const day = leadTransferredDay(l);
       if (!reportDateMatchesAdminBounds(day, bounds)) return false;
       if (filterManager !== 'Все' && l.creatorName !== filterManager) return false;
       return true;
@@ -3769,7 +3868,7 @@ const KpiDashboard = ({
   const transferredByManagerDate = useMemo(() => {
     const map = new Map<string, number>();
     for (const l of diggerLeadsInPeriod) {
-      const day = (l.transferredAt || '').slice(0, 10);
+      const day = leadTransferredDay(l);
       const key = `${l.creatorName}||${day}`;
       map.set(key, (map.get(key) || 0) + 1);
     }

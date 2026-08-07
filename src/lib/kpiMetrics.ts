@@ -5,12 +5,20 @@ export function normalizeKpiMeetingType(value: string): string {
   return value.trim().toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ');
 }
 
+export function isEnterpriseLeadMeetingType(type: string): boolean {
+  return normalizeKpiMeetingType(type).includes('крупн');
+}
+
 export function isNewMeetingType(type: string): boolean {
-  return normalizeKpiMeetingType(type).startsWith('нов');
+  const n = normalizeKpiMeetingType(type);
+  if (n.includes('крупн')) return false;
+  return n.startsWith('нов');
 }
 
 export function isRepeatMeetingType(type: string): boolean {
-  return normalizeKpiMeetingType(type).startsWith('повтор');
+  const n = normalizeKpiMeetingType(type);
+  if (n.includes('крупн')) return false;
+  return n.startsWith('повтор');
 }
 
 function normalizeKpiText(value: string): string {

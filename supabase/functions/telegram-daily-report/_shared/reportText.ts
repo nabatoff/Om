@@ -18,7 +18,7 @@ export function buildTelegramReportText(payload: TelegramReportPayload): string 
   const { reportDateLabel, weeklyForecast, todayOrdersSum, weekOrdersSum, monthOrdersSum, total, rows } = payload;
   const lines: string[] = [];
 
-  lines.push(`📊 <b>Сводка за ${escHtml(reportDateLabel)}</b>`);
+  lines.push(`📊 <b>Сводка менеджеров за ${escHtml(reportDateLabel)}</b>`);
   lines.push("━━━━━━━━━━━━━━━━━━━━");
   lines.push("");
   lines.push(`Прогноз на неделю: <b>${money(weeklyForecast)} ₸</b>`);
@@ -64,4 +64,41 @@ export function buildTelegramReportText(payload: TelegramReportPayload): string 
   }
 
   return lines.join("\n");
+}
+
+export type DiggerReportRow = {
+  digger: string;
+  processed_total: number;
+  new_in_work: number;
+  calls_total: number;
+  validated_total: number;
+  transferred_count: number;
+};
+
+export function buildTelegramDiggerReportText(
+  reportDateLabel: string,
+  rows: DiggerReportRow[],
+): string {
+  const lines: string[] = [];
+  lines.push(`🪓 <b>Сводка лидорубов за ${escHtml(reportDateLabel)}</b>`);
+  lines.push("━━━━━━━━━━━━━━━━━━━━");
+  lines.push("");
+
+  const sorted = [...rows].sort((a, b) => (a.digger ?? "").localeCompare(b.digger ?? "", "ru"));
+  if (sorted.length === 0) {
+    lines.push("• Нет отчётов за день");
+  } else {
+    for (const r of sorted) {
+      const name = escHtml((r.digger ?? "").trim() || "Без имени");
+      lines.push(`<b>${name}</b>`);
+      lines.push(`  Отработано: <b>${Number(r.processed_total ?? 0)}</b>`);
+      lines.push(`  Новых в работе: <b>${Number(r.new_in_work ?? 0)}</b>`);
+      lines.push(`  Звонков: <b>${Number(r.calls_total ?? 0)}</b>`);
+      lines.push(`  Квалификация: <b>${Number(r.validated_total ?? 0)}</b>`);
+      lines.push(`  Передано в круп: <b>${Number(r.transferred_count ?? 0)}</b>`);
+      lines.push("");
+    }
+  }
+
+  return lines.join("\n").trimEnd();
 }

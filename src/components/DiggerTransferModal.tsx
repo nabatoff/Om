@@ -21,6 +21,7 @@ type Props = {
   onSuccess: (result: {
     items: DiggerTransferBatchResultItem[];
     meetingRows: DiggerTransferRow[];
+    skippedExisting: number;
   }) => void | Promise<void>;
 };
 
@@ -34,6 +35,18 @@ function normalizeBin(s: string): string {
 
 function normalizeName(s: string): string {
   return s.trim().toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ');
+}
+
+function extractErrorMessage(e: unknown): string {
+  if (e instanceof Error && e.message) return e.message;
+  if (e && typeof e === 'object') {
+    const o = e as { message?: string; details?: string; hint?: string; error_description?: string };
+    const parts = [o.message, o.details, o.hint, o.error_description].filter(
+      (x): x is string => typeof x === 'string' && x.trim().length > 0,
+    );
+    if (parts.length) return parts.join(' — ');
+  }
+  return 'Не удалось передать';
 }
 
 export function DiggerTransferModal({ open, rowCount, reportDate, clients, onClose, onSuccess }: Props) {
@@ -109,17 +122,21 @@ export function DiggerTransferModal({ open, rowCount, reportDate, clients, onClo
         meeting_scheduled: r.meetingScheduled,
       }));
       const result = await diggerTransferEnterpriseBatchApi(reportDate, payload);
+      const skippedExisting = result.items.filter((i) => i.skipped_existing).length;
+      const meetingBins = new Set(
+        result.items.filter((i) => i.created && i.meeting_scheduled).map((i) => i.bin),
+      );
       const meetingRows = rows
-        .filter((r) => r.meetingScheduled)
+        .filter((r) => r.meetingScheduled && meetingBins.has(normalizeBin(r.bin)))
         .map((r) => ({
           bin: normalizeBin(r.bin),
           name: r.name.trim(),
           meetingScheduled: true,
         }));
-      await onSuccess({ items: result.items, meetingRows });
+      await onSuccess({ items: result.items, meetingRows, skippedExisting });
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Не удалось передать');
+      setError(extractErrorMessage(e));
     } finally {
       setSubmitting(false);
     }

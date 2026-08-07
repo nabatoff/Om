@@ -34,6 +34,16 @@ export function formatYmdLocal(d: Date): string {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
+/** YYYY-MM-DD из date-only или timestamptz в локальной TZ (не UTC `.slice(0,10)`). */
+export function ymdFromIsoLocal(iso: string | null | undefined): string {
+  const raw = (iso || '').trim();
+  if (!raw) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return raw.slice(0, 10);
+  return formatYmdLocal(d);
+}
+
 export function todayPeriodBounds(): { from: string; to: string } {
   const t = formatYmdLocal(new Date());
   return { from: t, to: t };

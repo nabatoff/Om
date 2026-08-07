@@ -1,4 +1,7 @@
 import type { FullReport } from './crmApi';
+import { resolveReportStaffDept } from './staffDept';
+
+type StaffProfile = { id: string; fullName: string; role: string };
 
 function formatDigestDateHeader(ymd: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec((ymd || '').trim());
@@ -23,10 +26,21 @@ function reportStrength(r: FullReport): number {
   );
 }
 
-export function pickBestReportsPerManagerOnDate(allReports: FullReport[], reportDate: string): FullReport[] {
+export function pickBestReportsPerManagerOnDate(
+  allReports: FullReport[],
+  reportDate: string,
+  profiles: StaffProfile[] = [],
+  dept: 'managers' | 'diggers' = 'managers',
+): FullReport[] {
   const byKey = new Map<string, FullReport>();
   for (const r of allReports) {
     if (r.date !== reportDate) continue;
+    const resolved = resolveReportStaffDept(r, profiles);
+    if (dept === 'diggers') {
+      if (resolved !== 'diggers') continue;
+    } else if (resolved === 'diggers') {
+      continue;
+    }
     const key = (r.manager || '').trim() || '—';
     const prev = byKey.get(key);
     if (!prev) {
@@ -46,7 +60,9 @@ function normalizeKpiMeetingType(value: string): string {
 }
 
 function isNewMeetingType(type: string): boolean {
-  return normalizeKpiMeetingType(type).startsWith('нов');
+  const n = normalizeKpiMeetingType(type);
+  if (n.includes('крупн')) return false;
+  return n.startsWith('нов');
 }
 
 function normalizeKpiText(value: string): string {
@@ -101,13 +117,18 @@ function aggregateConfirmedOrdersByClient(
   return Array.from(map.values()).sort((a, b) => b.total - a.total);
 }
 
+export type DiggerTransferCount = { diggerName: string; count: number };
+
 /**
- * Текст сводки за день по всем менеджерам (для Telegram / webhook).
- * Подписи: назначено встреч, факт проведено, проведено новых, сумма подтверждённых заказов + разбивка по контрагентам.
+ * Текст сводки за день по менеджерам (без лидорубов).
  */
-export function buildTelegramDailyDigestText(allReports: FullReport[], reportDate: string): string {
-  const header = `Сводка за ${formatDigestDateHeader(reportDate)}`;
-  const rows = pickBestReportsPerManagerOnDate(allReports, reportDate);
+export function buildTelegramDailyDigestText(
+  allReports: FullReport[],
+  reportDate: string,
+  profiles: StaffProfile[] = [],
+): string {
+  const header = `Сводка менеджеров за ${formatDigestDateHeader(reportDate)}`;
+  const rows = pickBestReportsPerManagerOnDate(allReports, reportDate, profiles, 'managers');
   if (rows.length === 0) {
     return `${header}\n\nНет сохранённых отчётов за эту дату.`;
   }
@@ -140,14 +161,64 @@ export function buildTelegramDailyDigestText(allReports: FullReport[], reportDat
   return blocks.join('\n').trimEnd();
 }
 
-/** POST JSON `{ text }` на URL из VITE_TELEGRAM_REPORT_WEBHOOK_URL (например Make/n8n → Telegram). */
-export async function postTelegramDailyDigestIfConfigured(allReports: FullReport[], reportDate: string): Promise<void> {
+/** Отдельная сводка по лидорубам (KPI + передано в круп). */
+export function buildTelegramDiggerDigestText(
+  allReports: FullReport[],
+  reportDate: string,
+  profiles: StaffProfile[] = [],
+  transfers: DiggerTransferCount[] = [],
+): string {
+  const header = `Сводка лидорубов за ${formatDigestDateHeader(reportDate)}`;
+  const rows = pickBestReportsPerManagerOnDate(allReports, reportDate, profiles, 'diggers');
+  const transferByName = new Map(
+    transfers.map((t) => [normalizeKpiText(t.diggerName), t.count]),
+  );
+
+  if (rows.length === 0 && transfers.every((t) => t.count === 0)) {
+    return `${header}\n\nНет отчётов и передач за эту дату.`;
+  }
+
+  const blocks: string[] = [header, ''];
+  const seen = new Set<string>();
+
+  for (const r of rows) {
+    const name = (r.manager || '').trim() || '—';
+    seen.add(normalizeKpiText(name));
+    const transferred = transferByName.get(normalizeKpiText(name)) ?? 0;
+    blocks.push(name);
+    blocks.push(`• Отработано: ${r.stats.processedTotal}`);
+    blocks.push(`• Новых в работе: ${r.stats.newInWork}`);
+    blocks.push(`• Звонков: ${r.stats.callsTotal}`);
+    blocks.push(`• Квалификация: ${r.stats.validatedTotal}`);
+    blocks.push(`• Передано в круп: ${transferred}`);
+    blocks.push('');
+  }
+
+  for (const t of transfers) {
+    const key = normalizeKpiText(t.diggerName);
+    if (!key || seen.has(key) || t.count <= 0) continue;
+    blocks.push(t.diggerName || '—');
+    blocks.push(`• Передано в круп: ${t.count}`);
+    blocks.push('');
+  }
+
+  return blocks.join('\n').trimEnd();
+}
+
+/** POST JSON `{ text }` / `{ texts }` на URL из VITE_TELEGRAM_REPORT_WEBHOOK_URL. */
+export async function postTelegramDailyDigestIfConfigured(
+  allReports: FullReport[],
+  reportDate: string,
+  profiles: StaffProfile[] = [],
+  transfers: DiggerTransferCount[] = [],
+): Promise<void> {
   const url = (import.meta.env.VITE_TELEGRAM_REPORT_WEBHOOK_URL ?? '').trim();
   if (!url) return;
-  const text = buildTelegramDailyDigestText(allReports, reportDate);
+  const managerText = buildTelegramDailyDigestText(allReports, reportDate, profiles);
+  const diggerText = buildTelegramDiggerDigestText(allReports, reportDate, profiles, transfers);
   await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text: managerText, texts: [managerText, diggerText] }),
   });
 }

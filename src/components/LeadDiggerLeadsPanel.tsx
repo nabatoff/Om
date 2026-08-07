@@ -4,6 +4,7 @@ import { getSupabase } from '../lib/supabase';
 import {
   formatLeadDate,
   leadDisplayStatus,
+  leadTransferredDay,
   listEnterpriseLeadsApi,
   type EnterpriseLead,
 } from '../lib/enterpriseLeadsApi';
@@ -55,27 +56,50 @@ export function LeadDiggerLeadsPanel({ mode, dateFrom, dateTo, creatorId }: Prop
   }, [load]);
 
   useEffect(() => {
-    if (!creatorId) return;
+    const onFocus = () => {
+      void load();
+    };
+    const onVis = () => {
+      if (document.visibilityState === 'visible') void load();
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, [load]);
+
+  useEffect(() => {
     const sb = getSupabase();
-    // Unique topic per mount/mode — reuse of the same name returns an already-subscribed
-    // channel and .on('postgres_changes') then throws.
-    const topic = `enterprise-leads:${creatorId}:${mode}:${crypto.randomUUID()}`;
+    const topic = `enterprise-leads:${creatorId || 'all'}:${mode}:${crypto.randomUUID()}`;
     const channel = sb.channel(topic);
+    const filter = creatorId ? { filter: `creator_id=eq.${creatorId}` as const } : {};
     channel.on(
       'postgres_changes',
       {
         event: '*',
         schema: 'public',
         table: 'crm_enterprise_leads',
-        filter: `creator_id=eq.${creatorId}`,
+        ...filter,
       },
       () => {
         void load();
       },
     );
     channel.subscribe();
+
+    // Fallback poll when creatorId missing or realtime lags
+    const pollMs = creatorId ? 0 : 15_000;
+    const timer = pollMs
+      ? window.setInterval(() => {
+          void load();
+        }, pollMs)
+      : 0;
+
     return () => {
       void sb.removeChannel(channel);
+      if (timer) window.clearInterval(timer);
     };
   }, [creatorId, mode, load]);
 
@@ -83,7 +107,7 @@ export function LeadDiggerLeadsPanel({ mode, dateFrom, dateTo, creatorId }: Prop
     return rows.filter((r) => {
       if (mode === 'returns') return r.routingStatus === 'returned_to_smb';
       if (r.routingStatus === 'returned_to_smb') return false;
-      const day = (r.transferredAt || '').slice(0, 10);
+      const day = leadTransferredDay(r);
       if (dateFrom && day < dateFrom) return false;
       if (dateTo && day > dateTo) return false;
       return true;
@@ -138,7 +162,7 @@ export function LeadDiggerLeadsPanel({ mode, dateFrom, dateTo, creatorId }: Prop
                       Менеджер: {r.assignedManagerName}
                     </div>
                   ) : (
-                    <div className="text-xs text-gray-500">Передано: {formatLeadDate(r.transferredAt)}</div>
+                    <div className="text-xs text-gray-500">Передано: {formatLeadDate(r.transferredOn || r.transferredAt)}</div>
                   )}
                 </div>
               );
@@ -194,5 +218,5 @@ export function LeadDiggerLeadsPanel({ mode, dateFrom, dateTo, creatorId }: Prop
 }
 
 export function countTransferredOnDate(leads: EnterpriseLead[], ymd: string): number {
-  return leads.filter((r) => (r.transferredAt || '').slice(0, 10) === ymd).length;
+  return leads.filter((r) => leadTransferredDay(r) === ymd).length;
 }

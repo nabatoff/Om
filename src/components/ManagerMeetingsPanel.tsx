@@ -6,12 +6,15 @@ import {
   type UiAssigned,
   type UiConducted,
   createAssignedMeetingForReport,
+  setClientDigger,
   updateAssignedMeetingById,
   updateConductedMeetingById,
   updateConductedMeetingCpById,
 } from '../lib/crmApi';
 import { ALL_TIME_FROM, ALL_TIME_TO, adminDateFilterBounds } from '../lib/periodBounds';
 import { PeriodFilterFields } from './PeriodFilterFields';
+
+type MeetingTypeOption = 'Новая' | 'Повторная' | 'Крупный лид';
 
 export type UiAssignedWithReport = UiAssigned & { reportDate: string };
 type UiMeetingWithReport = UiAssignedWithReport & {
@@ -64,6 +67,13 @@ function addDaysYmd(ymd: string, add: number): string {
 
 function normalizeMeetingType(value: string): string {
   return value.trim().toLowerCase().replace(/ё/g, 'е');
+}
+
+function meetingTypeBadgeClass(type: string): string {
+  const n = normalizeMeetingType(type);
+  if (n.includes('крупн')) return 'bg-indigo-100 text-indigo-800';
+  if (n.startsWith('нов')) return 'bg-green-100 text-green-800';
+  return 'bg-amber-100 text-amber-800';
 }
 
 function meetingDateSortKey(raw: string): string {
@@ -359,7 +369,8 @@ type AdminMeetingEditState = {
   conductedId: string | null;
   entityName: string;
   bin: string;
-  type: 'Новая' | 'Повторная';
+  type: MeetingTypeOption;
+  diggerId: string;
   assignedDate: string;
   conductedDate: string;
   result: string;
@@ -436,8 +447,11 @@ function resolveLinkedMeetingIds(
   return { reportId: report?.id ?? null, assignedId, conductedId, assigned, conducted };
 }
 
-function meetingTypeSelectValue(raw: string): 'Новая' | 'Повторная' {
-  return normalizeMeetingType(raw).startsWith('повтор') ? 'Повторная' : 'Новая';
+function meetingTypeSelectValue(raw: string): MeetingTypeOption {
+  const n = normalizeMeetingType(raw);
+  if (n.includes('крупн')) return 'Крупный лид';
+  if (n.startsWith('повтор')) return 'Повторная';
+  return 'Новая';
 }
 
 export function ManagerMeetingsPanel({
@@ -451,6 +465,7 @@ export function ManagerMeetingsPanel({
   onAdminRestoreMeeting,
   onAdminHardDeleteMeeting,
   onRefreshReports,
+  diggerProfiles = [],
 }: {
   allReports: FullReport[];
   findEvidence: (planned: UiAssigned, manager: string) => { evidence: UiConducted; reportDate: string } | null;
@@ -465,6 +480,7 @@ export function ManagerMeetingsPanel({
   onAdminHardDeleteMeeting?: (row: DeletedMeeting) => void | Promise<void>;
   /** После правки ЦП из таблицы «Все встречи» — перезагрузить отчёты. */
   onRefreshReports?: () => Promise<void>;
+  diggerProfiles?: Array<{ id: string; fullName: string }>;
 }) {
   const todayYmd = localYmd(new Date());
   const [view, setView] = useState(() => {
@@ -480,7 +496,7 @@ export function ManagerMeetingsPanel({
   /** admin «Все встречи»: один активный фильтр периода — по назначению или по проведению. */
   const [adminPeriodMode, setAdminPeriodMode] = useState<'assigned' | 'conducted'>('assigned');
   const [assignedStatusFilter, setAssignedStatusFilter] = useState<'all' | 'done' | 'pending'>('all');
-  const [assignedTypeFilter, setAssignedTypeFilter] = useState<'all' | 'Новая' | 'Повторная'>('all');
+  const [assignedTypeFilter, setAssignedTypeFilter] = useState<'all' | MeetingTypeOption>('all');
   const [assignedCounterpartyFilter, setAssignedCounterpartyFilter] = useState('');
   const [adminMeetingsManager, setAdminMeetingsManager] = useState('Все');
   const [basketQuery, setBasketQuery] = useState('');
@@ -593,8 +609,9 @@ export function ManagerMeetingsPanel({
       if (assignedStatusFilter === 'pending' && isDone) return false;
       if (assignedTypeFilter !== 'all') {
         const rowType = normalizeMeetingType(a.type);
-        if (assignedTypeFilter === 'Новая' && !rowType.startsWith('нов')) return false;
+        if (assignedTypeFilter === 'Новая' && (!rowType.startsWith('нов') || rowType.includes('крупн'))) return false;
         if (assignedTypeFilter === 'Повторная' && !rowType.startsWith('повтор')) return false;
+        if (assignedTypeFilter === 'Крупный лид' && !rowType.includes('крупн')) return false;
       }
       return true;
     });
@@ -662,6 +679,7 @@ export function ManagerMeetingsPanel({
       entityName: row.entityName,
       bin: row.bin.replace(/\D/g, '').slice(0, 12),
       type: meetingTypeSelectValue(row.type),
+      diggerId: '',
       assignedDate: assignedYmd,
       conductedDate: conductedYmd,
       result: linked.conducted?.result ?? row.result ?? '',
@@ -733,6 +751,9 @@ export function ManagerMeetingsPanel({
           result: editMeeting.result,
         });
       }
+      if (editMeeting.type === 'Крупный лид' && editMeeting.diggerId) {
+        await setClientDigger(bin, editMeeting.diggerId);
+      }
       await onRefreshReports();
       setEditMeeting(null);
     } catch (e) {
@@ -782,11 +803,12 @@ export function ManagerMeetingsPanel({
               <select
                 className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm font-semibold"
                 value={assignedTypeFilter}
-                onChange={(e) => setAssignedTypeFilter(e.target.value as 'all' | 'Новая' | 'Повторная')}
+                onChange={(e) => setAssignedTypeFilter(e.target.value as 'all' | MeetingTypeOption)}
               >
                 <option value="all">Все</option>
                 <option value="Новая">Новая</option>
                 <option value="Повторная">Повторная</option>
+                <option value="Крупный лид">Крупный лид</option>
               </select>
             </div>
             <div className="space-y-1.5 w-full sm:w-auto sm:min-w-[200px]">
@@ -880,9 +902,7 @@ export function ManagerMeetingsPanel({
                       <td className="py-3 text-sm font-bold text-gray-800 whitespace-nowrap">{a.manager}</td>
                       <td className="py-3 text-center">
                         <span
-                          className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
-                            a.type === 'Новая' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'
-                          }`}
+                          className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${meetingTypeBadgeClass(a.type)}`}
                         >
                           {a.type}
                         </span>
@@ -1101,15 +1121,36 @@ export function ManagerMeetingsPanel({
                     value={editMeeting.type}
                     onChange={(e) =>
                       setEditMeeting((m) =>
-                        m ? { ...m, type: e.target.value as 'Новая' | 'Повторная' } : m,
+                        m ? { ...m, type: e.target.value as MeetingTypeOption } : m,
                       )
                     }
                     className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500/30 disabled:opacity-60"
                   >
                     <option value="Новая">Новая</option>
                     <option value="Повторная">Повторная</option>
+                    <option value="Крупный лид">Крупный лид</option>
                   </select>
                 </label>
+                {editMeeting.type === 'Крупный лид' && diggerProfiles.length > 0 ? (
+                  <label className="block space-y-1.5">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Лидоруб</span>
+                    <select
+                      disabled={editBusy}
+                      value={editMeeting.diggerId}
+                      onChange={(e) =>
+                        setEditMeeting((m) => (m ? { ...m, diggerId: e.target.value } : m))
+                      }
+                      className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500/30 disabled:opacity-60"
+                    >
+                      <option value="">Не менять</option>
+                      {diggerProfiles.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.fullName || d.id.slice(0, 8)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
                 <label className="block space-y-1.5">
                   <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
                     Дата назначения
@@ -1328,11 +1369,12 @@ export function ManagerMeetingsPanel({
               <select
                 className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm font-semibold"
                 value={assignedTypeFilter}
-                onChange={(e) => setAssignedTypeFilter(e.target.value as 'all' | 'Новая' | 'Повторная')}
+                onChange={(e) => setAssignedTypeFilter(e.target.value as 'all' | MeetingTypeOption)}
               >
                 <option value="all">Все</option>
                 <option value="Новая">Новая</option>
                 <option value="Повторная">Повторная</option>
+                <option value="Крупный лид">Крупный лид</option>
               </select>
             </div>
             <div className="space-y-1.5 w-full sm:w-auto sm:min-w-[200px]">
@@ -1396,7 +1438,7 @@ export function ManagerMeetingsPanel({
                     <td className="py-3 text-center">
                       <span
                         className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
-                          a.type === 'Новая' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'
+                          meetingTypeBadgeClass(a.type)
                         }`}
                       >
                         {a.type}

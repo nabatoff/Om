@@ -1,5 +1,9 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { buildTelegramReportText } from "./_shared/reportText.ts";
+import {
+  buildTelegramDiggerReportText,
+  buildTelegramReportText,
+  type DiggerReportRow,
+} from "./_shared/reportText.ts";
 import { renderTelegramReportPng } from "./_shared/renderReportPng.ts";
 import type { ReportManagerRow, TelegramReportPayload } from "./_shared/telegramReportTypes.ts";
 
@@ -198,7 +202,16 @@ export async function handleCronReport(req: Request): Promise<Response> {
     const reportDateLabel = formatDateDisplay(reportDate);
     const payload = await loadReportPayload(supabase, reportDate, tz, reportDateLabel);
     const text = buildTelegramReportText(payload);
-    const caption = `Сводка за ${reportDateLabel}`;
+    const caption = `Сводка менеджеров за ${reportDateLabel}`;
+
+    const { data: diggerData, error: diggerError } = await supabase.rpc("telegram_daily_digger_rows", {
+      p_date: reportDate,
+    });
+    if (diggerError) throw diggerError;
+    const diggerRows = (diggerData ?? []) as DiggerReportRow[];
+    const diggerText = diggerRows.length > 0
+      ? buildTelegramDiggerReportText(reportDateLabel, diggerRows)
+      : "";
 
     if (previewPng) {
       const png = await renderTelegramReportPng(payload);
@@ -229,6 +242,10 @@ export async function handleCronReport(req: Request): Promise<Response> {
       await sendTelegramMessage(botToken, chatId, text);
     }
 
+    if (diggerText) {
+      await sendTelegramMessage(botToken, chatId, diggerText);
+    }
+
     return new Response(
       JSON.stringify({
         ok: true,
@@ -236,6 +253,7 @@ export async function handleCronReport(req: Request): Promise<Response> {
         reportDateLabel,
         chatId,
         managers: payload.rows.length,
+        diggers: diggerRows.length,
         delivery,
         imageError,
       }),

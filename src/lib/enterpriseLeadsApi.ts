@@ -1,4 +1,5 @@
 import { getSupabase } from './supabase';
+import { ymdFromIsoLocal } from './periodBounds';
 
 export type EnterpriseLead = {
   id: string;
@@ -13,6 +14,9 @@ export type EnterpriseLead = {
   routingStatus: 'pending_distribution' | 'assigned_to_manager' | 'returned_to_smb';
   meetingStatus: 'completed' | 'cancelled' | null;
   transferredAt: string;
+  /** Локальный календарный день передачи (Asia/Almaty с бэка / локальный fallback). */
+  transferredOn: string;
+  meetingRequested: boolean;
   assignedAt: string | null;
   returnedAt: string | null;
   assignedMeetingId: string | null;
@@ -37,6 +41,8 @@ export type LeadDiggerConversionRow = {
 };
 
 function mapLead(r: Record<string, unknown>): EnterpriseLead {
+  const transferredAt = String(r.transferred_at ?? '');
+  const transferredOnRaw = r.transferred_on != null ? String(r.transferred_on).slice(0, 10) : '';
   return {
     id: String(r.id),
     bin: String(r.bin ?? ''),
@@ -49,7 +55,9 @@ function mapLead(r: Record<string, unknown>): EnterpriseLead {
     assignedManagerName: String(r.assigned_manager_name ?? ''),
     routingStatus: String(r.routing_status) as EnterpriseLead['routingStatus'],
     meetingStatus: (r.meeting_status as EnterpriseLead['meetingStatus']) ?? null,
-    transferredAt: String(r.transferred_at ?? ''),
+    transferredAt,
+    transferredOn: transferredOnRaw || ymdFromIsoLocal(transferredAt),
+    meetingRequested: Boolean(r.meeting_requested),
     assignedAt: r.assigned_at ? String(r.assigned_at) : null,
     returnedAt: r.returned_at ? String(r.returned_at) : null,
     assignedMeetingId: r.assigned_meeting_id ? String(r.assigned_meeting_id) : null,
@@ -139,6 +147,18 @@ export type DiggerTransferBatchResultItem = {
   skipped_existing?: boolean;
 };
 
+function errMessage(e: unknown): string {
+  if (e instanceof Error && e.message) return e.message;
+  if (e && typeof e === 'object') {
+    const o = e as { message?: string; error_description?: string; details?: string; hint?: string };
+    const parts = [o.message, o.details, o.hint, o.error_description].filter(
+      (x): x is string => typeof x === 'string' && x.trim().length > 0,
+    );
+    if (parts.length) return parts.join(' — ');
+  }
+  return 'Не удалось передать';
+}
+
 export async function diggerTransferEnterpriseBatchApi(
   reportDate: string,
   items: DiggerTransferBatchItem[],
@@ -147,7 +167,7 @@ export async function diggerTransferEnterpriseBatchApi(
     p_report_date: reportDate,
     p_items: items,
   });
-  if (error) throw error;
+  if (error) throw new Error(errMessage(error));
   const raw = (data || {}) as { ok?: boolean; items?: DiggerTransferBatchResultItem[] };
   return {
     ok: Boolean(raw.ok),
@@ -194,8 +214,12 @@ export function leadDisplayStatus(lead: EnterpriseLead): {
 
 export function formatLeadDate(iso: string | null): string {
   if (!iso) return '—';
-  const d = iso.slice(0, 10);
+  const d = ymdFromIsoLocal(iso) || iso.slice(0, 10);
   const [y, m, day] = d.split('-');
   if (!y || !m || !day) return iso;
   return `${day}.${m}.${y}`;
+}
+
+export function leadTransferredDay(lead: EnterpriseLead): string {
+  return lead.transferredOn || ymdFromIsoLocal(lead.transferredAt);
 }
