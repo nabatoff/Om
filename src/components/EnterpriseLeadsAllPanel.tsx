@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
+import { getSupabase } from '../lib/supabase';
 import {
   formatLeadDate,
   leadDisplayStatus,
@@ -28,6 +29,27 @@ export function EnterpriseLeadsAllPanel() {
 
   useEffect(() => {
     void load();
+  }, [load]);
+
+  useEffect(() => {
+    const sb = getSupabase();
+    const channel = sb
+      .channel(`enterprise-leads-all:${crypto.randomUUID()}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'crm_enterprise_leads' }, () => {
+        void load();
+      });
+    channel.subscribe();
+    const onFocus = () => void load();
+    const onVis = () => {
+      if (document.visibilityState === 'visible') void load();
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      void sb.removeChannel(channel);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVis);
+    };
   }, [load]);
 
   return (
