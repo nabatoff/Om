@@ -25,8 +25,21 @@ function normalizeKpiText(value: string): string {
   return value.trim().toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ');
 }
 
-function normalizeKpiBin(value: string): string {
+export function normalizeKpiBin(value: string): string {
   return value.replace(/\D/g, '');
+}
+
+/** План «Крупный лид» скрываем, если по БИН уже есть факт того же типа. */
+export function shouldHidePlannedEnterpriseLead(
+  assigned: { bin: string; type: string },
+  conductedPool: Array<{ bin: string; type: string }>,
+): boolean {
+  if (!isEnterpriseLeadMeetingType(assigned.type)) return false;
+  const digits = normalizeKpiBin(assigned.bin);
+  if (!digits) return false;
+  return conductedPool.some(
+    (c) => isEnterpriseLeadMeetingType(c.type) && normalizeKpiBin(c.bin) === digits,
+  );
 }
 
 export function countAssignedNewMeetings(report: FullReport): number {

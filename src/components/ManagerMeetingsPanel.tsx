@@ -549,31 +549,39 @@ export function ManagerMeetingsPanel({
 
   const tomorrowYmd = addDaysYmd(todayYmd, 1);
 
+  const isHiddenPlannedKrup = (a: UiMeetingWithReport) => {
+    if (a.source !== 'assigned') return false;
+    if (!normalizeMeetingType(a.type).includes('крупн')) return false;
+    return Boolean(findEvidence(a, a.manager));
+  };
+
   const { today, tomorrow } = useMemo(() => {
     const t: typeof rows = [];
     const tom: typeof rows = [];
     for (const a of rows) {
+      if (isHiddenPlannedKrup(a)) continue;
       const ymd = toYmd(a.date);
       if (!ymd) continue;
       if (ymd === todayYmd) t.push(a);
       else if (ymd === tomorrowYmd) tom.push(a);
     }
     return { today: t, tomorrow: tom };
-  }, [rows, todayYmd, tomorrowYmd]);
+  }, [rows, todayYmd, tomorrowYmd, findEvidence]);
 
   const byDay = useMemo(() => {
     const m = new Map<string, number>();
     for (const a of rows) {
+      if (isHiddenPlannedKrup(a)) continue;
       const y = toYmd(a.date);
       if (!y) continue;
       m.set(y, (m.get(y) || 0) + 1);
     }
     return m;
-  }, [rows]);
+  }, [rows, findEvidence]);
 
   const selectedRows = useMemo(() => {
-    return rows.filter((a) => toYmd(a.date) === selectedYmd);
-  }, [rows, selectedYmd]);
+    return rows.filter((a) => toYmd(a.date) === selectedYmd && !isHiddenPlannedKrup(a));
+  }, [rows, selectedYmd, findEvidence]);
 
   const filteredAssignedRows = useMemo(() => {
     const counterpartyNeedle = assignedCounterpartyFilter.trim().toLowerCase();
@@ -607,6 +615,14 @@ export function ManagerMeetingsPanel({
       const isDone = a.source === 'conducted' ? true : Boolean(findEvidence(a, a.manager));
       if (assignedStatusFilter === 'done' && !isDone) return false;
       if (assignedStatusFilter === 'pending' && isDone) return false;
+      if (
+        assignedStatusFilter === 'pending' &&
+        a.source === 'assigned' &&
+        normalizeMeetingType(a.type).includes('крупн') &&
+        isDone
+      ) {
+        return false;
+      }
       if (assignedTypeFilter !== 'all') {
         const rowType = normalizeMeetingType(a.type);
         if (assignedTypeFilter === 'Новая' && (!rowType.startsWith('нов') || rowType.includes('крупн'))) return false;

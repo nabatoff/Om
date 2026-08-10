@@ -10,7 +10,7 @@ import {
 } from '../lib/enterpriseLeadsApi';
 
 type Props = {
-  mode: 'status' | 'returns';
+  mode: 'status' | 'returns' | 'history';
   dateFrom?: string;
   dateTo?: string;
   creatorId?: string;
@@ -106,6 +106,7 @@ export function LeadDiggerLeadsPanel({ mode, dateFrom, dateTo, creatorId }: Prop
   const filtered = useMemo(() => {
     return rows.filter((r) => {
       if (mode === 'returns') return r.routingStatus === 'returned_to_smb';
+      if (mode === 'history') return true;
       if (r.routingStatus === 'returned_to_smb') return false;
       const day = leadTransferredDay(r);
       if (dateFrom && day < dateFrom) return false;
@@ -113,6 +114,57 @@ export function LeadDiggerLeadsPanel({ mode, dateFrom, dateTo, creatorId }: Prop
       return true;
     });
   }, [rows, mode, dateFrom, dateTo]);
+
+  if (mode === 'history') {
+    return (
+      <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-gray-100 text-left space-y-4">
+        <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+          <div>
+            <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide">Все переданные лиды</h2>
+            <p className="text-[10px] text-gray-400 mt-1">Без фильтра даты · {filtered.length} шт.</p>
+          </div>
+          <Info size={16} className="text-gray-400" aria-label="Полная история переданных в круп" />
+        </div>
+
+        {err ? <p className="text-sm font-bold text-red-600">{err}</p> : null}
+        {loading && filtered.length === 0 ? (
+          <p className="text-sm text-gray-400">Загрузка…</p>
+        ) : filtered.length === 0 ? (
+          <p className="text-sm text-gray-400">Нет переданных лидов</p>
+        ) : (
+          <div className="space-y-3">
+            {filtered.map((r) => {
+              const st = leadDisplayStatus(r);
+              return (
+                <div key={r.id} className="border border-gray-100 rounded-xl p-3 bg-white">
+                  <div className="flex justify-between items-start mb-2 gap-2">
+                    <div>
+                      <div className="font-bold text-sm text-gray-800">{r.clientName}</div>
+                      <div className="text-[10px] font-mono text-gray-400">{r.bin}</div>
+                    </div>
+                    <span className={`shrink-0 text-[10px] uppercase font-bold px-2 py-1 rounded ${statusBadgeClass(st.key)}`}>
+                      {st.key === 'waiting' ? 'Ожидает встречи' : st.label}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
+                    <span>Передано: {formatLeadDate(r.transferredOn || r.transferredAt)}</span>
+                    {r.assignedManagerName ? (
+                      <span className="inline-flex items-center gap-1">
+                        <User size={12} className="text-gray-400" />
+                        {r.assignedManagerName}
+                      </span>
+                    ) : (
+                      <span>На распределении</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   if (mode === 'status') {
     return (
