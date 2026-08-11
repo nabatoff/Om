@@ -2456,12 +2456,12 @@ const ManagerDashboard = ({
       </div>
 
       <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-gray-100">
-        <div className="text-xs uppercase font-bold tracking-wider text-gray-400 mb-4">KPI за день</div>
+        <div className="text-xs uppercase font-bold tracking-wider text-gray-400 mb-4">Общая сводка за период</div>
         {isSalesManager ? (
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
             <div className="bg-[#f3f4f6] p-4 rounded-xl text-left">
               <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">
-                Уникальные поставщики в работе
+                Уникальные поставщики
               </div>
               <input
                 type="number"
@@ -2473,6 +2473,21 @@ const ManagerDashboard = ({
                 onBlur={async () => {
                   handleStatBlur('processedTotal');
                   await commitKpi('processedTotal');
+                }}
+              />
+            </div>
+            <div className="bg-[#ecfdf5] p-4 rounded-xl border border-green-50 text-left">
+              <div className="text-[10px] font-bold text-green-700 uppercase tracking-widest mb-1">Взято новых</div>
+              <input
+                type="number"
+                min={0}
+                className="w-full text-2xl font-black text-green-800 outline-none bg-transparent"
+                value={statDraft.newInWork}
+                onChange={(e) => handleStatChange('newInWork', e.target.value)}
+                onFocus={(e) => e.target.value === '0' && handleStatChange('newInWork', '')}
+                onBlur={async () => {
+                  handleStatBlur('newInWork');
+                  await commitKpi('newInWork');
                 }}
               />
             </div>
@@ -2494,6 +2509,21 @@ const ManagerDashboard = ({
                 }}
               />
               <p className="text-[10px] text-blue-400/80 mt-1">{kpiSaving ? 'Сохранение…' : 'KPI при уходе с поля'}</p>
+            </div>
+            <div className="bg-[#fffbeb] p-4 rounded-xl border border-yellow-50 text-left">
+              <div className="text-[10px] font-bold text-yellow-700 uppercase tracking-widest mb-1">Квалификация</div>
+              <input
+                type="number"
+                min={0}
+                className="w-full text-2xl font-black text-yellow-800 outline-none bg-transparent"
+                value={statDraft.validatedTotal}
+                onChange={(e) => handleStatChange('validatedTotal', e.target.value)}
+                onFocus={(e) => e.target.value === '0' && handleStatChange('validatedTotal', '')}
+                onBlur={async () => {
+                  handleStatBlur('validatedTotal');
+                  await commitKpi('validatedTotal');
+                }}
+              />
             </div>
             <div className="bg-[#faf5ff] p-4 rounded-xl border border-purple-50 text-left">
               <div className="text-[10px] font-bold text-purple-700 uppercase tracking-widest mb-1">

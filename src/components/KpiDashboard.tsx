@@ -378,15 +378,6 @@ export function KpiDashboard({
                   Новые встречи ÷ Звонки × 100%
                 </p>
               </div>
-              <div className="rounded-xl bg-slate-50/80 border border-slate-200 p-3">
-                <p className="text-[10px] text-slate-700 font-bold uppercase leading-snug">Переходы этапа</p>
-                <p className="text-xl font-black text-slate-900 mt-1">
-                  {formatKpiPercent(managerKpiSummary.transitionsPct)}
-                </p>
-                <p className="text-[9px] text-slate-600 mt-1 leading-snug">
-                  Переходы этапа ÷ Новые встречи × 100%
-                </p>
-              </div>
               <div className="rounded-xl bg-teal-50/60 border border-teal-100 p-3">
                 <p className="text-[10px] text-teal-800 font-bold uppercase leading-snug">Проведен ГЭП</p>
                 <p className="text-xl font-black text-teal-950 mt-1">
@@ -394,6 +385,17 @@ export function KpiDashboard({
                 </p>
                 <p className="text-[9px] text-teal-800/80 mt-1 leading-snug">
                   Проведено новых ÷ Назначено встреч × 100%
+                </p>
+              </div>
+              <div className="rounded-xl bg-purple-50/60 border border-purple-100 p-3">
+                <p className="text-[10px] text-purple-800 font-bold uppercase leading-snug">
+                  Проведен ГЭП → переход на след. этап
+                </p>
+                <p className="text-xl font-black text-purple-950 mt-1">
+                  {formatKpiPercent(managerKpiSummary.transitionsPct)}
+                </p>
+                <p className="text-[9px] text-purple-800/80 mt-1 leading-snug">
+                  Переходы на след. этап ÷ Проведено новых × 100%
                 </p>
               </div>
               <div className="rounded-xl bg-orange-50/70 border border-orange-100 p-3">
