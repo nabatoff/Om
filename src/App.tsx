@@ -2464,7 +2464,9 @@ const ManagerDashboard = ({
         {isSalesManager ? (
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <div className="bg-[#f3f4f6] p-4 rounded-xl text-left">
-              <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Уник. поставщики</div>
+              <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">
+                Уникальные поставщики в работе
+              </div>
               <div className="text-2xl font-black text-gray-800">{stats.processedTotal}</div>
               <p className="text-[10px] text-gray-400 mt-1">Из карточек «Поставщики в работе»</p>
             </div>
@@ -2488,7 +2490,9 @@ const ManagerDashboard = ({
               <p className="text-[10px] text-blue-400/80 mt-1">{kpiSaving ? 'Сохранение…' : 'KPI при уходе с поля'}</p>
             </div>
             <div className="bg-[#faf5ff] p-4 rounded-xl border border-purple-50 text-left">
-              <div className="text-[10px] font-bold text-purple-700 uppercase tracking-widest mb-1">Переходы этапа</div>
+              <div className="text-[10px] font-bold text-purple-700 uppercase tracking-widest mb-1">
+                Переходы на след. этап
+              </div>
               <input
                 type="number"
                 min={0}

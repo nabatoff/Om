@@ -264,9 +264,14 @@ export type KpiPeriodSummary = {
   reportsCount: number;
   metrics: KpiEightMetrics;
   conversions: {
-    interestRate: number | null;
-    meetingsRate: number | null;
-    successRate: number | null;
+    /** Новые встречи ÷ Звонки */
+    meetingsFromCallsRate: number | null;
+    /** Переходы ÷ Новые встречи */
+    transitionsRate: number | null;
+    /** Проведено новых ÷ Назначено (без изменений) */
+    conductedGepRate: number | null;
+    /** Подтвержден заказ (без изменений) */
+    confirmedOrderRate: number | null;
   };
 };
 
@@ -346,11 +351,16 @@ export function sumKpiEightMetrics(rows: KpiEightMetrics[]): KpiEightMetrics {
   return init;
 }
 
-export function buildKpiConversions(metrics: KpiEightMetrics): KpiPeriodSummary['conversions'] {
+export function buildKpiConversions(
+  metrics: KpiEightMetrics,
+  assignedNew = 0,
+  confirmedOrders = 0,
+): KpiPeriodSummary['conversions'] {
   return {
-    interestRate: kpiConversionPercent(metrics.calls, metrics.uniqueSuppliers),
-    meetingsRate: kpiConversionPercent(metrics.newMeetings, metrics.calls),
-    successRate: kpiConversionPercent(metrics.transitions, metrics.newMeetings),
+    meetingsFromCallsRate: kpiConversionPercent(metrics.newMeetings, metrics.calls),
+    transitionsRate: kpiConversionPercent(metrics.transitions, metrics.newMeetings),
+    conductedGepRate: kpiConversionPercent(metrics.newMeetings, assignedNew),
+    confirmedOrderRate: kpiConversionPercent(confirmedOrders, metrics.newMeetings),
   };
 }
 

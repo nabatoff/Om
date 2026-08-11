@@ -6,23 +6,18 @@ import {
   listEnterpriseLeadsApi,
   type EnterpriseLead,
 } from '../lib/enterpriseLeadsApi';
-import { countResolvedBlockersApi } from '../lib/managerBlockersApi';
-import { listManagerWorkItemsPeriodApi } from '../lib/managerWorkItemsApi';
-import { adminDateFilterBounds } from '../lib/periodBounds';
+import { adminDateFilterBounds, reportDateMatchesAdminBounds } from '../lib/periodBounds';
 import type { StaffDept } from '../lib/staffDept';
 import {
-  buildKpiConversions,
-  buildKpiRowMetrics,
   buildRnpPaceRows,
+  countAssignedNewMeetings,
+  countConductedNewMeetings,
+  countConductedRepeatMeetings,
+  countCounterpartiesConductedNewWithOrder,
   dedupeReportsByDayManager,
   formatKpiPercent,
-  groupBlockersByReportKey,
-  groupWorkItemsByReportKey,
   kpiConversionPercent,
-  sumKpiEightMetrics,
-  type KpiEightMetrics,
 } from '../lib/kpiMetrics';
-import { reportDateMatchesAdminBounds } from '../lib/periodBounds';
 import { AdminFilters } from './AdminFilters';
 import { RnpPacePanel } from './RnpPacePanel';
 
@@ -35,16 +30,16 @@ function formatDisplayDate(raw: string): string {
   return t;
 }
 
-const METRIC_CARDS: { key: keyof KpiEightMetrics; label: string; short: string; className: string }[] = [
-  { key: 'uniqueSuppliers', label: 'Уник. поставщики', short: 'Уник. поставщики', className: 'bg-gray-50 border-gray-100 text-gray-800' },
-  { key: 'calls', label: 'Звонки', short: 'Звонки', className: 'bg-emerald-50/50 border-emerald-100/50 text-emerald-700' },
-  { key: 'newMeetings', label: 'Новые встречи', short: 'Новые встречи', className: 'bg-indigo-50/50 border-indigo-100/50 text-indigo-700' },
-  { key: 'repeatMeetings', label: 'Повт. встречи', short: 'Повт. встречи', className: 'bg-amber-50/50 border-amber-100/50 text-amber-700' },
-  { key: 'nextActions', label: 'След. действия', short: 'След. действия', className: 'bg-cyan-50/50 border-cyan-100/50 text-cyan-700' },
-  { key: 'tasks', label: 'Задачи', short: 'Задачи', className: 'bg-blue-50/50 border-blue-100/50 text-blue-700' },
-  { key: 'transitions', label: 'Переходы этапа', short: 'Переходы', className: 'bg-purple-50/50 border-purple-100/50 text-purple-700' },
-  { key: 'blockersResolved', label: 'Блокеры (снято)', short: 'Блокеры', className: 'bg-rose-50/50 border-rose-100/50 text-rose-700' },
-];
+type ManagerDayMetrics = {
+  uniqueSuppliers: number;
+  newInWork: number;
+  calls: number;
+  validated: number;
+  assignedNew: number;
+  conductedNew: number;
+  conductedRepeat: number;
+  transitions: number;
+};
 
 type Props = {
   allReports: FullReport[];
@@ -85,13 +80,9 @@ export function KpiDashboard({
   }`;
 
   const [enterpriseLeads, setEnterpriseLeads] = useState<EnterpriseLead[]>([]);
-  const [workItemRows, setWorkItemRows] = useState<
-    Awaited<ReturnType<typeof listManagerWorkItemsPeriodApi>>
-  >([]);
-  const [blockerCounts, setBlockerCounts] = useState<Awaited<ReturnType<typeof countResolvedBlockersApi>>>([]);
 
   useEffect(() => {
-    if (isDiggerKpi) {
+    if (!isDiggerKpi) {
       setEnterpriseLeads([]);
       return;
     }
@@ -108,66 +99,12 @@ export function KpiDashboard({
     };
   }, [isDiggerKpi]);
 
-  useEffect(() => {
-    if (isDiggerKpi) {
-      setWorkItemRows([]);
-      setBlockerCounts([]);
-      return;
-    }
-    let cancelled = false;
-    const bounds = adminDateFilterBounds(filterDateFrom, filterDateTo);
-    void Promise.all([
-      listManagerWorkItemsPeriodApi(bounds.from, bounds.to),
-      countResolvedBlockersApi(bounds.from, bounds.to),
-    ])
-      .then(([wi, bl]) => {
-        if (!cancelled) {
-          setWorkItemRows(wi);
-          setBlockerCounts(bl);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setWorkItemRows([]);
-          setBlockerCounts([]);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [isDiggerKpi, filterDateFrom, filterDateTo]);
-
   const kpiRows = useMemo(
     () =>
       dedupeReportsByDayManager(reports).sort(
         (a, b) => b.date.localeCompare(a.date) || a.manager.localeCompare(b.manager, 'ru'),
       ),
     [reports],
-  );
-
-  const workItemsByKey = useMemo(
-    () =>
-      groupWorkItemsByReportKey(
-        workItemRows.map((w) => ({
-          reportDate: w.reportDate,
-          managerName: w.managerName,
-          nextStep: w.nextStep,
-          status: w.status,
-        })),
-      ),
-    [workItemRows],
-  );
-
-  const blockersByKey = useMemo(
-    () =>
-      groupBlockersByReportKey(
-        blockerCounts.map((b) => ({
-          managerName: b.managerName,
-          reportDate: b.reportDate,
-          resolvedCount: b.resolvedCount,
-        })),
-      ),
-    [blockerCounts],
   );
 
   const diggerLeadsInPeriod = useMemo(() => {
@@ -215,25 +152,71 @@ export function KpiDashboard({
     return map;
   }, [diggerLeadsInPeriod]);
 
+  const meetingTotals = useMemo(() => {
+    let assignedNew = 0;
+    let conductedNew = 0;
+    let conductedRepeat = 0;
+    let transitions = 0;
+    for (const r of kpiRows) {
+      assignedNew += countAssignedNewMeetings(r);
+      conductedNew += countConductedNewMeetings(r, allReports);
+      conductedRepeat += countConductedRepeatMeetings(r);
+      transitions += r.stats.stageTransitions ?? 0;
+    }
+    return { assignedNew, conductedNew, conductedRepeat, transitions };
+  }, [kpiRows, allReports]);
+
   const managerKpiSummary = useMemo(() => {
     const bounds = adminDateFilterBounds(filterDateFrom, filterDateTo);
     const periodLabel = `${formatDisplayDate(bounds.from)} — ${formatDisplayDate(bounds.to)}`;
     const monthPrefix = bounds.from.slice(0, 7);
-    const rowMetrics = kpiRows.map((r) => {
-      const wi = workItemsByKey.get(`${r.date}|${r.manager}`) || { nextActions: 0, tasks: 0 };
-      const bl = blockersByKey.get(`${r.date}|${r.manager}`) || 0;
-      return buildKpiRowMetrics(r, allReports, wi, bl);
-    });
-    const metrics = sumKpiEightMetrics(rowMetrics);
+
+    let uniqueSuppliers = 0;
+    let newInWork = 0;
+    let calls = 0;
+    let validated = 0;
+    let assignedNew = 0;
+    let conductedNew = 0;
+    let conductedRepeat = 0;
+    let transitions = 0;
+
+    for (const r of kpiRows) {
+      uniqueSuppliers += r.stats.processedTotal;
+      newInWork += r.stats.newInWork;
+      calls += r.stats.callsTotal;
+      validated += r.stats.validatedTotal;
+      assignedNew += countAssignedNewMeetings(r);
+      conductedNew += countConductedNewMeetings(r, allReports);
+      conductedRepeat += countConductedRepeatMeetings(r);
+      transitions += r.stats.stageTransitions ?? 0;
+    }
+
+    const confirmedOrderConvNumerator = countCounterpartiesConductedNewWithOrder(kpiRows, allReports);
+
     return {
       monthPrefix,
       periodLabel,
       isDefaultMonth: bounds.isDefaultMonth,
       reportsCount: kpiRows.length,
-      metrics,
-      conversions: buildKpiConversions(metrics),
+      uniqueSuppliers,
+      newInWork,
+      calls,
+      validated,
+      assignedNew,
+      conductedNew,
+      conductedRepeat,
+      transitions,
+      /** 1: Новые встречи ÷ Звонки */
+      meetingsFromCallsPct: kpiConversionPercent(conductedNew, calls),
+      /** 2: Переходы ÷ Новые встречи */
+      transitionsPct: kpiConversionPercent(transitions, conductedNew),
+      /** без изменений: Проведен ГЭП */
+      conductedGepPct: kpiConversionPercent(conductedNew, assignedNew),
+      /** без изменений: Подтвержден заказ */
+      confirmedOrderConvNumerator,
+      confirmedOrderConvPct: kpiConversionPercent(confirmedOrderConvNumerator, conductedNew),
     };
-  }, [kpiRows, allReports, workItemsByKey, blockersByKey, filterDateFrom, filterDateTo]);
+  }, [kpiRows, allReports, filterDateFrom, filterDateTo]);
 
   const rnpRows = useMemo(() => {
     if (isDiggerKpi) return [];
@@ -242,14 +225,21 @@ export function KpiDashboard({
   }, [allReports, managerOptions, isDiggerKpi]);
 
   const rowMetricsMap = useMemo(() => {
-    const map = new Map<string, KpiEightMetrics>();
+    const map = new Map<string, ManagerDayMetrics>();
     for (const r of kpiRows) {
-      const wi = workItemsByKey.get(`${r.date}|${r.manager}`) || { nextActions: 0, tasks: 0 };
-      const bl = blockersByKey.get(`${r.date}|${r.manager}`) || 0;
-      map.set(r.id, buildKpiRowMetrics(r, allReports, wi, bl));
+      map.set(r.id, {
+        uniqueSuppliers: r.stats.processedTotal,
+        newInWork: r.stats.newInWork,
+        calls: r.stats.callsTotal,
+        validated: r.stats.validatedTotal,
+        assignedNew: countAssignedNewMeetings(r),
+        conductedNew: countConductedNewMeetings(r, allReports),
+        conductedRepeat: countConductedRepeatMeetings(r),
+        transitions: r.stats.stageTransitions ?? 0,
+      });
     }
     return map;
-  }, [kpiRows, allReports, workItemsByKey, blockersByKey]);
+  }, [kpiRows, allReports]);
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-500">
@@ -324,17 +314,39 @@ export function KpiDashboard({
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
-            {METRIC_CARDS.map((card) => (
-              <div key={card.key} className={`p-4 rounded-xl border text-left ${card.className.split(' ').slice(0, 2).join(' ')}`}>
-                <div className={`text-[10px] font-bold uppercase mb-2 ${card.className.split(' ').slice(2).join(' ')}`}>
-                  {card.label}
-                </div>
-                <div className={`text-2xl font-bold ${card.className.includes('text-gray') ? 'text-slate-800' : ''}`}>
-                  {managerKpiSummary.metrics[card.key]}
-                </div>
-              </div>
-            ))}
+          <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-2">
+            <div className="rounded-xl bg-gray-50 border border-gray-100 p-3 text-left">
+              <p className="text-[10px] text-gray-500 font-bold uppercase leading-snug">Уник. поставщики в работе</p>
+              <p className="text-lg font-black text-gray-900">{managerKpiSummary.uniqueSuppliers}</p>
+            </div>
+            <div className="rounded-xl bg-emerald-50 border border-emerald-100 p-3 text-left">
+              <p className="text-[10px] text-emerald-700 font-bold uppercase">Взято новых</p>
+              <p className="text-lg font-black text-emerald-800">{managerKpiSummary.newInWork}</p>
+            </div>
+            <div className="rounded-xl bg-indigo-50 border border-indigo-100 p-3 text-left">
+              <p className="text-[10px] text-indigo-700 font-bold uppercase">Звонки</p>
+              <p className="text-lg font-black text-indigo-800">{managerKpiSummary.calls}</p>
+            </div>
+            <div className="rounded-xl bg-amber-50 border border-amber-100 p-3 text-left">
+              <p className="text-[10px] text-amber-700 font-bold uppercase">Прошли квал</p>
+              <p className="text-lg font-black text-amber-800">{managerKpiSummary.validated}</p>
+            </div>
+            <div className="rounded-xl bg-slate-50 border border-slate-100 p-3 text-left">
+              <p className="text-[10px] text-slate-700 font-bold uppercase">Назначено встреч</p>
+              <p className="text-lg font-black text-slate-900">{managerKpiSummary.assignedNew}</p>
+            </div>
+            <div className="rounded-xl bg-teal-50 border border-teal-100 p-3 text-left">
+              <p className="text-[10px] text-teal-700 font-bold uppercase">Проведено новых</p>
+              <p className="text-lg font-black text-teal-800">{managerKpiSummary.conductedNew}</p>
+            </div>
+            <div className="rounded-xl bg-blue-50 border border-blue-100 p-3 text-left">
+              <p className="text-[10px] text-blue-700 font-bold uppercase">Проведено повторных</p>
+              <p className="text-lg font-black text-blue-800">{managerKpiSummary.conductedRepeat}</p>
+            </div>
+            <div className="rounded-xl bg-purple-50 border border-purple-100 p-3 text-left">
+              <p className="text-[10px] text-purple-700 font-bold uppercase">Переходы на след. этап</p>
+              <p className="text-lg font-black text-purple-800">{managerKpiSummary.transitions}</p>
+            </div>
           </div>
         )}
 
@@ -356,27 +368,45 @@ export function KpiDashboard({
         ) : (
           <div className="mt-4 pt-4 border-t border-gray-100 text-left">
             <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Конверсия</p>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="border border-orange-100 bg-orange-50/30 p-5 rounded-xl">
-                <div className="text-[11px] font-bold text-orange-700 uppercase mb-1">Интерес</div>
-                <div className="text-3xl font-extrabold text-slate-800 mb-2">
-                  {formatKpiPercent(managerKpiSummary.conversions.interestRate)}
-                </div>
-                <div className="text-[10px] text-slate-400">Звонки ÷ Уник. поставщики × 100%</div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="rounded-xl bg-amber-50/60 border border-amber-100 p-3">
+                <p className="text-[10px] text-amber-800 font-bold uppercase leading-snug">Встречи из звонков</p>
+                <p className="text-xl font-black text-amber-950 mt-1">
+                  {formatKpiPercent(managerKpiSummary.meetingsFromCallsPct)}
+                </p>
+                <p className="text-[9px] text-amber-700/80 mt-1 leading-snug">
+                  Новые встречи ÷ Звонки × 100%
+                </p>
               </div>
-              <div className="border border-slate-200 p-5 rounded-xl">
-                <div className="text-[11px] font-bold text-slate-700 uppercase mb-1">Встречи</div>
-                <div className="text-3xl font-extrabold text-slate-800 mb-2">
-                  {formatKpiPercent(managerKpiSummary.conversions.meetingsRate)}
-                </div>
-                <div className="text-[10px] text-slate-400">Новые встречи ÷ Звонки × 100%</div>
+              <div className="rounded-xl bg-slate-50/80 border border-slate-200 p-3">
+                <p className="text-[10px] text-slate-700 font-bold uppercase leading-snug">Переходы этапа</p>
+                <p className="text-xl font-black text-slate-900 mt-1">
+                  {formatKpiPercent(managerKpiSummary.transitionsPct)}
+                </p>
+                <p className="text-[9px] text-slate-600 mt-1 leading-snug">
+                  Переходы этапа ÷ Новые встречи × 100%
+                </p>
               </div>
-              <div className="border border-emerald-100 bg-emerald-50/30 p-5 rounded-xl">
-                <div className="text-[11px] font-bold text-emerald-700 uppercase mb-1">Успех (переходы)</div>
-                <div className="text-3xl font-extrabold text-slate-800 mb-2">
-                  {formatKpiPercent(managerKpiSummary.conversions.successRate)}
-                </div>
-                <div className="text-[10px] text-slate-400">Переходы этапа ÷ Новые встречи × 100%</div>
+              <div className="rounded-xl bg-teal-50/60 border border-teal-100 p-3">
+                <p className="text-[10px] text-teal-800 font-bold uppercase leading-snug">Проведен ГЭП</p>
+                <p className="text-xl font-black text-teal-950 mt-1">
+                  {formatKpiPercent(managerKpiSummary.conductedGepPct)}
+                </p>
+                <p className="text-[9px] text-teal-800/80 mt-1 leading-snug">
+                  Проведено новых ÷ Назначено встреч × 100%
+                </p>
+              </div>
+              <div className="rounded-xl bg-orange-50/70 border border-orange-100 p-3">
+                <p className="text-[10px] text-orange-900 font-bold uppercase leading-snug">Подтвержден заказ</p>
+                <p className="text-xl font-black text-orange-950 mt-1">
+                  {formatKpiPercent(managerKpiSummary.confirmedOrderConvPct)}
+                </p>
+                <p className="text-[9px] text-orange-900/80 mt-1 leading-snug">
+                  Уникальные контрагенты с «проведено новых» (KPI) и заказом в периоде ÷ Проведено новых × 100%
+                </p>
+                <p className="text-[9px] text-orange-800/70 mt-1 font-mono">
+                  {managerKpiSummary.confirmedOrderConvNumerator} / {managerKpiSummary.conductedNew}
+                </p>
               </div>
             </div>
           </div>
@@ -388,9 +418,15 @@ export function KpiDashboard({
       <section className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-x-auto text-left">
         <div className="px-6 pt-5 pb-2 space-y-1">
           <h3 className="text-xs font-bold text-gray-700 uppercase tracking-widest">
-            {isDiggerKpi ? 'Отдельный отчёт по KPI лидорубов' : 'Отдельный отчёт по KPI менеджеров (детализация по дням)'}
+            {isDiggerKpi ? 'Отдельный отчёт по KPI лидорубов' : 'Отдельный отчёт по KPI менеджеров'}
           </h3>
           <p className="text-[10px] text-gray-500">{kpiTablePeriodLabel}</p>
+          {!isDiggerKpi ? (
+            <p className="text-[10px] text-gray-500 leading-relaxed">
+              Столбцы встреч считаются автоматически из назначенных и проведённых встреч отчёта (тип «Новая» /
+              «Повторная»). Переходы — ручной ввод менеджера.
+            </p>
+          ) : null}
         </div>
 
         {isDiggerKpi ? (
@@ -400,7 +436,9 @@ export function KpiDashboard({
                 <th className="py-4 px-6">Дата отчета</th>
                 <th className="py-4 px-4">Лидоруб</th>
                 <th className="py-4 px-4 text-center">Отработано</th>
+                <th className="py-4 px-4 text-center">Взято новых</th>
                 <th className="py-4 px-4 text-center">Звонки</th>
+                <th className="py-4 px-4 text-center">Квалификация</th>
                 <th className="py-4 px-4 text-center">Передано</th>
                 {onDeleteReport ? <th className="py-4 px-4 text-right">Действия</th> : null}
               </tr>
@@ -411,7 +449,9 @@ export function KpiDashboard({
                   <td className="py-3.5 px-6 text-gray-600 whitespace-nowrap">{formatDisplayDate(report.date)}</td>
                   <td className="py-3.5 px-4 font-bold text-gray-800 whitespace-nowrap">{report.manager}</td>
                   <td className="py-3.5 px-4 text-center font-black text-gray-800">{report.stats.processedTotal}</td>
+                  <td className="py-3.5 px-4 text-center font-black text-emerald-700">{report.stats.newInWork}</td>
                   <td className="py-3.5 px-4 text-center font-black text-indigo-700">{report.stats.callsTotal}</td>
+                  <td className="py-3.5 px-4 text-center font-black text-amber-700">{report.stats.validatedTotal}</td>
                   <td className="py-3.5 px-4 text-center font-black text-slate-800">
                     {transferredByManagerDate.get(`${report.manager}||${report.date}`) || 0}
                   </td>
@@ -436,11 +476,14 @@ export function KpiDashboard({
               <tr className="bg-gray-50/50 text-[9px] font-bold text-gray-400 uppercase border-y border-gray-100">
                 <th className="py-4 px-4">Дата отчета</th>
                 <th className="py-4 px-4">Менеджер</th>
-                {METRIC_CARDS.map((c) => (
-                  <th key={c.key} className="py-4 px-4 text-center whitespace-nowrap">
-                    {c.short.toUpperCase()}
-                  </th>
-                ))}
+                <th className="py-4 px-4 text-center">Уник. поставщики</th>
+                <th className="py-4 px-4 text-center">Взято новых</th>
+                <th className="py-4 px-4 text-center">Звонки</th>
+                <th className="py-4 px-4 text-center">Прошли квал</th>
+                <th className="py-4 px-4 text-center">Назначено встреч</th>
+                <th className="py-4 px-4 text-center">Проведено новых</th>
+                <th className="py-4 px-4 text-center">Проведено повторных</th>
+                <th className="py-4 px-4 text-center">Переходы</th>
                 {onDeleteReport ? <th className="py-4 px-4 text-right">Действия</th> : null}
               </tr>
             </thead>
@@ -450,16 +493,18 @@ export function KpiDashboard({
                 if (!m) return null;
                 return (
                   <tr key={`kpi-${report.id}`} className="hover:bg-gray-50/50">
-                    <td className="py-3.5 px-4 text-gray-500 text-xs whitespace-nowrap">{formatDisplayDate(report.date)}</td>
+                    <td className="py-3.5 px-4 text-gray-500 text-xs whitespace-nowrap">
+                      {formatDisplayDate(report.date)}
+                    </td>
                     <td className="py-3.5 px-4 font-bold text-gray-800 whitespace-nowrap">{report.manager}</td>
-                    <td className="py-3.5 px-4 text-center font-bold text-gray-700">{m.uniqueSuppliers}</td>
-                    <td className="py-3.5 px-4 text-center font-bold text-emerald-600">{m.calls}</td>
-                    <td className="py-3.5 px-4 text-center font-bold text-indigo-600">{m.newMeetings}</td>
-                    <td className="py-3.5 px-4 text-center font-bold text-amber-600">{m.repeatMeetings}</td>
-                    <td className="py-3.5 px-4 text-center font-bold text-cyan-600">{m.nextActions}</td>
-                    <td className="py-3.5 px-4 text-center font-bold text-blue-600">{m.tasks}</td>
-                    <td className="py-3.5 px-4 text-center font-bold text-purple-600">{m.transitions}</td>
-                    <td className="py-3.5 px-4 text-center font-bold text-rose-600">{m.blockersResolved}</td>
+                    <td className="py-3.5 px-4 text-center font-black text-gray-800">{m.uniqueSuppliers}</td>
+                    <td className="py-3.5 px-4 text-center font-black text-emerald-700">{m.newInWork}</td>
+                    <td className="py-3.5 px-4 text-center font-black text-indigo-700">{m.calls}</td>
+                    <td className="py-3.5 px-4 text-center font-black text-amber-700">{m.validated}</td>
+                    <td className="py-3.5 px-4 text-center font-black text-slate-800">{m.assignedNew}</td>
+                    <td className="py-3.5 px-4 text-center font-black text-teal-700">{m.conductedNew}</td>
+                    <td className="py-3.5 px-4 text-center font-black text-blue-700">{m.conductedRepeat}</td>
+                    <td className="py-3.5 px-4 text-center font-black text-purple-700">{m.transitions}</td>
                     {onDeleteReport ? (
                       <td className="py-3.5 px-4 text-right">
                         <button
@@ -474,6 +519,22 @@ export function KpiDashboard({
                   </tr>
                 );
               })}
+              {kpiRows.length > 0 ? (
+                <tr className="bg-gray-50/80 font-black text-[11px] text-gray-700">
+                  <td className="py-3 px-4" colSpan={2}>
+                    Итого по таблице
+                  </td>
+                  <td className="py-3 px-4 text-center text-gray-500">—</td>
+                  <td className="py-3 px-4 text-center text-gray-500">—</td>
+                  <td className="py-3 px-4 text-center text-gray-500">—</td>
+                  <td className="py-3 px-4 text-center text-gray-500">—</td>
+                  <td className="py-3 px-4 text-center text-slate-900">{meetingTotals.assignedNew}</td>
+                  <td className="py-3 px-4 text-center text-teal-900">{meetingTotals.conductedNew}</td>
+                  <td className="py-3 px-4 text-center text-blue-900">{meetingTotals.conductedRepeat}</td>
+                  <td className="py-3 px-4 text-center text-purple-900">{meetingTotals.transitions}</td>
+                  {onDeleteReport ? <td className="py-3 px-4" /> : null}
+                </tr>
+              ) : null}
             </tbody>
           </table>
         )}
