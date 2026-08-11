@@ -34,6 +34,7 @@ export type FormStats = {
   newInWork: number;
   callsTotal: number;
   validatedTotal: number;
+  stageTransitions: number;
 };
 export type UiAssigned = { id?: string; entityName: string; bin: string; date: string; type: string };
 export type UiConducted = {
@@ -100,6 +101,7 @@ type ReportRow = {
   new_in_work: number;
   calls_total: number;
   validated_total: number;
+  stage_transitions: number;
   crm_assigned_meetings: {
     id: string;
     entity_name: string;
@@ -147,6 +149,7 @@ function mapReport(r: ReportRow): FullReport {
       newInWork: r.new_in_work,
       callsTotal: r.calls_total,
       validatedTotal: r.validated_total,
+      stageTransitions: r.stage_transitions ?? 0,
     },
     assignedMeetings: (r.crm_assigned_meetings || [])
       .sort((a, b) => a.sort_order - b.sort_order)
@@ -199,7 +202,7 @@ function mapReport(r: ReportRow): FullReport {
 
 const reportSelect = `
   id, report_date, manager, manager_id,
-  processed_total, new_in_work, calls_total, validated_total,
+  processed_total, new_in_work, calls_total, validated_total, stage_transitions,
   crm_assigned_meetings ( id, entity_name, bin, meeting_date, meeting_type, sort_order ),
   crm_conducted_meetings ( id, entity_name, bin, meeting_date, meeting_type, result, sort_order, cp_sent, cp_quantity, cp_paid ),
   crm_confirmed_orders ( id, entity_name, bin, via_entity_name, via_bin, order_count, amounts, total_amount, sort_order, mrp_kzt_applied, is_ktp_applied, commission_amount )
@@ -815,6 +818,7 @@ export async function saveKpiToDb(payload: {
   newInWork: number;
   callsTotal: number;
   validatedTotal: number;
+  stageTransitions: number;
 }): Promise<string> {
   const { data, error } = await getSupabase().rpc('save_crm_kpi', { payload });
   if (error) throw error;

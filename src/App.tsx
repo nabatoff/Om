@@ -98,7 +98,6 @@ import {
 } from './lib/enterpriseLeadsApi';
 import { notifyEnterpriseLeadTelegram } from './lib/telegramEnterpriseLead';
 import {
-  STAFF_DEPT_OPTIONS,
   managerOptionsForDept,
   reportMatchesStaffDept,
   type StaffDept,
@@ -107,15 +106,8 @@ import type { OrderRow } from './lib/ordersGrouping';
 import { AdminSettingsPanel } from './components/AdminSettingsPanel';
 import { SalesComparisonDashboard } from './components/SalesComparisonDashboard';
 import {
-  countAssignedNewMeetings,
-  countConductedNewMeetings,
-  countConductedRepeatMeetings,
-  countCounterpartiesConductedNewWithOrder,
-  dedupeReportsByDayManager,
-  formatKpiPercent,
   isNewMeetingType,
   isRepeatMeetingType,
-  kpiConversionPercent,
   normalizeKpiMeetingType,
   shouldHidePlannedEnterpriseLead,
 } from './lib/kpiMetrics';
@@ -152,8 +144,11 @@ import { LoginView } from './components/LoginView';
 import { StaffManager } from './components/StaffManager';
 import { ManagerMeetingsPanel } from './components/ManagerMeetingsPanel';
 import { postTelegramDailyDigestIfConfigured } from './lib/telegramDailyDigest';
-
-const DAILY_CALL_GOAL = 22;
+import { KpiDashboard } from './components/KpiDashboard';
+import { AdminFilters } from './components/AdminFilters';
+import { ManagerWorkItemsPanel } from './components/ManagerWorkItemsPanel';
+import { ManagerBlockersPanel } from './components/ManagerBlockersPanel';
+import { DAILY_CALL_GOAL } from './lib/kpiMetrics';
 
 function reportStrength(r: FullReport): number {
   return (
@@ -267,6 +262,7 @@ const App = () => {
     newInWork: 0,
     callsTotal: 0,
     validatedTotal: 0,
+    stageTransitions: 0,
   });
   const [assignedMeetings, setAssignedMeetings] = useState<UiAssigned[]>([]);
   const [conductedMeetings, setConductedMeetings] = useState<UiConducted[]>([]);
@@ -594,7 +590,7 @@ const App = () => {
       setConfirmedOrders([...managerReportForDate.confirmedOrders]);
       return;
     }
-    setFormStats({ processedTotal: 0, newInWork: 0, callsTotal: 0, validatedTotal: 0 });
+    setFormStats({ processedTotal: 0, newInWork: 0, callsTotal: 0, validatedTotal: 0, stageTransitions: 0 });
     setAssignedMeetings([]);
     setConductedMeetings([]);
     setConfirmedOrders([]);
@@ -688,7 +684,8 @@ const App = () => {
         nextStats.processedTotal === 0 &&
         nextStats.newInWork === 0 &&
         nextStats.callsTotal === 0 &&
-        nextStats.validatedTotal === 0;
+        nextStats.validatedTotal === 0 &&
+        nextStats.stageTransitions === 0;
       if (isAllZero && !managerReportForDate?.id) return;
       setKpiSaving(true);
       try {
@@ -699,6 +696,7 @@ const App = () => {
           newInWork: nextStats.newInWork,
           callsTotal: nextStats.callsTotal,
           validatedTotal: nextStats.validatedTotal,
+          stageTransitions: nextStats.stageTransitions,
         });
       } catch (e) {
         console.error(e);
@@ -1601,6 +1599,7 @@ const App = () => {
             onSaveAction={(opts) => saveReport(opts)}
             onSaveKpi={saveKpi}
             kpiSaving={kpiSaving}
+            onRefreshReport={refresh}
             setIsMeetingModalOpen={setIsMeetingModalOpen}
             setActiveMeetingIndex={setActiveMeetingIndex}
             setMeetingResultTemp={setMeetingResultTemp}
@@ -2281,6 +2280,7 @@ const ManagerDashboard = ({
   onSaveAction,
   onSaveKpi,
   kpiSaving,
+  onRefreshReport,
   setIsMeetingModalOpen,
   setActiveMeetingIndex,
   setMeetingResultTemp,
@@ -2310,6 +2310,7 @@ const ManagerDashboard = ({
   onSaveAction: (opts?: SaveReportOptions) => Promise<boolean>;
   onSaveKpi: (nextStats: FormStats) => Promise<void>;
   kpiSaving: boolean;
+  onRefreshReport?: () => void | Promise<void>;
   setIsMeetingModalOpen: SetState<boolean>;
   setActiveMeetingIndex: SetState<number | null>;
   setMeetingResultTemp: SetState<string>;
@@ -2329,6 +2330,7 @@ const ManagerDashboard = ({
     newInWork: String(stats.newInWork),
     callsTotal: String(stats.callsTotal),
     validatedTotal: String(stats.validatedTotal),
+    stageTransitions: String(stats.stageTransitions),
   });
   const [transferredToEnterprise, setTransferredToEnterprise] = useState(0);
   const [transferDraft, setTransferDraft] = useState('');
@@ -2341,8 +2343,9 @@ const ManagerDashboard = ({
       newInWork: String(stats.newInWork),
       callsTotal: String(stats.callsTotal),
       validatedTotal: String(stats.validatedTotal),
+      stageTransitions: String(stats.stageTransitions),
     });
-  }, [stats.processedTotal, stats.newInWork, stats.callsTotal, stats.validatedTotal]);
+  }, [stats.processedTotal, stats.newInWork, stats.callsTotal, stats.validatedTotal, stats.stageTransitions]);
 
   const refreshTransferredCount = useCallback(async () => {
     try {
@@ -2457,7 +2460,50 @@ const ManagerDashboard = ({
       </div>
 
       <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-gray-100">
-        <div className="text-xs uppercase font-bold tracking-wider text-gray-400 mb-4">Общая сводка за период</div>
+        <div className="text-xs uppercase font-bold tracking-wider text-gray-400 mb-4">KPI за день</div>
+        {isSalesManager ? (
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <div className="bg-[#f3f4f6] p-4 rounded-xl text-left">
+              <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Уник. поставщики</div>
+              <div className="text-2xl font-black text-gray-800">{stats.processedTotal}</div>
+              <p className="text-[10px] text-gray-400 mt-1">Из карточек «Поставщики в работе»</p>
+            </div>
+            <div className="bg-[#eff6ff] p-4 rounded-xl border border-blue-50 text-left">
+              <div className="flex items-center justify-between mb-1">
+                <div className="text-[10px] font-bold text-blue-700 uppercase tracking-widest">Звонки</div>
+                <span className="text-[10px] font-bold text-blue-300">Цель: {DAILY_CALL_GOAL}</span>
+              </div>
+              <input
+                type="number"
+                min={0}
+                className="w-full text-2xl font-black text-blue-800 outline-none bg-transparent"
+                value={statDraft.callsTotal}
+                onChange={(e) => handleStatChange('callsTotal', e.target.value)}
+                onFocus={(e) => e.target.value === '0' && handleStatChange('callsTotal', '')}
+                onBlur={async () => {
+                  handleStatBlur('callsTotal');
+                  await commitKpi('callsTotal');
+                }}
+              />
+              <p className="text-[10px] text-blue-400/80 mt-1">{kpiSaving ? 'Сохранение…' : 'KPI при уходе с поля'}</p>
+            </div>
+            <div className="bg-[#faf5ff] p-4 rounded-xl border border-purple-50 text-left">
+              <div className="text-[10px] font-bold text-purple-700 uppercase tracking-widest mb-1">Переходы этапа</div>
+              <input
+                type="number"
+                min={0}
+                className="w-full text-2xl font-black text-purple-800 outline-none bg-transparent"
+                value={statDraft.stageTransitions}
+                onChange={(e) => handleStatChange('stageTransitions', e.target.value)}
+                onFocus={(e) => e.target.value === '0' && handleStatChange('stageTransitions', '')}
+                onBlur={async () => {
+                  handleStatBlur('stageTransitions');
+                  await commitKpi('stageTransitions');
+                }}
+              />
+            </div>
+          </div>
+        ) : (
         <div
           className={`grid grid-cols-2 gap-4 ${
             isLeadDigger ? 'md:grid-cols-3 lg:grid-cols-5' : 'md:grid-cols-4'
@@ -2555,7 +2601,21 @@ const ManagerDashboard = ({
             </div>
           ) : null}
         </div>
+        )}
       </div>
+      {isSalesManager ? (
+        <>
+          <ManagerWorkItemsPanel
+            reportDate={reportDate}
+            clients={clients}
+            onOpenAddClient={onOpenAddClient}
+            onSaved={async () => {
+              await onRefreshReport?.();
+            }}
+          />
+          <ManagerBlockersPanel clients={clients} onOpenAddClient={onOpenAddClient} />
+        </>
+      ) : null}
       <MeetingTable
         title="Назначено встреч (План)"
         icon={<Clock className="text-indigo-400" />}
@@ -3826,457 +3886,6 @@ const AdminDashboard = ({
   );
 };
 
-const KpiDashboard = ({
-  allReports,
-  reports,
-  filterManager,
-  setFilterManager,
-  filterDateFrom,
-  setFilterDateFrom,
-  filterDateTo,
-  setFilterDateTo,
-  managerOptions,
-  staffDept,
-  setStaffDept,
-  onDeleteReport,
-}: {
-  allReports: FullReport[];
-  reports: FullReport[];
-  filterManager: string;
-  setFilterManager: SetState<string>;
-  filterDateFrom: string;
-  setFilterDateFrom: SetState<string>;
-  filterDateTo: string;
-  setFilterDateTo: SetState<string>;
-  managerOptions: string[];
-  staffDept: StaffDept;
-  setStaffDept: (dept: StaffDept) => void;
-  onDeleteReport?: (reportId: string) => void;
-}) => {
-  const isDiggerKpi = staffDept === 'diggers';
-  const kpiTablePeriod = useMemo(() => adminDateFilterBounds(filterDateFrom, filterDateTo), [filterDateFrom, filterDateTo]);
-  const kpiTablePeriodLabel = `${formatDisplayDate(kpiTablePeriod.from)} — ${formatDisplayDate(kpiTablePeriod.to)}${
-    kpiTablePeriod.isDefaultMonth ? ' · текущий месяц по умолчанию' : ''
-  }`;
-
-  const [enterpriseLeads, setEnterpriseLeads] = useState<EnterpriseLead[]>([]);
-
-  useEffect(() => {
-    if (!isDiggerKpi) {
-      setEnterpriseLeads([]);
-      return;
-    }
-    let cancelled = false;
-    void listEnterpriseLeadsApi('all')
-      .then((rows) => {
-        if (!cancelled) setEnterpriseLeads(rows);
-      })
-      .catch(() => {
-        if (!cancelled) setEnterpriseLeads([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [isDiggerKpi, filterDateFrom, filterDateTo, filterManager]);
-
-  const kpiRows = useMemo(
-    () =>
-      dedupeReportsByDayManager(reports).sort(
-        (a, b) => b.date.localeCompare(a.date) || a.manager.localeCompare(b.manager, 'ru'),
-      ),
-    [reports],
-  );
-
-  const diggerLeadsInPeriod = useMemo(() => {
-    const bounds = adminDateFilterBounds(filterDateFrom, filterDateTo);
-    return enterpriseLeads.filter((l) => {
-      if (l.routingStatus === 'returned_to_smb') return false;
-      const day = leadTransferredDay(l);
-      if (!reportDateMatchesAdminBounds(day, bounds)) return false;
-      if (filterManager !== 'Все' && l.creatorName !== filterManager) return false;
-      return true;
-    });
-  }, [enterpriseLeads, filterDateFrom, filterDateTo, filterManager]);
-
-  const diggerTransferTotals = useMemo(() => {
-    const transferred = diggerLeadsInPeriod.length;
-    const completed = diggerLeadsInPeriod.filter((l) => l.meetingStatus === 'completed').length;
-    return {
-      transferred,
-      completed,
-      conversion: kpiConversionPercent(completed, transferred),
-    };
-  }, [diggerLeadsInPeriod]);
-
-  const transferredByManagerDate = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const l of diggerLeadsInPeriod) {
-      const day = leadTransferredDay(l);
-      const key = `${l.creatorName}||${day}`;
-      map.set(key, (map.get(key) || 0) + 1);
-    }
-    return map;
-  }, [diggerLeadsInPeriod]);
-
-  const meetingTotals = useMemo(() => {
-    let conductedFact = 0;
-    let assignedNew = 0;
-    let conductedNew = 0;
-    let conductedRepeat = 0;
-    for (const r of kpiRows) {
-      conductedFact += r.conductedMeetings.length;
-      assignedNew += countAssignedNewMeetings(r);
-      conductedNew += countConductedNewMeetings(r, allReports);
-      conductedRepeat += countConductedRepeatMeetings(r);
-    }
-    return { conductedFact, assignedNew, conductedNew, conductedRepeat };
-  }, [kpiRows, allReports]);
-
-  const monthlyManagerSummary = useMemo(() => {
-    const bounds = adminDateFilterBounds(filterDateFrom, filterDateTo);
-    const periodLabel = `${formatDisplayDate(bounds.from)} — ${formatDisplayDate(bounds.to)}`;
-    const monthPrefix = bounds.from.slice(0, 7);
-    const source = allReports.filter((r) => {
-      const matchManager = filterManager === 'Все' || r.manager === filterManager;
-      return matchManager && reportDateMatchesAdminBounds(r.date, bounds);
-    });
-    const summaryReports = dedupeReportsByDayManager(source);
-    let processedTotal = 0;
-    let newInWork = 0;
-    let callsTotal = 0;
-    let validatedTotal = 0;
-    let assignedNew = 0;
-    let conductedNew = 0;
-    let conductedRepeat = 0;
-    for (const r of summaryReports) {
-      processedTotal += r.stats.processedTotal;
-      newInWork += r.stats.newInWork;
-      callsTotal += r.stats.callsTotal;
-      validatedTotal += r.stats.validatedTotal;
-      assignedNew += countAssignedNewMeetings(r);
-      conductedNew += countConductedNewMeetings(r, allReports);
-      conductedRepeat += countConductedRepeatMeetings(r);
-    }
-    const passedQualificationPct = kpiConversionPercent(validatedTotal, callsTotal);
-    const assignedGepPct = kpiConversionPercent(assignedNew, validatedTotal);
-    const conductedGepPct = kpiConversionPercent(conductedNew, assignedNew);
-    const confirmedOrderConvNumerator = countCounterpartiesConductedNewWithOrder(summaryReports, allReports);
-    const confirmedOrderConvPct = kpiConversionPercent(confirmedOrderConvNumerator, conductedNew);
-    return {
-      monthPrefix,
-      periodLabel,
-      isDefaultMonth: bounds.isDefaultMonth,
-      reportsCount: summaryReports.length,
-      processedTotal,
-      newInWork,
-      callsTotal,
-      validatedTotal,
-      assignedNew,
-      conductedNew,
-      conductedRepeat,
-      passedQualificationPct,
-      assignedGepPct,
-      conductedGepPct,
-      confirmedOrderConvNumerator,
-      confirmedOrderConvPct,
-    };
-  }, [allReports, filterManager, filterDateFrom, filterDateTo]);
-
-  return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-500">
-      <AdminFilters
-        manager={filterManager}
-        setManager={setFilterManager}
-        from={filterDateFrom}
-        setFrom={setFilterDateFrom}
-        to={filterDateTo}
-        setTo={setFilterDateTo}
-        managerOptions={managerOptions}
-        staffDept={staffDept}
-        setStaffDept={setStaffDept}
-        onReset={() => {
-          setStaffDept('all');
-          setFilterManager('Все');
-          const b = adminDateFilterBounds('', '');
-          setFilterDateFrom(b.from);
-          setFilterDateTo(b.to);
-        }}
-      />
-      <section className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-5 shadow-sm">
-        <div className="mb-3 text-left">
-          <h3 className="text-[11px] font-bold text-gray-700 uppercase tracking-widest">
-            {isDiggerKpi
-              ? monthlyManagerSummary.isDefaultMonth
-                ? `KPI лидорубов за месяц (${monthlyManagerSummary.monthPrefix})`
-                : 'KPI лидорубов за период'
-              : monthlyManagerSummary.isDefaultMonth
-                ? `Общая сводка за месяц (${monthlyManagerSummary.monthPrefix})`
-                : 'Общая сводка за период'}
-          </h3>
-          <p className="text-[10px] text-gray-500 mt-1">
-            {monthlyManagerSummary.periodLabel}
-            {' · '}
-            {isDiggerKpi ? 'лидоруб' : 'менеджер'}: {filterManager === 'Все' ? 'все' : filterManager}
-            {staffDept === 'diggers' ? ' · отдел: лидорубы' : staffDept === 'managers' ? ' · отдел: менеджеры' : ''}
-            . Отчётов: {monthlyManagerSummary.reportsCount}
-          </p>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-2">
-          <div className="rounded-xl bg-gray-50 border border-gray-100 p-3 text-left">
-            <p className="text-[10px] text-gray-500 font-bold uppercase">Отработано</p>
-            <p className="text-lg font-black text-gray-900">{monthlyManagerSummary.processedTotal}</p>
-          </div>
-          <div className="rounded-xl bg-emerald-50 border border-emerald-100 p-3 text-left">
-            <p className="text-[10px] text-emerald-700 font-bold uppercase">Взято новых</p>
-            <p className="text-lg font-black text-emerald-800">{monthlyManagerSummary.newInWork}</p>
-          </div>
-          <div className="rounded-xl bg-indigo-50 border border-indigo-100 p-3 text-left">
-            <p className="text-[10px] text-indigo-700 font-bold uppercase">Звонки</p>
-            <p className="text-lg font-black text-indigo-800">{monthlyManagerSummary.callsTotal}</p>
-          </div>
-          <div className="rounded-xl bg-amber-50 border border-amber-100 p-3 text-left">
-            <p className="text-[10px] text-amber-700 font-bold uppercase">Квалификация</p>
-            <p className="text-lg font-black text-amber-800">{monthlyManagerSummary.validatedTotal}</p>
-          </div>
-          {isDiggerKpi ? (
-            <>
-              <div className="rounded-xl bg-slate-50 border border-slate-100 p-3 text-left">
-                <p className="text-[10px] text-slate-700 font-bold uppercase">Передано</p>
-                <p className="text-lg font-black text-slate-900">{diggerTransferTotals.transferred}</p>
-              </div>
-              <div className="rounded-xl bg-teal-50 border border-teal-100 p-3 text-left">
-                <p className="text-[10px] text-teal-700 font-bold uppercase">Проведено по крупным</p>
-                <p className="text-lg font-black text-teal-800">{diggerTransferTotals.completed}</p>
-              </div>
-              <div className="rounded-xl bg-blue-50 border border-blue-100 p-3 text-left">
-                <p className="text-[10px] text-blue-700 font-bold uppercase">Конверсия</p>
-                <p className="text-lg font-black text-blue-800">{formatKpiPercent(diggerTransferTotals.conversion)}</p>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="rounded-xl bg-slate-50 border border-slate-100 p-3 text-left">
-                <p className="text-[10px] text-slate-700 font-bold uppercase">Назначено новых</p>
-                <p className="text-lg font-black text-slate-900">{monthlyManagerSummary.assignedNew}</p>
-              </div>
-              <div className="rounded-xl bg-teal-50 border border-teal-100 p-3 text-left">
-                <p className="text-[10px] text-teal-700 font-bold uppercase">Проведено новых</p>
-                <p className="text-lg font-black text-teal-800">{monthlyManagerSummary.conductedNew}</p>
-              </div>
-              <div className="rounded-xl bg-blue-50 border border-blue-100 p-3 text-left">
-                <p className="text-[10px] text-blue-700 font-bold uppercase">Проведено повторных</p>
-                <p className="text-lg font-black text-blue-800">{monthlyManagerSummary.conductedRepeat}</p>
-              </div>
-            </>
-          )}
-        </div>
-        {isDiggerKpi ? (
-          <div className="mt-4 pt-4 border-t border-gray-100 text-left">
-            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Конверсия по крупным</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              <div className="rounded-xl bg-amber-50/60 border border-amber-100 p-3">
-                <p className="text-[10px] text-amber-800 font-bold uppercase leading-snug">Прошли квалификацию</p>
-                <p className="text-xl font-black text-amber-950 mt-1">
-                  {formatKpiPercent(monthlyManagerSummary.passedQualificationPct)}
-                </p>
-                <p className="text-[9px] text-amber-700/80 mt-1 leading-snug">Квалификация ÷ Звонки × 100%</p>
-              </div>
-              <div className="rounded-xl bg-slate-50/80 border border-slate-200 p-3">
-                <p className="text-[10px] text-slate-700 font-bold uppercase leading-snug">Доходимость круп</p>
-                <p className="text-xl font-black text-slate-900 mt-1">
-                  {formatKpiPercent(diggerTransferTotals.conversion)}
-                </p>
-                <p className="text-[9px] text-slate-600 mt-1 leading-snug">
-                  Проведено ÷ Передано × 100% (без возвратов на СМБ)
-                </p>
-                <p className="text-[9px] text-slate-500 mt-1 font-mono">
-                  {diggerTransferTotals.completed} / {diggerTransferTotals.transferred}
-                </p>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="mt-4 pt-4 border-t border-gray-100 text-left">
-            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Конверсия</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <div className="rounded-xl bg-amber-50/60 border border-amber-100 p-3">
-                <p className="text-[10px] text-amber-800 font-bold uppercase leading-snug">Прошли квалификацию</p>
-                <p className="text-xl font-black text-amber-950 mt-1">
-                  {formatKpiPercent(monthlyManagerSummary.passedQualificationPct)}
-                </p>
-                <p className="text-[9px] text-amber-700/80 mt-1 leading-snug">
-                  Квалификация ÷ Звонки × 100%
-                </p>
-              </div>
-              <div className="rounded-xl bg-slate-50/80 border border-slate-200 p-3">
-                <p className="text-[10px] text-slate-700 font-bold uppercase leading-snug">Назначено ГЭП</p>
-                <p className="text-xl font-black text-slate-900 mt-1">
-                  {formatKpiPercent(monthlyManagerSummary.assignedGepPct)}
-                </p>
-                <p className="text-[9px] text-slate-600 mt-1 leading-snug">
-                  Назначено новых ÷ Квалификация × 100%
-                </p>
-              </div>
-              <div className="rounded-xl bg-teal-50/60 border border-teal-100 p-3">
-                <p className="text-[10px] text-teal-800 font-bold uppercase leading-snug">Проведен ГЭП</p>
-                <p className="text-xl font-black text-teal-950 mt-1">
-                  {formatKpiPercent(monthlyManagerSummary.conductedGepPct)}
-                </p>
-                <p className="text-[9px] text-teal-800/80 mt-1 leading-snug">
-                  Проведено новых ÷ Назначено новых × 100%
-                </p>
-              </div>
-              <div className="rounded-xl bg-orange-50/70 border border-orange-100 p-3">
-                <p className="text-[10px] text-orange-900 font-bold uppercase leading-snug">Подтвержден заказ</p>
-                <p className="text-xl font-black text-orange-950 mt-1">
-                  {formatKpiPercent(monthlyManagerSummary.confirmedOrderConvPct)}
-                </p>
-                <p className="text-[9px] text-orange-900/80 mt-1 leading-snug">
-                  Уникальные контрагенты с «проведено новых» (KPI) и заказом в периоде ÷ Проведено новых × 100%
-                </p>
-                <p className="text-[9px] text-orange-800/70 mt-1 font-mono">
-                  {monthlyManagerSummary.confirmedOrderConvNumerator} / {monthlyManagerSummary.conductedNew}
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-      </section>
-      <section className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-x-auto text-left">
-        <div className="px-6 pt-5 pb-2 space-y-1">
-          <h3 className="text-xs font-bold text-gray-700 uppercase tracking-widest">
-            {isDiggerKpi ? 'Отдельный отчёт по KPI лидорубов' : 'Отдельный отчёт по KPI менеджеров'}
-          </h3>
-          <p className="text-[10px] text-gray-500">{kpiTablePeriodLabel}</p>
-          <p className="text-[10px] text-gray-500 leading-relaxed">
-            {isDiggerKpi
-              ? '«Передано» — лиды в буфер за дату отчёта (без возвратов на СМБ). Базовые KPI — из дневных отчётов.'
-              : 'Столбцы встреч считаются автоматически из назначенных и проведённых встреч отчёта (тип «Новая» / «Повторная» по полю типа встречи).'}
-          </p>
-        </div>
-        {isDiggerKpi ? (
-          <table className="w-full text-left border-collapse min-w-[980px]">
-            <thead>
-              <tr className="bg-gray-50/50 text-[10px] font-bold text-gray-400 uppercase border-y border-gray-100">
-                <th className="py-4 px-6">Дата отчета</th>
-                <th className="py-4 px-4">Лидоруб</th>
-                <th className="py-4 px-4 text-center">Отработано</th>
-                <th className="py-4 px-4 text-center">Взято новых</th>
-                <th className="py-4 px-4 text-center">Звонки</th>
-                <th className="py-4 px-4 text-center">Квалификация</th>
-                <th className="py-4 px-4 text-center">Передано</th>
-                {onDeleteReport ? <th className="py-4 px-4 text-right">Действия</th> : null}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {kpiRows.map((report) => (
-                <tr key={`kpi-digger-${report.id}`} className="hover:bg-gray-50/50">
-                  <td className="py-3.5 px-6 text-gray-600 whitespace-nowrap">{formatDisplayDate(report.date)}</td>
-                  <td className="py-3.5 px-4 font-bold text-gray-800 whitespace-nowrap">{report.manager}</td>
-                  <td className="py-3.5 px-4 text-center font-black text-gray-800">{report.stats.processedTotal}</td>
-                  <td className="py-3.5 px-4 text-center font-black text-emerald-700">{report.stats.newInWork}</td>
-                  <td className="py-3.5 px-4 text-center font-black text-indigo-700">{report.stats.callsTotal}</td>
-                  <td className="py-3.5 px-4 text-center font-black text-amber-700">{report.stats.validatedTotal}</td>
-                  <td className="py-3.5 px-4 text-center font-black text-slate-800">
-                    {transferredByManagerDate.get(`${report.manager}||${report.date}`) || 0}
-                  </td>
-                  {onDeleteReport ? (
-                    <td className="py-3.5 px-4 text-right">
-                      <button
-                        type="button"
-                        onClick={() => onDeleteReport(report.id)}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase text-red-600 border border-red-100 hover:bg-red-50"
-                        title="Удалить KPI-отчёт"
-                      >
-                        <Trash2 size={12} /> Удалить
-                      </button>
-                    </td>
-                  ) : null}
-                </tr>
-              ))}
-              {kpiRows.length > 0 && (
-                <tr className="bg-gray-50/80 font-black text-[11px] text-gray-700">
-                  <td className="py-3 px-6" colSpan={2}>
-                    Итого по таблице
-                  </td>
-                  <td className="py-3 px-4 text-center text-gray-500">—</td>
-                  <td className="py-3 px-4 text-center text-gray-500">—</td>
-                  <td className="py-3 px-4 text-center text-gray-500">—</td>
-                  <td className="py-3 px-4 text-center text-gray-500">—</td>
-                  <td className="py-3 px-4 text-center text-slate-900">{diggerTransferTotals.transferred}</td>
-                  <td className="py-3 px-4" />
-                </tr>
-              )}
-            </tbody>
-          </table>
-        ) : (
-          <table className="w-full text-left border-collapse min-w-[1180px]">
-            <thead>
-              <tr className="bg-gray-50/50 text-[10px] font-bold text-gray-400 uppercase border-y border-gray-100">
-                <th className="py-4 px-6">Дата отчета</th>
-                <th className="py-4 px-4">Менеджер</th>
-                <th className="py-4 px-4 text-center">Отработано</th>
-                <th className="py-4 px-4 text-center">Взято новых</th>
-                <th className="py-4 px-4 text-center">Звонки</th>
-                <th className="py-4 px-4 text-center">Квалификация</th>
-                <th className="py-4 px-4 text-center">Фактически за день проведено</th>
-                <th className="py-4 px-4 text-center">Назначено новых</th>
-                <th className="py-4 px-4 text-center">Проведено новых</th>
-                <th className="py-4 px-4 text-center">Проведено повторных</th>
-                {onDeleteReport ? <th className="py-4 px-4 text-right">Действия</th> : null}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {kpiRows.map((report) => (
-                <tr key={`kpi-${report.id}`} className="hover:bg-gray-50/50">
-                  <td className="py-3.5 px-6 text-gray-600 whitespace-nowrap">{formatDisplayDate(report.date)}</td>
-                  <td className="py-3.5 px-4 font-bold text-gray-800 whitespace-nowrap">{report.manager}</td>
-                  <td className="py-3.5 px-4 text-center font-black text-gray-800">{report.stats.processedTotal}</td>
-                  <td className="py-3.5 px-4 text-center font-black text-emerald-700">{report.stats.newInWork}</td>
-                  <td className="py-3.5 px-4 text-center font-black text-indigo-700">{report.stats.callsTotal}</td>
-                  <td className="py-3.5 px-4 text-center font-black text-amber-700">{report.stats.validatedTotal}</td>
-                  <td className="py-3.5 px-4 text-center font-black text-sky-700">{report.conductedMeetings.length}</td>
-                  <td className="py-3.5 px-4 text-center font-black text-slate-800">{countAssignedNewMeetings(report)}</td>
-                  <td className="py-3.5 px-4 text-center font-black text-teal-700">{countConductedNewMeetings(report, allReports)}</td>
-                  <td className="py-3.5 px-4 text-center font-black text-blue-700">{countConductedRepeatMeetings(report)}</td>
-                  {onDeleteReport ? (
-                  <td className="py-3.5 px-4 text-right">
-                    <button
-                      type="button"
-                      onClick={() => onDeleteReport(report.id)}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase text-red-600 border border-red-100 hover:bg-red-50"
-                      title="Удалить KPI-отчёт"
-                    >
-                      <Trash2 size={12} /> Удалить
-                    </button>
-                  </td>
-                  ) : null}
-                </tr>
-              ))}
-              {kpiRows.length > 0 && (
-                <tr className="bg-gray-50/80 font-black text-[11px] text-gray-700">
-                  <td className="py-3 px-6" colSpan={2}>
-                    Итого по таблице
-                  </td>
-                  <td className="py-3 px-4 text-center text-gray-500">—</td>
-                  <td className="py-3 px-4 text-center text-gray-500">—</td>
-                  <td className="py-3 px-4 text-center text-gray-500">—</td>
-                  <td className="py-3 px-4 text-center text-gray-500">—</td>
-                  <td className="py-3 px-4 text-center text-sky-900">{meetingTotals.conductedFact}</td>
-                  <td className="py-3 px-4 text-center text-slate-900">{meetingTotals.assignedNew}</td>
-                  <td className="py-3 px-4 text-center text-teal-900">{meetingTotals.conductedNew}</td>
-                  <td className="py-3 px-4 text-center text-violet-900">{meetingTotals.conductedRepeat}</td>
-                  <td className="py-3 px-4" />
-                </tr>
-              )}
-            </tbody>
-          </table>
-        )}
-      </section>
-    </div>
-  );
-};
-
 const OrderSumCell = ({
   amount,
   commission,
@@ -4702,77 +4311,6 @@ const OrdersHistoryDashboard = ({
     </div>
   );
 };
-
-const AdminFilters = ({
-  manager,
-  setManager,
-  from,
-  setFrom,
-  to,
-  setTo,
-  managerOptions,
-  staffDept = 'all',
-  setStaffDept,
-  onReset,
-}: {
-  manager: string;
-  setManager: SetState<string>;
-  from: string;
-  setFrom: SetState<string>;
-  to: string;
-  setTo: SetState<string>;
-  managerOptions: string[];
-  staffDept?: StaffDept;
-  setStaffDept?: (dept: StaffDept) => void;
-  onReset: () => void;
-}) => (
-  <div className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4">
-    <div className="flex flex-wrap gap-4 sm:gap-6 items-end justify-between">
-      {setStaffDept ? (
-        <div className="w-full sm:flex-1 sm:min-w-[160px] space-y-1.5 text-left">
-          <label className="text-[10px] font-bold text-gray-400 uppercase">Отдел</label>
-          <select
-            className="w-full px-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-sm font-bold"
-            value={staffDept}
-            onChange={(e) => setStaffDept(e.target.value as StaffDept)}
-          >
-            {STAFF_DEPT_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </div>
-      ) : null}
-      <div className="w-full sm:flex-1 sm:min-w-[200px] space-y-1.5 text-left">
-        <label className="text-[10px] font-bold text-gray-400 uppercase">
-          {staffDept === 'diggers' ? 'Лидоруб' : staffDept === 'managers' ? 'Менеджер' : 'Сотрудник'}
-        </label>
-        <select
-          className="w-full px-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-sm font-bold"
-          value={manager}
-          onChange={(e) => setManager(e.target.value)}
-        >
-          {managerOptions.map((m) => (
-            <option key={m} value={m}>
-              {m}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="w-full sm:w-auto flex-none self-end">
-        <button
-          type="button"
-          onClick={onReset}
-          className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-gray-200 text-xs font-bold uppercase tracking-wider text-gray-600 hover:bg-gray-50"
-        >
-          Сбросить фильтр
-        </button>
-      </div>
-    </div>
-    <PeriodFilterFields from={from} to={to} setFrom={setFrom} setTo={setTo} />
-  </div>
-);
 
 const MeetingModal = ({
   isOpen: _o,
