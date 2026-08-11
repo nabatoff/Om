@@ -1682,7 +1682,9 @@ const App = () => {
             {adminSubView === 'enterpriseLeads' && canAdminWrite && (
               <EnterpriseLeadsBuffer managers={managerProfiles} onAssigned={refresh} />
             )}
-            {adminSubView === 'enterpriseLeadsAll' && <EnterpriseLeadsAllPanel />}
+            {adminSubView === 'enterpriseLeadsAll' && (
+              <EnterpriseLeadsAllPanel canDelete={canAdminWrite} onDeleted={refresh} />
+            )}
             {adminSubView === 'diggerConversion' && <LeadDiggerConversionDashboard />}
             {adminSubView === 'staff' && canAdminWrite && <StaffManager />}
             {adminSubView === 'meetings' && canAdminWrite && (

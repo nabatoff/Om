@@ -1,18 +1,25 @@
 import { useCallback, useEffect, useState } from 'react';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, Trash2 } from 'lucide-react';
 import { getSupabase } from '../lib/supabase';
 import {
+  adminDeleteEnterpriseLeadApi,
   formatLeadDate,
   leadDisplayStatus,
   listEnterpriseLeadsApi,
   type EnterpriseLead,
 } from '../lib/enterpriseLeadsApi';
 
-/** Readonly список всех переданных в круп (для админа / view-only). */
-export function EnterpriseLeadsAllPanel() {
+type Props = {
+  canDelete?: boolean;
+  onDeleted?: () => void | Promise<void>;
+};
+
+/** Список всех переданных в круп (админ / view-only). Удаление — только admin_write. */
+export function EnterpriseLeadsAllPanel({ canDelete = false, onDeleted }: Props) {
   const [rows, setRows] = useState<EnterpriseLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -52,12 +59,36 @@ export function EnterpriseLeadsAllPanel() {
     };
   }, [load]);
 
+  const deleteLead = async (lead: EnterpriseLead) => {
+    const st = leadDisplayStatus(lead);
+    const msg =
+      st.key === 'done'
+        ? `Удалить «${lead.clientName || lead.bin}» из переданных в круп?\n\nБудут удалены лид, плановая и проведённая встреча «Крупный лид» у менеджера.`
+        : `Удалить «${lead.clientName || lead.bin}» из переданных в круп?\n\nБудут удалены лид и связанные встречи «Крупный лид» у менеджера и лидоруба.`;
+    if (!confirm(msg)) return;
+    setDeletingId(lead.id);
+    setErr(null);
+    try {
+      await adminDeleteEnterpriseLeadApi(lead.id);
+      await load();
+      await onDeleted?.();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Не удалось удалить');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   return (
     <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-gray-100 text-left space-y-4">
       <div className="flex items-center justify-between gap-3 border-b border-gray-100 pb-4">
         <div>
           <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide">Переданные в круп</h2>
-          <p className="text-[11px] text-gray-500 mt-1">Все лиды в воронке крупного бизнеса (только просмотр)</p>
+          <p className="text-[11px] text-gray-500 mt-1">
+            {canDelete
+              ? 'Все лиды в воронке крупного бизнеса · удаление с встречами'
+              : 'Все лиды в воронке крупного бизнеса (только просмотр)'}
+          </p>
         </div>
         <button
           type="button"
@@ -77,7 +108,7 @@ export function EnterpriseLeadsAllPanel() {
         <p className="text-sm text-gray-400">Нет переданных лидов</p>
       ) : (
         <div className="overflow-x-auto -mx-1 om-scroll">
-          <table className="w-full text-left border-collapse min-w-[720px]">
+          <table className="w-full text-left border-collapse min-w-[780px]">
             <thead>
               <tr className="text-[9px] font-bold text-gray-400 uppercase border-b border-gray-100 tracking-widest">
                 <th className="pb-3 pr-3">Компания</th>
@@ -85,7 +116,8 @@ export function EnterpriseLeadsAllPanel() {
                 <th className="pb-3 pr-3">Лидоруб</th>
                 <th className="pb-3 pr-3">Менеджер</th>
                 <th className="pb-3 pr-3">Статус</th>
-                <th className="pb-3">Передано</th>
+                <th className="pb-3 pr-3">Передано</th>
+                {canDelete ? <th className="pb-3 text-right"> </th> : null}
               </tr>
             </thead>
             <tbody>
@@ -102,7 +134,21 @@ export function EnterpriseLeadsAllPanel() {
                         {st.label}
                       </span>
                     </td>
-                    <td className="py-3 text-gray-600">{formatLeadDate(r.transferredOn || r.transferredAt)}</td>
+                    <td className="py-3 pr-3 text-gray-600">{formatLeadDate(r.transferredOn || r.transferredAt)}</td>
+                    {canDelete ? (
+                      <td className="py-3 text-right">
+                        <button
+                          type="button"
+                          disabled={deletingId === r.id}
+                          onClick={() => void deleteLead(r)}
+                          className="inline-flex items-center gap-1.5 bg-red-50 hover:bg-red-100 text-red-700 px-3 py-2 rounded-lg text-xs font-bold transition disabled:opacity-40 border border-red-100"
+                          title="Удалить лид и связанные встречи"
+                        >
+                          <Trash2 size={14} />
+                          {deletingId === r.id ? '…' : 'Удалить'}
+                        </button>
+                      </td>
+                    ) : null}
                   </tr>
                 );
               })}
