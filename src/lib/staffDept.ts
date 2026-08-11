@@ -1,20 +1,5 @@
 export type StaffDept = 'all' | 'managers' | 'diggers';
 
-/** Пилот крупного привлечения: только Мадина. */
-export const ENTERPRISE_PILOT_MANAGER_ID = '3c884b06-227f-44d5-923f-5060e23fcb24';
-
-export function isEnterprisePilotManager(opts: {
-  id?: string | null;
-  email?: string | null;
-  login?: string | null;
-}): boolean {
-  if ((opts.id || '').trim() === ENTERPRISE_PILOT_MANAGER_ID) return true;
-  const email = (opts.email || '').trim().toLowerCase();
-  if (email.includes('musenova')) return true;
-  const login = (opts.login || '').trim().toLowerCase();
-  return login.includes('musenova');
-}
-
 export const STAFF_DEPT_OPTIONS: Array<{ value: StaffDept; label: string }> = [
   { value: 'all', label: 'Все отделы' },
   { value: 'managers', label: 'Менеджеры' },

@@ -87,8 +87,6 @@ import { AdminOrderCreateModal } from './components/AdminOrderCreateModal';
 import { EnterpriseLeadsBuffer } from './components/EnterpriseLeadsBuffer';
 import { EnterpriseLeadsAllPanel } from './components/EnterpriseLeadsAllPanel';
 import { LeadDiggerLeadsPanel } from './components/LeadDiggerLeadsPanel';
-import { ManagerWorkItemsPanel } from './components/ManagerWorkItemsPanel';
-import { AdminWorkItemsPeriodPanel } from './components/AdminWorkItemsPeriodPanel';
 import { LeadDiggerConversionDashboard } from './components/LeadDiggerConversionDashboard';
 import { ManagerEnterpriseLeadsPanel } from './components/ManagerEnterpriseLeadsPanel';
 import { DiggerTransferModal } from './components/DiggerTransferModal';
@@ -101,7 +99,6 @@ import {
 import { notifyEnterpriseLeadTelegram } from './lib/telegramEnterpriseLead';
 import {
   STAFF_DEPT_OPTIONS,
-  isEnterprisePilotManager,
   managerOptionsForDept,
   reportMatchesStaffDept,
   type StaffDept,
@@ -255,8 +252,7 @@ function getSavedManagerOrdersSection(): 'calendar' | 'meetings' | 'orders' {
 }
 
 const App = () => {
-  const { session, ready: authReady, managerName, signOut, isAdmin, canAdminWrite, isLeadDigger, user, profile } =
-    useAuth();
+  const { session, ready: authReady, managerName, signOut, isAdmin, canAdminWrite, isLeadDigger } = useAuth();
   const canManageClients = !isAdmin || canAdminWrite;
   const sessionUserId = session?.user?.id;
   const [currentView, setCurrentView] = useState<CurrentView>(() => getSavedCurrentView());
@@ -1613,15 +1609,6 @@ const App = () => {
             mrpKzt={mrpKzt}
             isLeadDigger={isLeadDigger}
             isSalesManager={!isAdmin && !isLeadDigger}
-            isEnterprisePilot={
-              !isAdmin &&
-              !isLeadDigger &&
-              isEnterprisePilotManager({
-                id: sessionUserId,
-                email: user?.email,
-                login: profile?.login_code,
-              })
-            }
             sessionUserId={sessionUserId}
             creatorName={managerName}
             diggerProfiles={assigneeProfiles.filter((p) => p.role === 'lead_digger')}
@@ -2301,7 +2288,6 @@ const ManagerDashboard = ({
   mrpKzt,
   isLeadDigger = false,
   isSalesManager = false,
-  isEnterprisePilot = false,
   sessionUserId = null,
   creatorName = '',
   diggerProfiles = [],
@@ -2331,7 +2317,6 @@ const ManagerDashboard = ({
   mrpKzt: number;
   isLeadDigger?: boolean;
   isSalesManager?: boolean;
-  isEnterprisePilot?: boolean;
   sessionUserId?: string | null;
   creatorName?: string;
   diggerProfiles?: Array<{ id: string; fullName: string; role: string }>;
@@ -2477,25 +2462,19 @@ const ManagerDashboard = ({
           }`}
         >
           <div className="bg-[#f3f4f6] p-4 rounded-xl text-left">
-            <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">
-              {isEnterprisePilot ? 'Уникальные поставщики в работе' : 'Отработано'}
-            </div>
-            {isEnterprisePilot ? (
-              <div className="w-full text-2xl font-black text-gray-800">{stats.processedTotal}</div>
-            ) : (
-              <input
-                type="number"
-                min={0}
-                className="w-full text-2xl font-black text-gray-800 outline-none bg-transparent"
-                value={statDraft.processedTotal}
-                onChange={(e) => handleStatChange('processedTotal', e.target.value)}
-                onFocus={(e) => e.target.value === '0' && handleStatChange('processedTotal', '')}
-                onBlur={async () => {
-                  handleStatBlur('processedTotal');
-                  await commitKpi('processedTotal');
-                }}
-              />
-            )}
+            <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Отработано</div>
+            <input
+              type="number"
+              min={0}
+              className="w-full text-2xl font-black text-gray-800 outline-none bg-transparent"
+              value={statDraft.processedTotal}
+              onChange={(e) => handleStatChange('processedTotal', e.target.value)}
+              onFocus={(e) => e.target.value === '0' && handleStatChange('processedTotal', '')}
+              onBlur={async () => {
+                handleStatBlur('processedTotal');
+                await commitKpi('processedTotal');
+              }}
+            />
           </div>
           <div className="bg-[#ecfdf5] p-4 rounded-xl border border-green-50 text-left">
             <div className="text-[10px] font-bold text-green-700 uppercase tracking-widest mb-1">Взято новых</div>
@@ -2575,18 +2554,6 @@ const ManagerDashboard = ({
           ) : null}
         </div>
       </div>
-      {isEnterprisePilot ? (
-        <ManagerWorkItemsPanel
-          reportDate={reportDate}
-          clients={clients}
-          onOpenAddClient={onOpenAddClient}
-          processedTotal={stats.processedTotal}
-          onProcessedTotalChange={(n) => {
-            setStats((prev) => (prev.processedTotal === n ? prev : { ...prev, processedTotal: n }));
-            setStatDraft((p) => (p.processedTotal === String(n) ? p : { ...p, processedTotal: String(n) }));
-          }}
-        />
-      ) : null}
       <MeetingTable
         title="Назначено встреч (План)"
         icon={<Clock className="text-indigo-400" />}
@@ -4033,17 +4000,6 @@ const KpiDashboard = ({
           setFilterDateTo(b.to);
         }}
       />
-      {!isDiggerKpi ? (
-        <AdminWorkItemsPeriodPanel
-          dateFrom={kpiTablePeriod.from}
-          dateTo={kpiTablePeriod.to}
-          filterManager={filterManager}
-          callsTotal={monthlyManagerSummary.callsTotal}
-          assignedNew={monthlyManagerSummary.assignedNew}
-          conductedNew={monthlyManagerSummary.conductedNew}
-          conductedRepeat={monthlyManagerSummary.conductedRepeat}
-        />
-      ) : null}
       <section className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-5 shadow-sm">
         <div className="mb-3 text-left">
           <h3 className="text-[11px] font-bold text-gray-700 uppercase tracking-widest">
