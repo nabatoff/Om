@@ -278,10 +278,14 @@ export type KpiPeriodSummary = {
 export type RnpPaceRow = {
   manager: string;
   callsFact: number;
+  /** План на сегодня (рабочие дни с начала месяца × дневная норма) */
   callsPlan: number;
+  /** План на весь месяц (только рабочие дни) */
+  callsPlanMonth: number;
   callsDelta: number;
   newMeetingsFact: number;
   newMeetingsPlan: number;
+  newMeetingsPlanMonth: number;
   newMeetingsDelta: number;
   transitionsFact: number;
 };
@@ -390,7 +394,27 @@ export function groupBlockersByReportKey(rows: BlockerCountRow[]): Map<string, n
   return map;
 }
 
-export function monthElapsedPercent(now = new Date()): {
+/** Пн–Пт считаем рабочими (без учёта праздников). */
+export function isWorkingDay(d: Date): boolean {
+  const day = d.getDay();
+  return day !== 0 && day !== 6;
+}
+
+export function countWorkingDaysInRange(from: Date, to: Date): number {
+  if (to < from) return 0;
+  let n = 0;
+  const cur = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+  const end = new Date(to.getFullYear(), to.getMonth(), to.getDate());
+  while (cur <= end) {
+    if (isWorkingDay(cur)) n += 1;
+    cur.setDate(cur.getDate() + 1);
+  }
+  return n;
+}
+
+export function monthWorkingDayStats(now = new Date()): {
+  workingDaysInMonth: number;
+  workingDaysElapsed: number;
   percent: number;
   label: string;
   daysInMonth: number;
@@ -400,9 +424,30 @@ export function monthElapsedPercent(now = new Date()): {
   const m = now.getMonth();
   const daysInMonth = new Date(y, m + 1, 0).getDate();
   const dayOfMonth = now.getDate();
-  const percent = daysInMonth > 0 ? (dayOfMonth / daysInMonth) * 100 : 0;
+  const monthStart = new Date(y, m, 1);
+  const monthEnd = new Date(y, m, daysInMonth);
+  const today = new Date(y, m, dayOfMonth);
+  const workingDaysInMonth = countWorkingDaysInRange(monthStart, monthEnd);
+  const workingDaysElapsed = countWorkingDaysInRange(monthStart, today);
+  const percent = workingDaysInMonth > 0 ? (workingDaysElapsed / workingDaysInMonth) * 100 : 0;
   const label = now.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
-  return { percent, label, daysInMonth, dayOfMonth };
+  return { workingDaysInMonth, workingDaysElapsed, percent, label, daysInMonth, dayOfMonth };
+}
+
+/** @deprecated use monthWorkingDayStats — оставлено для совместимости */
+export function monthElapsedPercent(now = new Date()): {
+  percent: number;
+  label: string;
+  daysInMonth: number;
+  dayOfMonth: number;
+} {
+  const s = monthWorkingDayStats(now);
+  return {
+    percent: s.percent,
+    label: s.label,
+    daysInMonth: s.daysInMonth,
+    dayOfMonth: s.dayOfMonth,
+  };
 }
 
 export function currentMonthBounds(now = new Date()): { from: string; to: string; ym: string } {
@@ -416,11 +461,11 @@ export function currentMonthBounds(now = new Date()): { from: string; to: string
 
 export function buildRnpPaceRows(allReports: FullReport[], managerNames: string[]): RnpPaceRow[] {
   const { from, to } = currentMonthBounds();
-  const elapsed = monthElapsedPercent();
-  const callsPlanMonth = DAILY_CALL_GOAL * elapsed.daysInMonth;
-  const meetingsPlanMonth = DAILY_NEW_MEETINGS_GOAL * elapsed.daysInMonth;
-  const expectedCalls = Math.round(callsPlanMonth * (elapsed.percent / 100));
-  const expectedMeetings = Math.round(meetingsPlanMonth * (elapsed.percent / 100));
+  const wd = monthWorkingDayStats();
+  const callsPlanMonth = DAILY_CALL_GOAL * wd.workingDaysInMonth;
+  const meetingsPlanMonth = DAILY_NEW_MEETINGS_GOAL * wd.workingDaysInMonth;
+  const callsPlanToDate = DAILY_CALL_GOAL * wd.workingDaysElapsed;
+  const meetingsPlanToDate = DAILY_NEW_MEETINGS_GOAL * wd.workingDaysElapsed;
 
   const source = allReports.filter((r) => r.date >= from && r.date <= to);
   const summaryReports = dedupeReportsByDayManager(source);
@@ -431,11 +476,11 @@ export function buildRnpPaceRows(allReports: FullReport[], managerNames: string[
   }
 
   for (const r of summaryReports) {
-    const cur = byManager.get(r.manager) || { calls: 0, newMeetings: 0, transitions: 0 };
+    if (!byManager.has(r.manager)) continue;
+    const cur = byManager.get(r.manager)!;
     cur.calls += r.stats.callsTotal;
     cur.newMeetings += countConductedNewMeetings(r, allReports);
     cur.transitions += r.stats.stageTransitions ?? 0;
-    byManager.set(r.manager, cur);
   }
 
   return Array.from(byManager.entries())
@@ -443,11 +488,13 @@ export function buildRnpPaceRows(allReports: FullReport[], managerNames: string[
     .map(([manager, fact]) => ({
       manager,
       callsFact: fact.calls,
-      callsPlan: callsPlanMonth,
-      callsDelta: fact.calls - expectedCalls,
+      callsPlan: callsPlanToDate,
+      callsPlanMonth,
+      callsDelta: fact.calls - callsPlanToDate,
       newMeetingsFact: fact.newMeetings,
-      newMeetingsPlan: meetingsPlanMonth,
-      newMeetingsDelta: fact.newMeetings - expectedMeetings,
+      newMeetingsPlan: meetingsPlanToDate,
+      newMeetingsPlanMonth: meetingsPlanMonth,
+      newMeetingsDelta: fact.newMeetings - meetingsPlanToDate,
       transitionsFact: fact.transitions,
     }));
 }

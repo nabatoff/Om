@@ -220,9 +220,12 @@ export function KpiDashboard({
 
   const rnpRows = useMemo(() => {
     if (isDiggerKpi) return [];
-    const names = managerOptions.filter((m) => m !== 'Все');
+    const names =
+      filterManager !== 'Все'
+        ? [filterManager]
+        : managerOptions.filter((m) => m !== 'Все');
     return buildRnpPaceRows(allReports, names);
-  }, [allReports, managerOptions, isDiggerKpi]);
+  }, [allReports, managerOptions, isDiggerKpi, filterManager]);
 
   const rowMetricsMap = useMemo(() => {
     const map = new Map<string, ManagerDayMetrics>();
