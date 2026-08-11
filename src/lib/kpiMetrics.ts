@@ -240,7 +240,10 @@ export function collectReportMonthYms(allReports: FullReport[]): string[] {
 }
 
 export const DAILY_CALL_GOAL = 22;
-export const DAILY_NEW_MEETINGS_GOAL = 2;
+/** План новых встреч на календарный месяц (не дневная норма). */
+export const MONTHLY_NEW_MEETINGS_GOAL = 25;
+/** @deprecated используй MONTHLY_NEW_MEETINGS_GOAL */
+export const DAILY_NEW_MEETINGS_GOAL = MONTHLY_NEW_MEETINGS_GOAL;
 
 export type KpiEightMetrics = {
   uniqueSuppliers: number;
@@ -264,8 +267,8 @@ export type KpiPeriodSummary = {
   reportsCount: number;
   metrics: KpiEightMetrics;
   conversions: {
-    /** Новые встречи ÷ Звонки */
-    meetingsFromCallsRate: number | null;
+    /** Назначено ÷ Квал (из вала в назначенные) */
+    assignedFromQualRate: number | null;
     /** Переходы ÷ Новые встречи */
     transitionsRate: number | null;
     /** Проведено новых ÷ Назначено (без изменений) */
@@ -278,9 +281,9 @@ export type KpiPeriodSummary = {
 export type RnpPaceRow = {
   manager: string;
   callsFact: number;
-  /** План на сегодня (рабочие дни с начала месяца × дневная норма) */
+  /** План на «сегодня» внутри периода (рабочие дни с from по asOf × дневная норма) */
   callsPlan: number;
-  /** План на весь месяц (только рабочие дни) */
+  /** План на весь выбранный период (только рабочие дни) */
   callsPlanMonth: number;
   callsDelta: number;
   newMeetingsFact: number;
@@ -288,6 +291,16 @@ export type RnpPaceRow = {
   newMeetingsPlanMonth: number;
   newMeetingsDelta: number;
   transitionsFact: number;
+};
+
+export type RnpPaceMeta = {
+  from: string;
+  to: string;
+  asOf: string;
+  workingDaysInPeriod: number;
+  workingDaysElapsed: number;
+  percent: number;
+  label: string;
 };
 
 export type WorkItemRowLike = {
@@ -359,9 +372,10 @@ export function buildKpiConversions(
   metrics: KpiEightMetrics,
   assignedNew = 0,
   confirmedOrders = 0,
+  validated = 0,
 ): KpiPeriodSummary['conversions'] {
   return {
-    meetingsFromCallsRate: kpiConversionPercent(metrics.newMeetings, metrics.calls),
+    assignedFromQualRate: kpiConversionPercent(assignedNew, validated),
     transitionsRate: kpiConversionPercent(metrics.transitions, metrics.newMeetings),
     conductedGepRate: kpiConversionPercent(metrics.newMeetings, assignedNew),
     confirmedOrderRate: kpiConversionPercent(confirmedOrders, metrics.newMeetings),
@@ -434,6 +448,63 @@ export function monthWorkingDayStats(now = new Date()): {
   return { workingDaysInMonth, workingDaysElapsed, percent, label, daysInMonth, dayOfMonth };
 }
 
+export function parseYmdLocal(ymd: string): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec((ymd || '').trim());
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]) - 1;
+  const d = Number(m[3]);
+  if (!Number.isFinite(y) || mo < 0 || mo > 11 || d < 1 || d > 31) return null;
+  return new Date(y, mo, d);
+}
+
+export function formatYmdLocalDate(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+export function periodWorkingDayStats(
+  periodFrom: string,
+  periodTo: string,
+  now = new Date(),
+): RnpPaceMeta {
+  const from = parseYmdLocal(periodFrom);
+  const to = parseYmdLocal(periodTo);
+  if (!from || !to || to < from) {
+    return {
+      from: periodFrom,
+      to: periodTo,
+      asOf: periodFrom,
+      workingDaysInPeriod: 0,
+      workingDaysElapsed: 0,
+      percent: 0,
+      label: '—',
+    };
+  }
+
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  let asOf: Date;
+  if (today < from) asOf = new Date(from.getTime());
+  else if (today > to) asOf = new Date(to.getTime());
+  else asOf = today;
+
+  const workingDaysInPeriod = countWorkingDaysInRange(from, to);
+  const workingDaysElapsed =
+    today < from ? 0 : countWorkingDaysInRange(from, asOf);
+  const percent = workingDaysInPeriod > 0 ? (workingDaysElapsed / workingDaysInPeriod) * 100 : 0;
+  const label = asOf.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+
+  return {
+    from: formatYmdLocalDate(from),
+    to: formatYmdLocalDate(to),
+    asOf: formatYmdLocalDate(asOf),
+    workingDaysInPeriod,
+    workingDaysElapsed,
+    percent,
+    label,
+  };
+}
+
 /** @deprecated use monthWorkingDayStats — оставлено для совместимости */
 export function monthElapsedPercent(now = new Date()): {
   percent: number;
@@ -459,15 +530,31 @@ export function currentMonthBounds(now = new Date()): { from: string; to: string
   return { from: `${y}-${mo}-01`, to: `${y}-${mo}-${day}`, ym: `${y}-${mo}` };
 }
 
-export function buildRnpPaceRows(allReports: FullReport[], managerNames: string[]): RnpPaceRow[] {
-  const { from, to } = currentMonthBounds();
-  const wd = monthWorkingDayStats();
-  const callsPlanMonth = DAILY_CALL_GOAL * wd.workingDaysInMonth;
-  const meetingsPlanMonth = DAILY_NEW_MEETINGS_GOAL * wd.workingDaysInMonth;
-  const callsPlanToDate = DAILY_CALL_GOAL * wd.workingDaysElapsed;
-  const meetingsPlanToDate = DAILY_NEW_MEETINGS_GOAL * wd.workingDaysElapsed;
+export function buildRnpPaceRows(
+  allReports: FullReport[],
+  managerNames: string[],
+  periodFrom: string,
+  periodTo: string,
+): { rows: RnpPaceRow[]; meta: RnpPaceMeta } {
+  const meta = periodWorkingDayStats(periodFrom, periodTo);
+  const callsPlanPeriod = DAILY_CALL_GOAL * meta.workingDaysInPeriod;
+  const callsPlanToDate = DAILY_CALL_GOAL * meta.workingDaysElapsed;
 
-  const source = allReports.filter((r) => r.date >= from && r.date <= to);
+  const fromDate = parseYmdLocal(meta.from);
+  let workingDaysInRefMonth = meta.workingDaysInPeriod;
+  if (fromDate) {
+    const monthStart = new Date(fromDate.getFullYear(), fromDate.getMonth(), 1);
+    const monthEnd = new Date(fromDate.getFullYear(), fromDate.getMonth() + 1, 0);
+    workingDaysInRefMonth = Math.max(1, countWorkingDaysInRange(monthStart, monthEnd));
+  }
+  const meetingsPlanPeriod = Math.round(
+    MONTHLY_NEW_MEETINGS_GOAL * (meta.workingDaysInPeriod / workingDaysInRefMonth),
+  );
+  const meetingsPlanToDate = Math.round(
+    MONTHLY_NEW_MEETINGS_GOAL * (meta.workingDaysElapsed / workingDaysInRefMonth),
+  );
+
+  const source = allReports.filter((r) => r.date >= meta.from && r.date <= meta.asOf);
   const summaryReports = dedupeReportsByDayManager(source);
 
   const byManager = new Map<string, { calls: number; newMeetings: number; transitions: number }>();
@@ -483,20 +570,22 @@ export function buildRnpPaceRows(allReports: FullReport[], managerNames: string[
     cur.transitions += r.stats.stageTransitions ?? 0;
   }
 
-  return Array.from(byManager.entries())
+  const rows = Array.from(byManager.entries())
     .sort((a, b) => a[0].localeCompare(b[0], 'ru'))
     .map(([manager, fact]) => ({
       manager,
       callsFact: fact.calls,
       callsPlan: callsPlanToDate,
-      callsPlanMonth,
+      callsPlanMonth: callsPlanPeriod,
       callsDelta: fact.calls - callsPlanToDate,
       newMeetingsFact: fact.newMeetings,
       newMeetingsPlan: meetingsPlanToDate,
-      newMeetingsPlanMonth: meetingsPlanMonth,
+      newMeetingsPlanMonth: meetingsPlanPeriod,
       newMeetingsDelta: fact.newMeetings - meetingsPlanToDate,
       transitionsFact: fact.transitions,
     }));
+
+  return { rows, meta };
 }
 
 export function formatKpiDeltaBadge(delta: number): { text: string; tone: 'good' | 'bad' | 'neutral' } {

@@ -19,6 +19,7 @@ import {
   kpiConversionPercent,
 } from '../lib/kpiMetrics';
 import { AdminFilters } from './AdminFilters';
+import { AdminBlockersPanel } from './AdminBlockersPanel';
 import { RnpPacePanel } from './RnpPacePanel';
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
@@ -35,6 +36,7 @@ type ManagerDayMetrics = {
   newInWork: number;
   calls: number;
   validated: number;
+  conductedFact: number;
   assignedNew: number;
   conductedNew: number;
   conductedRepeat: number;
@@ -153,17 +155,19 @@ export function KpiDashboard({
   }, [diggerLeadsInPeriod]);
 
   const meetingTotals = useMemo(() => {
+    let conductedFact = 0;
     let assignedNew = 0;
     let conductedNew = 0;
     let conductedRepeat = 0;
     let transitions = 0;
     for (const r of kpiRows) {
+      conductedFact += r.conductedMeetings.length;
       assignedNew += countAssignedNewMeetings(r);
       conductedNew += countConductedNewMeetings(r, allReports);
       conductedRepeat += countConductedRepeatMeetings(r);
       transitions += r.stats.stageTransitions ?? 0;
     }
-    return { assignedNew, conductedNew, conductedRepeat, transitions };
+    return { conductedFact, assignedNew, conductedNew, conductedRepeat, transitions };
   }, [kpiRows, allReports]);
 
   const managerKpiSummary = useMemo(() => {
@@ -175,6 +179,7 @@ export function KpiDashboard({
     let newInWork = 0;
     let calls = 0;
     let validated = 0;
+    let conductedFact = 0;
     let assignedNew = 0;
     let conductedNew = 0;
     let conductedRepeat = 0;
@@ -185,6 +190,7 @@ export function KpiDashboard({
       newInWork += r.stats.newInWork;
       calls += r.stats.callsTotal;
       validated += r.stats.validatedTotal;
+      conductedFact += r.conductedMeetings.length;
       assignedNew += countAssignedNewMeetings(r);
       conductedNew += countConductedNewMeetings(r, allReports);
       conductedRepeat += countConductedRepeatMeetings(r);
@@ -202,13 +208,14 @@ export function KpiDashboard({
       newInWork,
       calls,
       validated,
+      conductedFact,
       assignedNew,
       conductedNew,
       conductedRepeat,
       transitions,
-      /** 1: Новые встречи ÷ Звонки */
-      meetingsFromCallsPct: kpiConversionPercent(conductedNew, calls),
-      /** 2: Переходы ÷ Новые встречи */
+      /** Из вала в назначенные: Назначено ÷ Квал */
+      assignedFromQualPct: kpiConversionPercent(assignedNew, validated),
+      /** Проведен ГЭП → переход */
       transitionsPct: kpiConversionPercent(transitions, conductedNew),
       /** без изменений: Проведен ГЭП */
       conductedGepPct: kpiConversionPercent(conductedNew, assignedNew),
@@ -218,14 +225,15 @@ export function KpiDashboard({
     };
   }, [kpiRows, allReports, filterDateFrom, filterDateTo]);
 
-  const rnpRows = useMemo(() => {
-    if (isDiggerKpi) return [];
+  const rnpPace = useMemo(() => {
+    if (isDiggerKpi) return { rows: [], meta: null as ReturnType<typeof buildRnpPaceRows>['meta'] | null };
+    const bounds = adminDateFilterBounds(filterDateFrom, filterDateTo);
     const names =
       filterManager !== 'Все'
         ? [filterManager]
         : managerOptions.filter((m) => m !== 'Все');
-    return buildRnpPaceRows(allReports, names);
-  }, [allReports, managerOptions, isDiggerKpi, filterManager]);
+    return buildRnpPaceRows(allReports, names, bounds.from, bounds.to);
+  }, [allReports, managerOptions, isDiggerKpi, filterManager, filterDateFrom, filterDateTo]);
 
   const rowMetricsMap = useMemo(() => {
     const map = new Map<string, ManagerDayMetrics>();
@@ -235,6 +243,7 @@ export function KpiDashboard({
         newInWork: r.stats.newInWork,
         calls: r.stats.callsTotal,
         validated: r.stats.validatedTotal,
+        conductedFact: r.conductedMeetings.length,
         assignedNew: countAssignedNewMeetings(r),
         conductedNew: countConductedNewMeetings(r, allReports),
         conductedRepeat: countConductedRepeatMeetings(r),
@@ -317,7 +326,7 @@ export function KpiDashboard({
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-2">
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-9 gap-2">
             <div className="rounded-xl bg-gray-50 border border-gray-100 p-3 text-left">
               <p className="text-[10px] text-gray-500 font-bold uppercase leading-snug">Уник. поставщики в работе</p>
               <p className="text-lg font-black text-gray-900">{managerKpiSummary.uniqueSuppliers}</p>
@@ -333,6 +342,10 @@ export function KpiDashboard({
             <div className="rounded-xl bg-amber-50 border border-amber-100 p-3 text-left">
               <p className="text-[10px] text-amber-700 font-bold uppercase">Прошли квал</p>
               <p className="text-lg font-black text-amber-800">{managerKpiSummary.validated}</p>
+            </div>
+            <div className="rounded-xl bg-sky-50 border border-sky-100 p-3 text-left">
+              <p className="text-[10px] text-sky-700 font-bold uppercase leading-snug">Фактически проведено</p>
+              <p className="text-lg font-black text-sky-800">{managerKpiSummary.conductedFact}</p>
             </div>
             <div className="rounded-xl bg-slate-50 border border-slate-100 p-3 text-left">
               <p className="text-[10px] text-slate-700 font-bold uppercase">Назначено встреч</p>
@@ -373,12 +386,12 @@ export function KpiDashboard({
             <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Конверсия</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <div className="rounded-xl bg-amber-50/60 border border-amber-100 p-3">
-                <p className="text-[10px] text-amber-800 font-bold uppercase leading-snug">Встречи из звонков</p>
+                <p className="text-[10px] text-amber-800 font-bold uppercase leading-snug">Из вала в назначенные</p>
                 <p className="text-xl font-black text-amber-950 mt-1">
-                  {formatKpiPercent(managerKpiSummary.meetingsFromCallsPct)}
+                  {formatKpiPercent(managerKpiSummary.assignedFromQualPct)}
                 </p>
                 <p className="text-[9px] text-amber-700/80 mt-1 leading-snug">
-                  Новые встречи ÷ Звонки × 100%
+                  Назначено встреч ÷ Прошли квал × 100%
                 </p>
               </div>
               <div className="rounded-xl bg-teal-50/60 border border-teal-100 p-3">
@@ -418,7 +431,11 @@ export function KpiDashboard({
         )}
       </section>
 
-      {!isDiggerKpi && rnpRows.length > 0 ? <RnpPacePanel rows={rnpRows} /> : null}
+      {!isDiggerKpi && rnpPace.rows.length > 0 && rnpPace.meta ? (
+        <RnpPacePanel rows={rnpPace.rows} meta={rnpPace.meta} />
+      ) : null}
+
+      {!isDiggerKpi ? <AdminBlockersPanel filterManager={filterManager} /> : null}
 
       <section className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-x-auto text-left">
         <div className="px-6 pt-5 pb-2 space-y-1">
@@ -485,6 +502,7 @@ export function KpiDashboard({
                 <th className="py-4 px-4 text-center">Взято новых</th>
                 <th className="py-4 px-4 text-center">Звонки</th>
                 <th className="py-4 px-4 text-center">Прошли квал</th>
+                <th className="py-4 px-4 text-center">Фактически проведено</th>
                 <th className="py-4 px-4 text-center">Назначено встреч</th>
                 <th className="py-4 px-4 text-center">Проведено новых</th>
                 <th className="py-4 px-4 text-center">Проведено повторных</th>
@@ -506,6 +524,7 @@ export function KpiDashboard({
                     <td className="py-3.5 px-4 text-center font-black text-emerald-700">{m.newInWork}</td>
                     <td className="py-3.5 px-4 text-center font-black text-indigo-700">{m.calls}</td>
                     <td className="py-3.5 px-4 text-center font-black text-amber-700">{m.validated}</td>
+                    <td className="py-3.5 px-4 text-center font-black text-sky-700">{m.conductedFact}</td>
                     <td className="py-3.5 px-4 text-center font-black text-slate-800">{m.assignedNew}</td>
                     <td className="py-3.5 px-4 text-center font-black text-teal-700">{m.conductedNew}</td>
                     <td className="py-3.5 px-4 text-center font-black text-blue-700">{m.conductedRepeat}</td>
@@ -533,6 +552,7 @@ export function KpiDashboard({
                   <td className="py-3 px-4 text-center text-gray-500">—</td>
                   <td className="py-3 px-4 text-center text-gray-500">—</td>
                   <td className="py-3 px-4 text-center text-gray-500">—</td>
+                  <td className="py-3 px-4 text-center text-sky-900">{meetingTotals.conductedFact}</td>
                   <td className="py-3 px-4 text-center text-slate-900">{meetingTotals.assignedNew}</td>
                   <td className="py-3 px-4 text-center text-teal-900">{meetingTotals.conductedNew}</td>
                   <td className="py-3 px-4 text-center text-blue-900">{meetingTotals.conductedRepeat}</td>

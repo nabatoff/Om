@@ -1,6 +1,6 @@
 import {
   formatKpiDeltaBadge,
-  monthWorkingDayStats,
+  type RnpPaceMeta,
   type RnpPaceRow,
 } from '../lib/kpiMetrics';
 import { TrendingUp } from 'lucide-react';
@@ -18,15 +18,22 @@ function DeltaBadge({ delta }: { delta: number }) {
   );
 }
 
+function formatDisplayDate(raw: string): string {
+  const t = (raw || '').trim();
+  const ymd = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (ymd) return `${ymd[3]}-${ymd[2]}-${ymd[1]}`;
+  return t;
+}
+
 type Props = {
   rows: RnpPaceRow[];
+  meta: RnpPaceMeta;
 };
 
-export function RnpPacePanel({ rows }: Props) {
-  const wd = monthWorkingDayStats();
+export function RnpPacePanel({ rows, meta }: Props) {
   if (rows.length === 0) return null;
 
-  const monthPlanCalls = rows[0]?.callsPlanMonth ?? 0;
+  const periodPlanCalls = rows[0]?.callsPlanMonth ?? 0;
 
   return (
     <section className="bg-white border border-blue-200 rounded-2xl shadow-sm overflow-hidden ring-1 ring-blue-50">
@@ -38,14 +45,15 @@ export function RnpPacePanel({ rows }: Props) {
           <div className="text-left">
             <h3 className="font-bold text-slate-700 uppercase tracking-wider text-xs">РНП: контроль темпа (дельта)</h3>
             <p className="text-[10px] text-slate-500 mt-0.5">
-              План на сегодня по рабочим дням · месяц: {wd.workingDaysInMonth} р.д. × 22 = {monthPlanCalls} звонков
+              Период {formatDisplayDate(meta.from)} — {formatDisplayDate(meta.to)} · звонки: {meta.workingDaysInPeriod}{' '}
+              р.д. × 22 = {periodPlanCalls} · встречи: план периода {rows[0]?.newMeetingsPlanMonth ?? 0} (25/мес)
             </p>
           </div>
         </div>
         <div className="bg-white border border-blue-200 text-blue-700 px-3 py-1.5 rounded text-xs font-bold shadow-sm">
           Норма времени:{' '}
-          <span className="text-blue-600">{Math.round(wd.percent)}%</span> ({wd.label}, {wd.workingDaysElapsed}/
-          {wd.workingDaysInMonth} р.д.)
+          <span className="text-blue-600">{Math.round(meta.percent)}%</span> ({meta.label}, {meta.workingDaysElapsed}/
+          {meta.workingDaysInPeriod} р.д.)
         </div>
       </div>
       <div className="overflow-x-auto">
@@ -53,9 +61,9 @@ export function RnpPacePanel({ rows }: Props) {
           <thead>
             <tr className="bg-white border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase">
               <th className="px-5 py-3 text-left">Менеджер</th>
-              <th className="px-5 py-3 border-l border-slate-100 bg-slate-50/30">Звонки (факт / план на сегодня)</th>
+              <th className="px-5 py-3 border-l border-slate-100 bg-slate-50/30">Звонки (факт / план на дату)</th>
               <th className="px-5 py-3 bg-slate-50/30">Дельта</th>
-              <th className="px-5 py-3 border-l border-slate-100 bg-slate-50/30">Новые встречи (на сегодня)</th>
+              <th className="px-5 py-3 border-l border-slate-100 bg-slate-50/30">Новые встречи (на дату)</th>
               <th className="px-5 py-3 bg-slate-50/30">Дельта</th>
               <th className="px-5 py-3 border-l border-slate-100 bg-slate-50/30">Переходы (факт)</th>
             </tr>
@@ -67,7 +75,7 @@ export function RnpPacePanel({ rows }: Props) {
                 <td className="px-5 py-3 border-l border-slate-100 font-medium">
                   {row.callsFact} <span className="text-xs text-slate-400">/ {row.callsPlan}</span>
                   <span className="block text-[10px] text-slate-400 font-normal mt-0.5">
-                    план месяца: {row.callsPlanMonth}
+                    план периода: {row.callsPlanMonth}
                   </span>
                 </td>
                 <td className="px-5 py-3">
@@ -76,7 +84,7 @@ export function RnpPacePanel({ rows }: Props) {
                 <td className="px-5 py-3 border-l border-slate-100 font-medium">
                   {row.newMeetingsFact} <span className="text-xs text-slate-400">/ {row.newMeetingsPlan}</span>
                   <span className="block text-[10px] text-slate-400 font-normal mt-0.5">
-                    план месяца: {row.newMeetingsPlanMonth}
+                    план периода: {row.newMeetingsPlanMonth}
                   </span>
                 </td>
                 <td className="px-5 py-3">
