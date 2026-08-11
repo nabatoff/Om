@@ -146,7 +146,6 @@ import { ManagerMeetingsPanel } from './components/ManagerMeetingsPanel';
 import { postTelegramDailyDigestIfConfigured } from './lib/telegramDailyDigest';
 import { KpiDashboard } from './components/KpiDashboard';
 import { AdminFilters } from './components/AdminFilters';
-import { ManagerWorkItemsPanel } from './components/ManagerWorkItemsPanel';
 import { ManagerBlockersPanel } from './components/ManagerBlockersPanel';
 import { DAILY_CALL_GOAL } from './lib/kpiMetrics';
 
@@ -1599,7 +1598,6 @@ const App = () => {
             onSaveAction={(opts) => saveReport(opts)}
             onSaveKpi={saveKpi}
             kpiSaving={kpiSaving}
-            onRefreshReport={refresh}
             setIsMeetingModalOpen={setIsMeetingModalOpen}
             setActiveMeetingIndex={setActiveMeetingIndex}
             setMeetingResultTemp={setMeetingResultTemp}
@@ -2280,7 +2278,6 @@ const ManagerDashboard = ({
   onSaveAction,
   onSaveKpi,
   kpiSaving,
-  onRefreshReport,
   setIsMeetingModalOpen,
   setActiveMeetingIndex,
   setMeetingResultTemp,
@@ -2310,7 +2307,6 @@ const ManagerDashboard = ({
   onSaveAction: (opts?: SaveReportOptions) => Promise<boolean>;
   onSaveKpi: (nextStats: FormStats) => Promise<void>;
   kpiSaving: boolean;
-  onRefreshReport?: () => void | Promise<void>;
   setIsMeetingModalOpen: SetState<boolean>;
   setActiveMeetingIndex: SetState<number | null>;
   setMeetingResultTemp: SetState<string>;
@@ -2467,8 +2463,18 @@ const ManagerDashboard = ({
               <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">
                 Уникальные поставщики в работе
               </div>
-              <div className="text-2xl font-black text-gray-800">{stats.processedTotal}</div>
-              <p className="text-[10px] text-gray-400 mt-1">Из карточек «Поставщики в работе»</p>
+              <input
+                type="number"
+                min={0}
+                className="w-full text-2xl font-black text-gray-800 outline-none bg-transparent"
+                value={statDraft.processedTotal}
+                onChange={(e) => handleStatChange('processedTotal', e.target.value)}
+                onFocus={(e) => e.target.value === '0' && handleStatChange('processedTotal', '')}
+                onBlur={async () => {
+                  handleStatBlur('processedTotal');
+                  await commitKpi('processedTotal');
+                }}
+              />
             </div>
             <div className="bg-[#eff6ff] p-4 rounded-xl border border-blue-50 text-left">
               <div className="flex items-center justify-between mb-1">
@@ -2608,17 +2614,7 @@ const ManagerDashboard = ({
         )}
       </div>
       {isSalesManager ? (
-        <>
-          <ManagerWorkItemsPanel
-            reportDate={reportDate}
-            clients={clients}
-            onOpenAddClient={onOpenAddClient}
-            onSaved={async () => {
-              await onRefreshReport?.();
-            }}
-          />
-          <ManagerBlockersPanel clients={clients} onOpenAddClient={onOpenAddClient} />
-        </>
+        <ManagerBlockersPanel clients={clients} onOpenAddClient={onOpenAddClient} />
       ) : null}
       <MeetingTable
         title="Назначено встреч (План)"
