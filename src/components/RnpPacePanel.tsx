@@ -63,7 +63,7 @@ export function RnpPacePanel({ rows, meta }: Props) {
               <th className="px-5 py-3 text-left">Менеджер</th>
               <th className="px-5 py-3 border-l border-slate-100 bg-slate-50/30">Звонки (факт / план на дату)</th>
               <th className="px-5 py-3 bg-slate-50/30">Дельта</th>
-              <th className="px-5 py-3 border-l border-slate-100 bg-slate-50/30">Новые встречи (на дату)</th>
+              <th className="px-5 py-3 border-l border-slate-100 bg-slate-50/30">Фактически проведенные встречи</th>
               <th className="px-5 py-3 bg-slate-50/30">Дельта</th>
               <th className="px-5 py-3 border-l border-slate-100 bg-slate-50/30">Переходы (факт)</th>
             </tr>
