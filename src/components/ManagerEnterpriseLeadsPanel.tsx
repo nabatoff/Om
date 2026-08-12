@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { AlertTriangle, Building2, RotateCcw } from 'lucide-react';
 import {
   formatLeadDate,
+  isActiveManagerEnterpriseLead,
   listEnterpriseLeadsApi,
   managerReturnLeadToSmbApi,
   managerSetLeadMeetingStatusApi,
@@ -31,7 +32,8 @@ export function ManagerEnterpriseLeadsPanel({ onChanged }: Props) {
     setLoading(true);
     setErr(null);
     try {
-      setRows(await listEnterpriseLeadsApi('mine_assigned'));
+      const data = await listEnterpriseLeadsApi('mine_assigned');
+      setRows(data.filter(isActiveManagerEnterpriseLead));
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Ошибка');
     } finally {

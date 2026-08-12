@@ -74,6 +74,11 @@ export async function setClientBusinessScaleApi(bin: string, scale: 'smb' | 'ent
   return data ? String(data) : null;
 }
 
+/** Активный лид в кабинете менеджера (ещё не проведён). */
+export function isActiveManagerEnterpriseLead(lead: EnterpriseLead): boolean {
+  return lead.routingStatus === 'assigned_to_manager' && lead.meetingStatus !== 'completed';
+}
+
 export async function listEnterpriseLeadsApi(
   filter: 'pending' | 'assigned' | 'returned' | 'all' | 'mine_assigned' = 'pending',
 ): Promise<EnterpriseLead[]> {
