@@ -119,6 +119,11 @@ export function countConductedRepeatMeetings(report: FullReport): number {
   return report.conductedMeetings.filter((m) => isRepeatMeetingType(m.type)).length;
 }
 
+/** Все проведённые встречи в отчёте (новые + повторные + крупные). */
+export function countConductedFactMeetings(report: FullReport): number {
+  return report.conductedMeetings.length;
+}
+
 export function kpiConversionPercent(numerator: number, denominator: number): number | null {
   if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator <= 0) return null;
   return (numerator / denominator) * 100;
@@ -557,16 +562,16 @@ export function buildRnpPaceRows(
   const source = allReports.filter((r) => r.date >= meta.from && r.date <= meta.asOf);
   const summaryReports = dedupeReportsByDayManager(source);
 
-  const byManager = new Map<string, { calls: number; newMeetings: number; transitions: number }>();
+  const byManager = new Map<string, { calls: number; conductedMeetings: number; transitions: number }>();
   for (const name of managerNames) {
-    if (name !== 'Все') byManager.set(name, { calls: 0, newMeetings: 0, transitions: 0 });
+    if (name !== 'Все') byManager.set(name, { calls: 0, conductedMeetings: 0, transitions: 0 });
   }
 
   for (const r of summaryReports) {
     if (!byManager.has(r.manager)) continue;
     const cur = byManager.get(r.manager)!;
     cur.calls += r.stats.callsTotal;
-    cur.newMeetings += countConductedNewMeetings(r, allReports);
+    cur.conductedMeetings += countConductedFactMeetings(r);
     cur.transitions += r.stats.stageTransitions ?? 0;
   }
 
@@ -578,10 +583,10 @@ export function buildRnpPaceRows(
       callsPlan: callsPlanToDate,
       callsPlanMonth: callsPlanPeriod,
       callsDelta: fact.calls - callsPlanToDate,
-      newMeetingsFact: fact.newMeetings,
+      newMeetingsFact: fact.conductedMeetings,
       newMeetingsPlan: meetingsPlanToDate,
       newMeetingsPlanMonth: meetingsPlanPeriod,
-      newMeetingsDelta: fact.newMeetings - meetingsPlanToDate,
+      newMeetingsDelta: fact.conductedMeetings - meetingsPlanToDate,
       transitionsFact: fact.transitions,
     }));
 
