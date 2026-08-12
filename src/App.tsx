@@ -1610,6 +1610,7 @@ const App = () => {
             creatorName={managerName}
             diggerProfiles={assigneeProfiles.filter((p) => p.role === 'lead_digger')}
             canSetDigger={canAdminWrite}
+            onRefreshReports={refresh}
             onOpenAddClient={(inputValue, callback) => {
               const isBin = /^\d{12}$/.test(inputValue.trim());
               setEditingClientBin(null);
@@ -2291,6 +2292,7 @@ const ManagerDashboard = ({
   creatorName = '',
   diggerProfiles = [],
   canSetDigger = false,
+  onRefreshReports,
 }: {
   stats: FormStats;
   setStats: SetState<FormStats>;
@@ -2320,6 +2322,7 @@ const ManagerDashboard = ({
   creatorName?: string;
   diggerProfiles?: Array<{ id: string; fullName: string; role: string }>;
   canSetDigger?: boolean;
+  onRefreshReports?: () => void | Promise<void>;
 }) => {
   const [statDraft, setStatDraft] = useState<Record<keyof FormStats, string>>({
     processedTotal: String(stats.processedTotal),
@@ -2687,9 +2690,7 @@ const ManagerDashboard = ({
       />
       {isSalesManager ? (
         <ManagerEnterpriseLeadsPanel
-          onChanged={async () => {
-            await onSaveAction({ refreshAfterSave: true });
-          }}
+          onChanged={onRefreshReports}
         />
       ) : null}
       {isLeadDigger ? (
