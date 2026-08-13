@@ -12,7 +12,7 @@ export type EnterpriseLead = {
   assignedManagerId: string | null;
   assignedManagerName: string;
   routingStatus: 'pending_distribution' | 'assigned_to_manager' | 'returned_to_smb';
-  meetingStatus: 'completed' | 'cancelled' | null;
+  meetingStatus: 'completed' | 'cancelled' | 'in_work' | null;
   transferredAt: string;
   /** Локальный календарный день передачи (Asia/Almaty с бэка / локальный fallback). */
   transferredOn: string;
@@ -74,9 +74,18 @@ export async function setClientBusinessScaleApi(bin: string, scale: 'smb' | 'ent
   return data ? String(data) : null;
 }
 
-/** Активный лид в кабинете менеджера (ещё не проведён). */
+/** Лид без назначенной встречи — берётся в работу, а не проводится. */
+export function isLeadWithoutScheduledMeeting(lead: EnterpriseLead): boolean {
+  return !lead.meetingRequested && !lead.meetingDate && !lead.assignedMeetingId;
+}
+
+/** Активный лид в кабинете менеджера (ещё не проведён и не взят в работу). */
 export function isActiveManagerEnterpriseLead(lead: EnterpriseLead): boolean {
-  return lead.routingStatus === 'assigned_to_manager' && lead.meetingStatus !== 'completed';
+  return (
+    lead.routingStatus === 'assigned_to_manager' &&
+    lead.meetingStatus !== 'completed' &&
+    lead.meetingStatus !== 'in_work'
+  );
 }
 
 export async function listEnterpriseLeadsApi(
@@ -102,6 +111,13 @@ export async function managerSetLeadMeetingStatusApi(
   const { error } = await getSupabase().rpc('manager_set_lead_meeting_status', {
     p_lead_id: leadId,
     p_status: status,
+  });
+  if (error) throw error;
+}
+
+export async function managerTakeLeadInWorkApi(leadId: string): Promise<void> {
+  const { error } = await getSupabase().rpc('manager_take_enterprise_lead_in_work', {
+    p_lead_id: leadId,
   });
   if (error) throw error;
 }
@@ -198,7 +214,7 @@ export async function adminClearReturnedLeadsApi(): Promise<number> {
 
 /** UI status for lead digger transferred list */
 export function leadDisplayStatus(lead: EnterpriseLead): {
-  key: 'pending' | 'waiting' | 'done' | 'cancelled' | 'returned';
+  key: 'pending' | 'waiting' | 'done' | 'cancelled' | 'returned' | 'in_work';
   label: string;
   color: string;
 } {
@@ -213,6 +229,12 @@ export function leadDisplayStatus(lead: EnterpriseLead): {
   }
   if (lead.meetingStatus === 'cancelled') {
     return { key: 'cancelled', label: 'Не состоялась', color: 'bg-red-100 text-red-700' };
+  }
+  if (lead.meetingStatus === 'in_work') {
+    return { key: 'in_work', label: 'Передан', color: 'bg-indigo-100 text-indigo-700' };
+  }
+  if (isLeadWithoutScheduledMeeting(lead)) {
+    return { key: 'waiting', label: 'Назначен', color: 'bg-slate-100 text-slate-700' };
   }
   return { key: 'waiting', label: 'Ожидает встречи', color: 'bg-yellow-100 text-yellow-700' };
 }

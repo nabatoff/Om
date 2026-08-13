@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
-import { AlertTriangle, Building2, RotateCcw } from 'lucide-react';
+import { AlertTriangle, Building2, RotateCcw, UserCheck } from 'lucide-react';
 import {
   formatLeadDate,
   isActiveManagerEnterpriseLead,
+  isLeadWithoutScheduledMeeting,
   listEnterpriseLeadsApi,
   managerReturnLeadToSmbApi,
   managerSetLeadMeetingStatusApi,
+  managerTakeLeadInWorkApi,
   type EnterpriseLead,
 } from '../lib/enterpriseLeadsApi';
 import { formatYmdLocal } from '../lib/periodBounds';
@@ -85,6 +87,7 @@ export function ManagerEnterpriseLeadsPanel({ onChanged }: Props) {
             const busy = busyId === r.id;
             const done = r.meetingStatus === 'completed';
             const cancelled = r.meetingStatus === 'cancelled';
+            const takeInWork = isLeadWithoutScheduledMeeting(r) && !done && !cancelled;
 
             if (blocked) {
               return (
@@ -151,7 +154,11 @@ export function ManagerEnterpriseLeadsPanel({ onChanged }: Props) {
                   <div>
                     <div className="font-extrabold text-gray-900 text-lg leading-tight">{r.clientName}</div>
                     <div className="text-xs font-medium text-gray-500 mt-0.5">
-                      {r.meetingDate ? `Встреча: ${formatLeadDate(r.meetingDate)}` : 'Менеджер назначен'}
+                      {r.meetingDate
+                        ? `Встреча: ${formatLeadDate(r.meetingDate)}`
+                        : takeInWork
+                          ? 'Без назначенной встречи'
+                          : 'Менеджер назначен'}
                     </div>
                     <div className="text-[10px] font-mono text-gray-400">{r.bin}</div>
                   </div>
@@ -170,7 +177,17 @@ export function ManagerEnterpriseLeadsPanel({ onChanged }: Props) {
                 )}
 
                 <div className="mt-auto space-y-2 pt-4 border-t border-gray-50">
-                  {!done && !cancelled ? (
+                  {takeInWork ? (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void run(r.id, () => managerTakeLeadInWorkApi(r.id))}
+                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-xl text-sm font-bold transition disabled:opacity-40 flex justify-center items-center gap-2"
+                    >
+                      <UserCheck size={16} />
+                      Взять в работу
+                    </button>
+                  ) : !done && !cancelled ? (
                     <>
                       <button
                         type="button"

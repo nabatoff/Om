@@ -28,6 +28,8 @@ function statusBadgeClass(key: ReturnType<typeof leadDisplayStatus>['key']): str
       return 'bg-red-100 text-red-700';
     case 'returned':
       return 'bg-orange-100 text-orange-700';
+    case 'in_work':
+      return 'bg-indigo-100 text-indigo-700';
     default:
       return 'bg-gray-100 text-gray-600';
   }
@@ -143,7 +145,7 @@ export function LeadDiggerLeadsPanel({ mode, dateFrom, dateTo, creatorId }: Prop
                       <div className="text-[10px] font-mono text-gray-400">{r.bin}</div>
                     </div>
                     <span className={`shrink-0 text-[10px] uppercase font-bold px-2 py-1 rounded ${statusBadgeClass(st.key)}`}>
-                      {st.key === 'waiting' ? 'Ожидает встречи' : st.label}
+                      {st.label}
                     </span>
                   </div>
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
@@ -203,7 +205,7 @@ export function LeadDiggerLeadsPanel({ mode, dateFrom, dateTo, creatorId }: Prop
                     <span
                       className={`shrink-0 text-[10px] uppercase font-bold px-2 py-1 rounded ${statusBadgeClass(st.key)}`}
                     >
-                      {st.key === 'waiting' ? 'Ожидает встречи' : st.label}
+                      {st.label}
                     </span>
                   </div>
                   {isPending ? (
