@@ -213,7 +213,7 @@ export function KpiDashboard({
       conductedNew,
       conductedRepeat,
       transitions,
-      /** Из вала в назначенные: Назначено ÷ Квал */
+      /** Из квала в назначенные: Назначено ÷ Квал */
       assignedFromQualPct: kpiConversionPercent(assignedNew, validated),
       /** Проведен ГЭП → переход */
       transitionsPct: kpiConversionPercent(transitions, conductedNew),
@@ -386,7 +386,7 @@ export function KpiDashboard({
             <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Конверсия</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <div className="rounded-xl bg-amber-50/60 border border-amber-100 p-3">
-                <p className="text-[10px] text-amber-800 font-bold uppercase leading-snug">Из вала в назначенные</p>
+                <p className="text-[10px] text-amber-800 font-bold uppercase leading-snug">Из квала в назначенные</p>
                 <p className="text-xl font-black text-amber-950 mt-1">
                   {formatKpiPercent(managerKpiSummary.assignedFromQualPct)}
                 </p>

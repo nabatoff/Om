@@ -272,7 +272,7 @@ export type KpiPeriodSummary = {
   reportsCount: number;
   metrics: KpiEightMetrics;
   conversions: {
-    /** Назначено ÷ Квал (из вала в назначенные) */
+    /** Назначено ÷ Квал (из квала в назначенные) */
     assignedFromQualRate: number | null;
     /** Переходы ÷ Новые встречи */
     transitionsRate: number | null;
