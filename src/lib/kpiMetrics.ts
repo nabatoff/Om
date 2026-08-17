@@ -259,6 +259,8 @@ export function collectReportMonthYms(allReports: FullReport[]): string[] {
 }
 
 export const DAILY_CALL_GOAL = 22;
+/** В дневной карточке РНП: >2 встреч = зелёный, 0 = красный */
+export const DAILY_MEETINGS_GREEN = 3;
 /** План новых встреч на календарный месяц (не дневная норма). */
 export const MONTHLY_NEW_MEETINGS_GOAL = 25;
 /** @deprecated используй MONTHLY_NEW_MEETINGS_GOAL */

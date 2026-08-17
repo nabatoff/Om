@@ -3,11 +3,22 @@ import { RefreshCw, Trash2 } from 'lucide-react';
 import { getSupabase } from '../lib/supabase';
 import {
   adminDeleteEnterpriseLeadApi,
+  adminSetEnterpriseLeadStatusApi,
   formatLeadDate,
   leadDisplayStatus,
+  leadStatusSelectValue,
   listEnterpriseLeadsApi,
   type EnterpriseLead,
 } from '../lib/enterpriseLeadsApi';
+
+type LeadStatusValue = 'waiting' | 'in_work' | 'completed' | 'cancelled';
+
+const STATUS_OPTIONS: Array<{ value: LeadStatusValue; label: string }> = [
+  { value: 'waiting', label: 'Ожидает встречи' },
+  { value: 'in_work', label: 'Передан' },
+  { value: 'completed', label: 'Проведена' },
+  { value: 'cancelled', label: 'Не состоялась' },
+];
 
 type Props = {
   canDelete?: boolean;
@@ -20,6 +31,7 @@ export function EnterpriseLeadsAllPanel({ canDelete = false, onDeleted }: Props)
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [statusBusyId, setStatusBusyId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -59,6 +71,22 @@ export function EnterpriseLeadsAllPanel({ canDelete = false, onDeleted }: Props)
     };
   }, [load]);
 
+  const setStatus = async (lead: EnterpriseLead, next: LeadStatusValue) => {
+    const current = leadStatusSelectValue(lead);
+    if (current === next || current === 'pending') return;
+    setStatusBusyId(lead.id);
+    setErr(null);
+    try {
+      await adminSetEnterpriseLeadStatusApi(lead.id, next);
+      await load();
+      await onDeleted?.();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Не удалось сменить статус');
+    } finally {
+      setStatusBusyId(null);
+    }
+  };
+
   const deleteLead = async (lead: EnterpriseLead) => {
     const st = leadDisplayStatus(lead);
     const msg =
@@ -86,7 +114,7 @@ export function EnterpriseLeadsAllPanel({ canDelete = false, onDeleted }: Props)
           <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide">Переданные в круп</h2>
           <p className="text-[11px] text-gray-500 mt-1">
             {canDelete
-              ? 'Все лиды в воронке крупного бизнеса · удаление с встречами'
+              ? 'Все лиды в воронке крупного бизнеса · статус и удаление с встречами'
               : 'Все лиды в воронке крупного бизнеса (только просмотр)'}
           </p>
         </div>
@@ -130,9 +158,24 @@ export function EnterpriseLeadsAllPanel({ canDelete = false, onDeleted }: Props)
                     <td className="py-3 pr-3 text-gray-700">{r.creatorName || '—'}</td>
                     <td className="py-3 pr-3 text-gray-700">{r.assignedManagerName || '—'}</td>
                     <td className="py-3 pr-3">
-                      <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded ${st.color}`}>
-                        {st.label}
-                      </span>
+                      {canDelete && leadStatusSelectValue(r) !== 'pending' ? (
+                        <select
+                          className={`text-[10px] uppercase font-bold px-2 py-1 rounded border border-transparent cursor-pointer ${st.color} disabled:opacity-40`}
+                          value={leadStatusSelectValue(r)}
+                          disabled={statusBusyId === r.id}
+                          onChange={(e) => void setStatus(r, e.target.value as LeadStatusValue)}
+                        >
+                          {STATUS_OPTIONS.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded ${st.color}`}>
+                          {st.label}
+                        </span>
+                      )}
                     </td>
                     <td className="py-3 pr-3 text-gray-600">{formatLeadDate(r.transferredOn || r.transferredAt)}</td>
                     {canDelete ? (

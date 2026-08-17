@@ -196,6 +196,17 @@ export async function diggerTransferEnterpriseBatchApi(
   };
 }
 
+export async function adminSetEnterpriseLeadStatusApi(
+  leadId: string,
+  status: 'waiting' | 'in_work' | 'completed' | 'cancelled',
+): Promise<void> {
+  const { error } = await getSupabase().rpc('admin_set_enterprise_lead_status', {
+    p_lead_id: leadId,
+    p_status: status,
+  });
+  if (error) throw error;
+}
+
 export async function adminDeleteReturnedLeadApi(leadId: string): Promise<void> {
   const { error } = await getSupabase().rpc('admin_delete_enterprise_lead', { p_lead_id: leadId });
   if (error) throw error;
@@ -237,6 +248,17 @@ export function leadDisplayStatus(lead: EnterpriseLead): {
     return { key: 'waiting', label: 'Назначен', color: 'bg-slate-100 text-slate-700' };
   }
   return { key: 'waiting', label: 'Ожидает встречи', color: 'bg-yellow-100 text-yellow-700' };
+}
+
+export function leadStatusSelectValue(
+  lead: EnterpriseLead,
+): 'waiting' | 'in_work' | 'completed' | 'cancelled' | 'pending' {
+  const st = leadDisplayStatus(lead);
+  if (st.key === 'pending' || st.key === 'returned') return 'pending';
+  if (st.key === 'done') return 'completed';
+  if (st.key === 'cancelled') return 'cancelled';
+  if (st.key === 'in_work') return 'in_work';
+  return 'waiting';
 }
 
 export function formatLeadDate(iso: string | null): string {

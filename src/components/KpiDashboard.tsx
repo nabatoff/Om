@@ -231,9 +231,15 @@ export function KpiDashboard({
     const names =
       filterManager !== 'Все'
         ? [filterManager]
-        : managerOptions.filter((m) => m !== 'Все' && !isAdminStaffName(m));
+        : Array.from(
+            new Set(
+              allReports
+                .map((r) => (r.manager || '').trim())
+                .filter((m) => m && m !== 'Все' && !isAdminStaffName(m)),
+            ),
+          );
     return buildRnpPaceRows(allReports, names, bounds.from, bounds.to);
-  }, [allReports, managerOptions, isDiggerKpi, filterManager, filterDateFrom, filterDateTo]);
+  }, [allReports, isDiggerKpi, filterManager, filterDateFrom, filterDateTo]);
 
   const rowMetricsMap = useMemo(() => {
     const map = new Map<string, ManagerDayMetrics>();

@@ -1,4 +1,4 @@
-import { DAILY_CALL_GOAL, type RnpDayFact, type RnpPaceMeta, type RnpPaceRow } from '../lib/kpiMetrics';
+import { DAILY_CALL_GOAL, DAILY_MEETINGS_GREEN, type RnpDayFact, type RnpPaceMeta, type RnpPaceRow } from '../lib/kpiMetrics';
 import { TrendingUp } from 'lucide-react';
 
 function formatDayHeader(ymd: string): string {
@@ -7,9 +7,22 @@ function formatDayHeader(ymd: string): string {
   return `${m[3]}.${m[2]}`;
 }
 
+function meetingsTone(count: number): 'good' | 'bad' | 'mid' {
+  if (count >= DAILY_MEETINGS_GREEN) return 'good';
+  if (count < 1) return 'bad';
+  return 'mid';
+}
+
 function MeetingsChip({ count }: { count: number }) {
+  const tone = meetingsTone(count);
+  const cls =
+    tone === 'good'
+      ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+      : tone === 'bad'
+        ? 'bg-rose-50 border-rose-200 text-rose-600'
+        : 'bg-white border-sky-200 text-sky-700';
   return (
-    <div className="mt-1.5 rounded-md bg-white border border-sky-200 px-1.5 py-0.5 text-[10px] font-bold text-sky-700 leading-tight">
+    <div className={`mt-1.5 rounded-md border px-1.5 py-0.5 text-[10px] font-bold leading-tight ${cls}`}>
       Встреч: {count}
     </div>
   );
@@ -77,6 +90,8 @@ export function RnpPacePanel({ rows, meta, days }: Props) {
             <p className="text-[11px] text-slate-500 mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1">
               <span>
                 Норма в день: <span className="font-bold text-slate-700">{DAILY_CALL_GOAL} звонка</span>
+                {', '}
+                <span className="font-bold text-slate-700">3+ встречи</span>
               </span>
               <span className="inline-flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-500" />

@@ -24,6 +24,13 @@ export function isAdminStaffName(name: string): boolean {
   return n.includes('администратор');
 }
 
+export function isHiddenFromManagerSelect(name: string): boolean {
+  const n = name.trim().toLowerCase().replace(/ё/g, 'е');
+  if (!n) return false;
+  if (isAdminStaffName(n)) return true;
+  return n === 'вюсал' || n === 'vusal' || n === 'visal' || n.startsWith('вюсал ');
+}
+
 function profileByName(profiles: StaffProfile[], name: string): StaffProfile | undefined {
   const n = name.trim().toLowerCase();
   if (!n) return undefined;
@@ -76,7 +83,7 @@ export function managerOptionsForDept(
   for (const r of reports) {
     if (!reportMatchesStaffDept(r, dept, profiles)) continue;
     const name = (r.manager || '').trim();
-    if (!name || isAdminStaffName(name)) continue;
+    if (!name || isHiddenFromManagerSelect(name)) continue;
     const byName = profileByName(profiles, name);
     if (byName && isAdminStaffRole(byName.role)) continue;
     set.add(name);

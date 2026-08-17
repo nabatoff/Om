@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { formatAttractionMonth } from '../lib/clientProfile';
 import type { FullReport, UiClient } from '../lib/crmApi';
-import { isAdminStaffName } from '../lib/staffDept';
+import { isHiddenFromManagerSelect } from '../lib/staffDept';
 import { formatMoneyKzt } from '../lib/commission';
 import {
   addCalendarMonths,
@@ -354,7 +354,7 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
     let hasUnassigned = false;
     for (const row of rows) {
       if (row.managerName) {
-        if (!isAdminStaffName(row.managerName)) names.add(row.managerName);
+        if (!isHiddenFromManagerSelect(row.managerName)) names.add(row.managerName);
       } else hasUnassigned = true;
     }
     const sorted = Array.from(names).sort((a, b) => a.localeCompare(b, 'ru'));

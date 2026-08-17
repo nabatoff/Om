@@ -99,7 +99,7 @@ import {
 } from './lib/enterpriseLeadsApi';
 import { notifyEnterpriseLeadTelegram } from './lib/telegramEnterpriseLead';
 import {
-  isAdminStaffName,
+  isHiddenFromManagerSelect,
   managerOptionsForDept,
   reportMatchesStaffDept,
   type StaffDept,
@@ -552,11 +552,21 @@ const App = () => {
     [assigneeProfiles, adminStaffProfiles],
   );
 
+  const selectableManagers = useMemo(
+    () => managerProfiles.filter((p) => !isHiddenFromManagerSelect(p.fullName)),
+    [managerProfiles],
+  );
+
+  const selectableAssignees = useMemo(
+    () => assigneeProfiles.filter((p) => !isHiddenFromManagerSelect(p.fullName)),
+    [assigneeProfiles],
+  );
+
   const isExcludedAdminName = useCallback(
     (name: string) => {
       const n = name.trim();
       if (!n) return true;
-      if (isAdminStaffName(n)) return true;
+      if (isHiddenFromManagerSelect(n)) return true;
       return adminStaffProfiles.some((p) => p.fullName.trim().toLowerCase() === n.toLowerCase());
     },
     [adminStaffProfiles],
@@ -1658,7 +1668,7 @@ const App = () => {
               />
             )}
             {adminSubView === 'enterpriseLeads' && canAdminWrite && (
-              <EnterpriseLeadsBuffer managers={managerProfiles} onAssigned={refresh} />
+              <EnterpriseLeadsBuffer managers={selectableManagers} onAssigned={refresh} />
             )}
             {adminSubView === 'enterpriseLeadsAll' && (
               <EnterpriseLeadsAllPanel canDelete={canAdminWrite} onDeleted={refresh} />
@@ -1735,7 +1745,7 @@ const App = () => {
             isAdmin={isAdmin}
             canAdminWrite={canAdminWrite}
             onToggleClientPaid={canAdminWrite ? toggleClientPaid : undefined}
-            managerSelectOptions={managerProfiles}
+            managerSelectOptions={selectableManagers}
             onAssignManager={canAdminWrite ? assignClientManager : undefined}
             onToggleKtp={canAdminWrite ? toggleClientKtp : undefined}
             managerFilter={adminClientsFilterManager}
@@ -1934,7 +1944,7 @@ const App = () => {
                     onChange={(e) => setNewClientData({ ...newClientData, managerId: e.target.value })}
                   >
                     <option value="">Не назначен</option>
-                    {assigneeProfiles.map((m) => (
+                    {selectableAssignees.map((m) => (
                       <option key={m.id} value={m.id}>
                         {m.fullName}
                         {m.role === 'lead_digger' ? ' (лидоруб)' : ''}
@@ -2193,7 +2203,7 @@ const App = () => {
       {creatingOrder && canAdminWrite ? (
         <AdminOrderCreateModal
           clients={clients}
-          managers={managerProfiles}
+          managers={selectableManagers}
           mrpKzt={mrpKzt}
           onOpenAddClient={(inputValue, callback) => {
             const isBin = /^\d{12}$/.test(inputValue.trim());
