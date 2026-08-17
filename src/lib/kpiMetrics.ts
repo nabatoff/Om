@@ -21,6 +21,19 @@ export function isRepeatMeetingType(type: string): boolean {
   return n.startsWith('повтор');
 }
 
+/** Крупный клиент: первую встречу нельзя ставить «Новая» — только «Крупный лид», дальше «Повторная». */
+export function resolveEnterpriseMeetingType(opts: {
+  type: string;
+  isEnterprise: boolean;
+  hasPriorKrup: boolean;
+  hasPriorNew: boolean;
+}): string {
+  if (opts.hasPriorNew && isNewMeetingType(opts.type)) return 'Повторная';
+  if (!opts.isEnterprise) return opts.type;
+  if (isNewMeetingType(opts.type)) return opts.hasPriorKrup ? 'Повторная' : 'Крупный лид';
+  return opts.type;
+}
+
 function normalizeKpiText(value: string): string {
   return value.trim().toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ');
 }
@@ -283,6 +296,13 @@ export type KpiPeriodSummary = {
   };
 };
 
+export type RnpDayFact = {
+  date: string;
+  /** null — нет отчёта за день */
+  calls: number | null;
+  meetings: number | null;
+};
+
 export type RnpPaceRow = {
   manager: string;
   callsFact: number;
@@ -296,6 +316,7 @@ export type RnpPaceRow = {
   newMeetingsPlanMonth: number;
   newMeetingsDelta: number;
   transitionsFact: number;
+  days: RnpDayFact[];
 };
 
 export type RnpPaceMeta = {
@@ -535,12 +556,26 @@ export function currentMonthBounds(now = new Date()): { from: string; to: string
   return { from: `${y}-${mo}-01`, to: `${y}-${mo}-${day}`, ym: `${y}-${mo}` };
 }
 
+export function enumerateYmdRange(fromYmd: string, toYmd: string): string[] {
+  const from = parseYmdLocal(fromYmd);
+  const to = parseYmdLocal(toYmd);
+  if (!from || !to || to < from) return [];
+  const out: string[] = [];
+  const cur = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+  const end = new Date(to.getFullYear(), to.getMonth(), to.getDate());
+  while (cur <= end) {
+    out.push(formatYmdLocalDate(cur));
+    cur.setDate(cur.getDate() + 1);
+  }
+  return out;
+}
+
 export function buildRnpPaceRows(
   allReports: FullReport[],
   managerNames: string[],
   periodFrom: string,
   periodTo: string,
-): { rows: RnpPaceRow[]; meta: RnpPaceMeta } {
+): { rows: RnpPaceRow[]; meta: RnpPaceMeta; days: string[] } {
   const meta = periodWorkingDayStats(periodFrom, periodTo);
   const callsPlanPeriod = DAILY_CALL_GOAL * meta.workingDaysInPeriod;
   const callsPlanToDate = DAILY_CALL_GOAL * meta.workingDaysElapsed;
@@ -559,10 +594,12 @@ export function buildRnpPaceRows(
     MONTHLY_NEW_MEETINGS_GOAL * (meta.workingDaysElapsed / workingDaysInRefMonth),
   );
 
+  const days = enumerateYmdRange(meta.from, meta.asOf);
   const source = allReports.filter((r) => r.date >= meta.from && r.date <= meta.asOf);
   const summaryReports = dedupeReportsByDayManager(source);
 
   const byManager = new Map<string, { calls: number; conductedMeetings: number; transitions: number }>();
+  const dayMap = new Map<string, { calls: number; meetings: number }>();
   for (const name of managerNames) {
     if (name !== 'Все') byManager.set(name, { calls: 0, conductedMeetings: 0, transitions: 0 });
   }
@@ -570,9 +607,11 @@ export function buildRnpPaceRows(
   for (const r of summaryReports) {
     if (!byManager.has(r.manager)) continue;
     const cur = byManager.get(r.manager)!;
+    const meetings = countConductedFactMeetings(r);
     cur.calls += r.stats.callsTotal;
-    cur.conductedMeetings += countConductedFactMeetings(r);
+    cur.conductedMeetings += meetings;
     cur.transitions += r.stats.stageTransitions ?? 0;
+    dayMap.set(`${r.manager}|${r.date}`, { calls: r.stats.callsTotal, meetings });
   }
 
   const rows = Array.from(byManager.entries())
@@ -588,9 +627,15 @@ export function buildRnpPaceRows(
       newMeetingsPlanMonth: meetingsPlanPeriod,
       newMeetingsDelta: fact.conductedMeetings - meetingsPlanToDate,
       transitionsFact: fact.transitions,
+      days: days.map((date) => {
+        const cell = dayMap.get(`${manager}|${date}`);
+        return cell
+          ? { date, calls: cell.calls, meetings: cell.meetings }
+          : { date, calls: null, meetings: null };
+      }),
     }));
 
-  return { rows, meta };
+  return { rows, meta, days };
 }
 
 export function formatKpiDeltaBadge(delta: number): { text: string; tone: 'good' | 'bad' | 'neutral' } {

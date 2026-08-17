@@ -106,9 +106,11 @@ import type { OrderRow } from './lib/ordersGrouping';
 import { AdminSettingsPanel } from './components/AdminSettingsPanel';
 import { SalesComparisonDashboard } from './components/SalesComparisonDashboard';
 import {
+  isEnterpriseLeadMeetingType,
   isNewMeetingType,
   isRepeatMeetingType,
   normalizeKpiMeetingType,
+  resolveEnterpriseMeetingType,
   shouldHidePlannedEnterpriseLead,
 } from './lib/kpiMetrics';
 import {
@@ -605,7 +607,41 @@ const App = () => {
     const assignedRaw = assignedMeetingsOverride ?? assignedMeetings;
     const conductedPool = [...conductedMeetings, ...allReports.flatMap((r) => r.conductedMeetings)];
     const assignedForSave = assignedRaw.filter((m) => !shouldHidePlannedEnterpriseLead(m, conductedPool));
-    const allEntries = [...assignedForSave, ...conductedMeetings, ...confirmedOrders];
+
+    const currentReportId = managerReportForDate?.id;
+    const enterpriseBins = new Set(
+      clients
+        .filter((c) => c.businessScale === 'enterprise')
+        .map((c) => c.bin.replace(/\D/g, ''))
+        .filter(Boolean),
+    );
+    const priorKrupBins = new Set<string>();
+    const priorNewBins = new Set<string>();
+    for (const r of allReports) {
+      if (currentReportId && r.id === currentReportId) continue;
+      for (const m of [...r.assignedMeetings, ...r.conductedMeetings]) {
+        const b = m.bin.replace(/\D/g, '');
+        if (!b) continue;
+        if (isEnterpriseLeadMeetingType(m.type)) priorKrupBins.add(b);
+        if (isNewMeetingType(m.type)) priorNewBins.add(b);
+      }
+    }
+    const rewriteType = <T extends { bin: string; type: string }>(row: T): T => {
+      const b = row.bin.replace(/\D/g, '');
+      const next = resolveEnterpriseMeetingType({
+        type: row.type,
+        isEnterprise: enterpriseBins.has(b),
+        hasPriorKrup: priorKrupBins.has(b),
+        hasPriorNew: priorNewBins.has(b),
+      });
+      if (isEnterpriseLeadMeetingType(next)) priorKrupBins.add(b);
+      if (isNewMeetingType(next)) priorNewBins.add(b);
+      return next === row.type ? row : { ...row, type: next };
+    };
+    const assignedSanitized = assignedForSave.map(rewriteType);
+    const conductedSanitized = conductedMeetings.map(rewriteType);
+
+    const allEntries = [...assignedSanitized, ...conductedSanitized, ...confirmedOrders];
     const invalidEntry = allEntries.find((e) => !e.bin);
     if (invalidEntry && !skipValidation) {
       if (!silent) {
@@ -640,8 +676,8 @@ const App = () => {
         reportId: managerReportForDate?.id,
         reportDate: managerReportDate,
         stats: { ...formStats },
-        assignedMeetings: assignedForSave,
-        conductedMeetings,
+        assignedMeetings: assignedSanitized,
+        conductedMeetings: conductedSanitized,
         confirmedOrders,
       });
       const webhook = (import.meta.env.VITE_TELEGRAM_REPORT_WEBHOOK_URL ?? '').trim();
@@ -2997,8 +3033,24 @@ const MeetingTable = ({
 }) => {
   const normalizeText = (value: string) => value.trim().toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ');
   const normalizeBin = (value: string) => value.replace(/\D/g, '');
-  const isKrupType = (t: string) => normalizeKpiMeetingType(t).includes('крупн');
+  const isKrupType = (t: string) => isEnterpriseLeadMeetingType(t);
   const [diggerPickByIdx, setDiggerPickByIdx] = useState<Record<number, string>>({});
+
+  const isEnterpriseCounterparty = (bin: string): boolean => {
+    const digits = normalizeBin(bin);
+    if (!digits) return false;
+    return clients.some((c) => normalizeBin(c.bin) === digits && c.businessScale === 'enterprise');
+  };
+
+  const counterpartyMatcher = (entityName: string, bin: string) => {
+    const targetBin = normalizeBin(bin);
+    const targetName = normalizeText(entityName);
+    return (name: string, b: string) => {
+      const bNorm = normalizeBin(b);
+      if (targetBin && bNorm) return bNorm === targetBin;
+      return normalizeText(name) === targetName;
+    };
+  };
 
   const hasAnyNewMeetingForCounterparty = (entityName: string, bin: string, selfIdx?: number): boolean => {
     const targetBin = normalizeBin(bin);
@@ -3024,6 +3076,43 @@ const MeetingTable = ({
     }
     return false;
   };
+
+  const hasAnyKrupMeetingForCounterparty = (entityName: string, bin: string, selfIdx?: number): boolean => {
+    const isSame = counterpartyMatcher(entityName, bin);
+
+    for (const report of allReports) {
+      if (report.assignedMeetings.some((m) => isKrupType(m.type) && isSame(m.entityName, m.bin))) return true;
+      if (report.conductedMeetings.some((m) => isKrupType(m.type) && isSame(m.entityName, m.bin))) return true;
+    }
+
+    for (let i = 0; i < currentAssignedMeetings.length; i++) {
+      if (type === 'assigned' && selfIdx != null && i === selfIdx) continue;
+      const m = currentAssignedMeetings[i];
+      if (isKrupType(m.type) && isSame(m.entityName, m.bin)) return true;
+    }
+    for (let i = 0; i < currentConductedMeetings.length; i++) {
+      if (type === 'conducted' && selfIdx != null && i === selfIdx) continue;
+      const m = currentConductedMeetings[i];
+      if (isKrupType(m.type) && isSame(m.entityName, m.bin)) return true;
+    }
+    return false;
+  };
+
+  const hideNewMeetingOption = (entityName: string, bin: string, selfIdx?: number): boolean =>
+    isEnterpriseCounterparty(bin) || hasAnyNewMeetingForCounterparty(entityName, bin, selfIdx);
+
+  const applyEnterpriseMeetingType = (
+    entityName: string,
+    bin: string,
+    currentType: string,
+    selfIdx?: number,
+  ): string =>
+    resolveEnterpriseMeetingType({
+      type: currentType,
+      isEnterprise: isEnterpriseCounterparty(bin),
+      hasPriorKrup: hasAnyKrupMeetingForCounterparty(entityName, bin, selfIdx),
+      hasPriorNew: hasAnyNewMeetingForCounterparty(entityName, bin, selfIdx),
+    });
 
   const isSameCounterparty = (name: string, bin: string, targetName: string, targetBin: string): boolean => {
     const bNorm = normalizeBin(bin);
@@ -3067,22 +3156,32 @@ const MeetingTable = ({
     entityName: string,
     bin: string,
     currentConductedIdx: number,
-  ): 'Новая' | 'Повторная' | null => {
+  ): 'Новая' | 'Повторная' | 'Крупный лид' | null => {
     const assignedPool: UiAssigned[] = [
       ...allReports.flatMap((report) => report.assignedMeetings),
       ...currentAssignedMeetings,
     ];
     let hasPendingNew = false;
     let hasPendingRepeat = false;
+    let hasPendingKrup = false;
     for (const assigned of assignedPool) {
       if (!isSameCounterparty(assigned.entityName, assigned.bin, entityName, bin)) continue;
       const stillPending = !hasEvidenceForAssignedInAllSources(assigned, currentConductedIdx);
       if (!stillPending) continue;
       if (isNewMeetingType(assigned.type)) hasPendingNew = true;
       if (isRepeatMeetingType(assigned.type)) hasPendingRepeat = true;
+      if (isKrupType(assigned.type)) hasPendingKrup = true;
     }
-    if (hasPendingNew && !hasPendingRepeat) return 'Новая';
-    if (hasPendingRepeat && !hasPendingNew) return 'Повторная';
+    if (hasPendingNew && !hasPendingRepeat && !hasPendingKrup) return 'Новая';
+    if (hasPendingRepeat && !hasPendingNew && !hasPendingKrup) return 'Повторная';
+    if (hasPendingKrup && !hasPendingNew && !hasPendingRepeat) return 'Крупный лид';
+    if (
+      isEnterpriseCounterparty(bin) &&
+      !hasAnyKrupMeetingForCounterparty(entityName, bin, currentConductedIdx) &&
+      !hasPendingRepeat
+    ) {
+      return 'Крупный лид';
+    }
     return null;
   };
 
@@ -3146,13 +3245,7 @@ const MeetingTable = ({
     const prevSig = rowSig(data[idx]);
     updated[idx].entityName = entityName;
     updated[idx].bin = bin;
-    if (
-      type === 'assigned' &&
-      hasAnyNewMeetingForCounterparty(entityName, bin, idx) &&
-      isNewMeetingType(String(updated[idx].type ?? ''))
-    ) {
-      updated[idx].type = 'Повторная';
-    }
+    updated[idx].type = applyEnterpriseMeetingType(entityName, bin, String(updated[idx].type ?? ''), idx);
     if (type === 'conducted') {
       const forcedType = getForcedConductedTypeForCounterparty(entityName, bin, idx);
       if (forcedType) {
@@ -3263,10 +3356,20 @@ const MeetingTable = ({
                         ) : null;
                       })()}
                       {type === 'assigned' &&
-                        hasAnyNewMeetingForCounterparty(row.entityName, row.bin, idx) &&
+                        (hasAnyNewMeetingForCounterparty(row.entityName, row.bin, idx) ||
+                          (isEnterpriseCounterparty(row.bin) &&
+                            hasAnyKrupMeetingForCounterparty(row.entityName, row.bin, idx))) &&
                         isNewMeetingType(row.type) && (
                           <p className="pointer-events-none absolute -top-4 left-1 text-[9px] font-bold uppercase tracking-wide text-amber-600 whitespace-nowrap">
                             Только «Повторная»
+                          </p>
+                        )}
+                      {type === 'assigned' &&
+                        isEnterpriseCounterparty(row.bin) &&
+                        !hasAnyKrupMeetingForCounterparty(row.entityName, row.bin, idx) &&
+                        !hasAnyNewMeetingForCounterparty(row.entityName, row.bin, idx) && (
+                          <p className="pointer-events-none absolute -top-4 left-1 text-[9px] font-bold uppercase tracking-wide text-purple-600 whitespace-nowrap">
+                            Первая — «Крупный лид»
                           </p>
                         )}
                     <select
@@ -3285,10 +3388,15 @@ const MeetingTable = ({
                         if (
                           type === 'assigned' &&
                           isNewMeetingType(nextType) &&
-                          hasAnyNewMeetingForCounterparty(row.entityName, row.bin, idx)
+                          hideNewMeetingOption(row.entityName, row.bin, idx)
                         ) {
-                          alert('С этим контрагентом уже была «Новая» встреча. Доступен только статус «Повторная».');
-                          updateRow(idx, 'type', 'Повторная');
+                          const fixed = applyEnterpriseMeetingType(row.entityName, row.bin, nextType, idx);
+                          alert(
+                            isEnterpriseCounterparty(row.bin)
+                              ? 'Для крупного лида нельзя выбрать «Новая». Первая встреча — «Крупный лид», дальше «Повторная».'
+                              : 'С этим контрагентом уже была «Новая» встреча. Доступен только статус «Повторная».',
+                          );
+                          updateRow(idx, 'type', fixed);
                           return;
                         }
                         updateRow(idx, 'type', nextType);
@@ -3314,7 +3422,15 @@ const MeetingTable = ({
                               return (
                                 <>
                                   <option>{forcedType}</option>
+                                  {forcedType !== 'Крупный лид' ? <option>Крупный лид</option> : <option>Повторная</option>}
+                                </>
+                              );
+                            }
+                            if (isEnterpriseCounterparty(row.bin)) {
+                              return (
+                                <>
                                   <option>Крупный лид</option>
+                                  <option>Повторная</option>
                                 </>
                               );
                             }
@@ -3327,8 +3443,7 @@ const MeetingTable = ({
                             );
                           })()
                         : null}
-                      {type !== 'conducted' &&
-                        !(type === 'assigned' && hasAnyNewMeetingForCounterparty(row.entityName, row.bin, idx)) && (
+                      {type !== 'conducted' && !hideNewMeetingOption(row.entityName, row.bin, idx) && (
                           <option>Новая</option>
                         )}
                       {type !== 'conducted' && <option>Повторная</option>}

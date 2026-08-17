@@ -226,7 +226,7 @@ export function KpiDashboard({
   }, [kpiRows, allReports, filterDateFrom, filterDateTo]);
 
   const rnpPace = useMemo(() => {
-    if (isDiggerKpi) return { rows: [], meta: null as ReturnType<typeof buildRnpPaceRows>['meta'] | null };
+    if (isDiggerKpi) return { rows: [], days: [] as string[], meta: null as ReturnType<typeof buildRnpPaceRows>['meta'] | null };
     const bounds = adminDateFilterBounds(filterDateFrom, filterDateTo);
     const names =
       filterManager !== 'Все'
@@ -432,7 +432,7 @@ export function KpiDashboard({
       </section>
 
       {!isDiggerKpi && rnpPace.rows.length > 0 && rnpPace.meta ? (
-        <RnpPacePanel rows={rnpPace.rows} meta={rnpPace.meta} />
+        <RnpPacePanel rows={rnpPace.rows} meta={rnpPace.meta} days={rnpPace.days} />
       ) : null}
 
       {!isDiggerKpi ? <AdminBlockersPanel filterManager={filterManager} /> : null}
