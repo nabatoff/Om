@@ -6,34 +6,63 @@ export const STAFF_DEPT_OPTIONS: Array<{ value: StaffDept; label: string }> = [
   { value: 'diggers', label: 'Лидорубы' },
 ];
 
-type StaffProfile = { id: string; fullName: string; role: string };
+export type StaffProfile = { id: string; fullName: string; role: string };
 
 type ReportLike = { managerId?: string | null; manager?: string };
 
-export function resolveReportStaffDept(
-  report: ReportLike,
-  profiles: StaffProfile[],
-): 'managers' | 'diggers' | 'unknown' {
+export type StaffDeptKind = 'managers' | 'diggers' | 'admin' | 'unknown';
+
+export function isAdminStaffRole(role: string | null | undefined): boolean {
+  return (role || '').trim().toLowerCase() === 'admin';
+}
+
+/** Имена админов в отчётах, даже без profiles (старые строки вроде Administrator). */
+export function isAdminStaffName(name: string): boolean {
+  const n = name.trim().toLowerCase().replace(/ё/g, 'е');
+  if (!n) return false;
+  if (n === 'administrator' || n === 'admin' || n === 'админ' || n === 'администратор') return true;
+  return n.includes('администратор');
+}
+
+function profileByName(profiles: StaffProfile[], name: string): StaffProfile | undefined {
+  const n = name.trim().toLowerCase();
+  if (!n) return undefined;
+  return profiles.find((p) => p.fullName.trim().toLowerCase() === n);
+}
+
+export function isAdminStaff(report: ReportLike, profiles: StaffProfile[]): boolean {
+  return resolveReportStaffDept(report, profiles) === 'admin';
+}
+
+export function resolveReportStaffDept(report: ReportLike, profiles: StaffProfile[]): StaffDeptKind {
   if (report.managerId) {
     const byId = profiles.find((p) => p.id === report.managerId);
-    if (byId) return byId.role === 'lead_digger' ? 'diggers' : 'managers';
+    if (byId) {
+      if (isAdminStaffRole(byId.role)) return 'admin';
+      return byId.role === 'lead_digger' ? 'diggers' : 'managers';
+    }
   }
-  const name = (report.manager || '').trim().toLowerCase();
-  if (name) {
-    const byName = profiles.find((p) => p.fullName.trim().toLowerCase() === name);
-    if (byName) return byName.role === 'lead_digger' ? 'diggers' : 'managers';
+  const rawName = (report.manager || '').trim();
+  if (isAdminStaffName(rawName)) return 'admin';
+  if (rawName) {
+    const byName = profileByName(profiles, rawName);
+    if (byName) {
+      if (isAdminStaffRole(byName.role)) return 'admin';
+      return byName.role === 'lead_digger' ? 'diggers' : 'managers';
+    }
   }
   return 'unknown';
 }
 
-/** unknown (старые отчёты без роли) — в «Менеджеры» и «Все», не в «Лидорубы». */
+/** unknown (старые отчёты без роли) — в «Менеджеры» и «Все», не в «Лидорубы». Админы никуда. */
 export function reportMatchesStaffDept(
   report: ReportLike,
   dept: StaffDept,
   profiles: StaffProfile[],
 ): boolean {
-  if (dept === 'all') return true;
   const resolved = resolveReportStaffDept(report, profiles);
+  if (resolved === 'admin') return false;
+  if (dept === 'all') return true;
   if (dept === 'diggers') return resolved === 'diggers';
   return resolved === 'managers' || resolved === 'unknown';
 }
@@ -47,7 +76,10 @@ export function managerOptionsForDept(
   for (const r of reports) {
     if (!reportMatchesStaffDept(r, dept, profiles)) continue;
     const name = (r.manager || '').trim();
-    if (name) set.add(name);
+    if (!name || isAdminStaffName(name)) continue;
+    const byName = profileByName(profiles, name);
+    if (byName && isAdminStaffRole(byName.role)) continue;
+    set.add(name);
   }
   return ['Все', ...Array.from(set).sort((a, b) => a.localeCompare(b, 'ru'))];
 }

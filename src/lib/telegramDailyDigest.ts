@@ -38,7 +38,7 @@ export function pickBestReportsPerManagerOnDate(
     const resolved = resolveReportStaffDept(r, profiles);
     if (dept === 'diggers') {
       if (resolved !== 'diggers') continue;
-    } else if (resolved === 'diggers') {
+    } else if (resolved === 'diggers' || resolved === 'admin') {
       continue;
     }
     const key = (r.manager || '').trim() || '—';

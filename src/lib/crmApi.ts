@@ -325,6 +325,21 @@ export async function fetchManagerProfilesApi(): Promise<UiManagerProfile[]> {
   }));
 }
 
+/** Все администраторы (в т.ч. неактивные) — чтобы вычищать их из KPI/фильтров. */
+export async function fetchAdminStaffProfilesApi(): Promise<Array<UiManagerProfile & { role: string }>> {
+  const { data, error } = await getSupabase()
+    .from('profiles')
+    .select('id, full_name, role, is_active')
+    .eq('role', 'admin')
+    .order('full_name', { ascending: true, nullsFirst: false });
+  if (error) throw error;
+  return (data || []).map((r) => ({
+    id: String(r.id),
+    fullName: String((r.full_name as string | null) || '').trim() || String(r.id).slice(0, 8),
+    role: 'admin',
+  }));
+}
+
 /** Менеджеры крупного + лидорубы (для назначения карточки клиента). */
 export async function fetchAssigneeProfilesApi(): Promise<Array<UiManagerProfile & { role: string }>> {
   const { data, error } = await getSupabase()

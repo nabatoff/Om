@@ -1,5 +1,6 @@
 import type { FullReport } from './crmApi';
 import { calendarMonthFromYm, reportDateMatchesAdminBounds } from './periodBounds';
+import { isAdminStaffName } from './staffDept';
 
 export function normalizeKpiMeetingType(value: string): string {
   return value.trim().toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ');
@@ -601,7 +602,8 @@ export function buildRnpPaceRows(
   const byManager = new Map<string, { calls: number; conductedMeetings: number; transitions: number }>();
   const dayMap = new Map<string, { calls: number; meetings: number }>();
   for (const name of managerNames) {
-    if (name !== 'Все') byManager.set(name, { calls: 0, conductedMeetings: 0, transitions: 0 });
+    if (!name || name === 'Все' || isAdminStaffName(name)) continue;
+    byManager.set(name, { calls: 0, conductedMeetings: 0, transitions: 0 });
   }
 
   for (const r of summaryReports) {

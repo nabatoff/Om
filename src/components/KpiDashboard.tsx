@@ -7,7 +7,7 @@ import {
   type EnterpriseLead,
 } from '../lib/enterpriseLeadsApi';
 import { adminDateFilterBounds, reportDateMatchesAdminBounds } from '../lib/periodBounds';
-import type { StaffDept } from '../lib/staffDept';
+import { isAdminStaffName, type StaffDept } from '../lib/staffDept';
 import {
   buildRnpPaceRows,
   countAssignedNewMeetings,
@@ -231,7 +231,7 @@ export function KpiDashboard({
     const names =
       filterManager !== 'Все'
         ? [filterManager]
-        : managerOptions.filter((m) => m !== 'Все');
+        : managerOptions.filter((m) => m !== 'Все' && !isAdminStaffName(m));
     return buildRnpPaceRows(allReports, names, bounds.from, bounds.to);
   }, [allReports, managerOptions, isDiggerKpi, filterManager, filterDateFrom, filterDateTo]);
 

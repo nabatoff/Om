@@ -47,6 +47,7 @@ import {
   fetchClientCategoriesApi,
   fetchManagerProfilesApi,
   fetchAssigneeProfilesApi,
+  fetchAdminStaffProfilesApi,
   setClientProfileApi,
   upsertClientCategoryApi,
   fetchAdminAnalyticsTabEnabledApi,
@@ -98,6 +99,7 @@ import {
 } from './lib/enterpriseLeadsApi';
 import { notifyEnterpriseLeadTelegram } from './lib/telegramEnterpriseLead';
 import {
+  isAdminStaffName,
   managerOptionsForDept,
   reportMatchesStaffDept,
   type StaffDept,
@@ -255,6 +257,7 @@ const App = () => {
   const [clients, setClients] = useState<UiClient[]>([]);
   const [managerProfiles, setManagerProfiles] = useState<Array<{ id: string; fullName: string }>>([]);
   const [assigneeProfiles, setAssigneeProfiles] = useState<Array<{ id: string; fullName: string; role: string }>>([]);
+  const [adminStaffProfiles, setAdminStaffProfiles] = useState<Array<{ id: string; fullName: string; role: string }>>([]);
   const [standaloneCp, setStandaloneCp] = useState<ClientStandaloneCp[]>([]);
   const [allReports, setAllReports] = useState<FullReport[]>([]);
   const [deletedMeetings, setDeletedMeetings] = useState<DeletedMeeting[]>([]);
@@ -435,9 +438,13 @@ const App = () => {
       const assignees = isAdmin
         ? await fetchAssigneeProfilesApi().catch(() => [] as Array<{ id: string; fullName: string; role: string }>)
         : [];
+      const admins = isAdmin
+        ? await fetchAdminStaffProfilesApi().catch(() => [] as Array<{ id: string; fullName: string; role: string }>)
+        : [];
       setClients(c);
       setManagerProfiles(managers);
       setAssigneeProfiles(assignees);
+      setAdminStaffProfiles(admins);
       setAllReports(r);
       setDeletedMeetings(basket);
       setStandaloneCp(standalone);
@@ -540,32 +547,54 @@ const App = () => {
     }
   }, [currentView]);
 
+  const staffDeptProfiles = useMemo(
+    () => [...assigneeProfiles, ...adminStaffProfiles],
+    [assigneeProfiles, adminStaffProfiles],
+  );
+
+  const isExcludedAdminName = useCallback(
+    (name: string) => {
+      const n = name.trim();
+      if (!n) return true;
+      if (isAdminStaffName(n)) return true;
+      return adminStaffProfiles.some((p) => p.fullName.trim().toLowerCase() === n.toLowerCase());
+    },
+    [adminStaffProfiles],
+  );
+
   const managerFilterOptions = useMemo(() => {
     const set = new Set<string>();
     allReports.forEach((r) => {
-      if (r.manager) set.add(r.manager);
+      if (!r.manager || isExcludedAdminName(r.manager)) return;
+      if (!reportMatchesStaffDept(r, 'all', staffDeptProfiles)) return;
+      set.add(r.manager);
     });
     return ['Все', ...Array.from(set).sort((a, b) => a.localeCompare(b, 'ru'))];
-  }, [allReports]);
+  }, [allReports, isExcludedAdminName, staffDeptProfiles]);
 
   const adminDeptManagerOptions = useMemo(
-    () => managerOptionsForDept(allReports, adminStaffDept, assigneeProfiles),
-    [allReports, adminStaffDept, assigneeProfiles],
+    () => managerOptionsForDept(allReports, adminStaffDept, staffDeptProfiles),
+    [allReports, adminStaffDept, staffDeptProfiles],
   );
 
   const kpiDeptManagerOptions = useMemo(
-    () => managerOptionsForDept(allReports, kpiStaffDept, assigneeProfiles),
-    [allReports, kpiStaffDept, assigneeProfiles],
+    () => managerOptionsForDept(allReports, kpiStaffDept, staffDeptProfiles),
+    [allReports, kpiStaffDept, staffDeptProfiles],
   );
 
   const adminDeptReports = useMemo(
-    () => allReports.filter((r) => reportMatchesStaffDept(r, adminStaffDept, assigneeProfiles)),
-    [allReports, adminStaffDept, assigneeProfiles],
+    () => allReports.filter((r) => reportMatchesStaffDept(r, adminStaffDept, staffDeptProfiles)),
+    [allReports, adminStaffDept, staffDeptProfiles],
   );
 
   const kpiDeptReports = useMemo(
-    () => allReports.filter((r) => reportMatchesStaffDept(r, kpiStaffDept, assigneeProfiles)),
-    [allReports, kpiStaffDept, assigneeProfiles],
+    () => allReports.filter((r) => reportMatchesStaffDept(r, kpiStaffDept, staffDeptProfiles)),
+    [allReports, kpiStaffDept, staffDeptProfiles],
+  );
+
+  const nonAdminReports = useMemo(
+    () => allReports.filter((r) => reportMatchesStaffDept(r, 'all', staffDeptProfiles)),
+    [allReports, staffDeptProfiles],
   );
 
   const managerReportForDate = useMemo(() => {
@@ -695,7 +724,7 @@ const App = () => {
           await postTelegramDailyDigestIfConfigured(
             latestReports,
             managerReportDate,
-            assigneeProfiles,
+            staffDeptProfiles,
             Array.from(transferMap.entries()).map(([diggerName, count]) => ({ diggerName, count })),
           );
         } catch (err) {
@@ -1125,6 +1154,7 @@ const App = () => {
   const reportsForOrders = useMemo(() => {
     if (isAdmin) {
       return allReports.filter((r) => {
+        if (!reportMatchesStaffDept(r, 'all', staffDeptProfiles)) return false;
         const matchManager = ordersFilterManager === 'Все' || r.manager === ordersFilterManager;
         const matchDateFrom = !ordersFilterDateFrom || r.date >= ordersFilterDateFrom;
         const matchDateTo = !ordersFilterDateTo || r.date <= ordersFilterDateTo;
@@ -1136,7 +1166,7 @@ const App = () => {
       const matchDateTo = !ordersFilterDateTo || r.date <= ordersFilterDateTo;
       return matchDateFrom && matchDateTo;
     });
-  }, [isAdmin, allReports, ordersFilterManager, ordersFilterDateFrom, ordersFilterDateTo]);
+  }, [isAdmin, allReports, ordersFilterManager, ordersFilterDateFrom, ordersFilterDateTo, staffDeptProfiles]);
 
   const allOrdersByDateAndManager = useMemo(() => {
     const orders: OrderRow[] = [];
@@ -1213,11 +1243,11 @@ const App = () => {
     const set = new Set<string>();
     for (const r of clientListRows) {
       for (const m of r.managerNames) {
-        if (m) set.add(m);
+        if (m && !isExcludedAdminName(m)) set.add(m);
       }
     }
     return ['Все', 'Не назначен', ...Array.from(set).sort((a, b) => a.localeCompare(b, 'ru'))];
-  }, [clientListRows]);
+  }, [clientListRows, isExcludedAdminName]);
 
   const visibleClientRows = useMemo(() => {
     if (!isAdmin || adminClientsFilterManager === 'Все') return clientListRows;
@@ -1638,7 +1668,7 @@ const App = () => {
             {adminSubView === 'meetings' && canAdminWrite && (
               <ManagerMeetingsPanel
                 variant="admin"
-                allReports={allReports}
+                allReports={nonAdminReports}
                 findEvidence={findSpecificConductedEvidence}
                 managerOptions={managerFilterOptions}
                 onAdminDeleteMeeting={removeAdminMeeting}
@@ -1662,7 +1692,7 @@ const App = () => {
         {isAdmin && currentView === 'registry' && (
           <SupplierRegistryPanel
             clients={clients}
-            reports={allReports}
+            reports={nonAdminReports}
             clientKtpByBin={clientKtpByBin}
             onOpenClient={(c) => setClientHistoryFor(c)}
           />
