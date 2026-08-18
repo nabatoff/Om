@@ -35,6 +35,25 @@ export function resolveEnterpriseMeetingType(opts: {
   return opts.type;
 }
 
+/** Уже проведённые «Новая» / «Крупный лид» по БИН (план назначенной не считаем). */
+export function collectConductedMeetingBins(
+  reports: Array<{ id?: string; conductedMeetings: Array<{ bin: string; type: string }> }>,
+  excludeReportId?: string,
+): { newBins: Set<string>; krupBins: Set<string> } {
+  const newBins = new Set<string>();
+  const krupBins = new Set<string>();
+  for (const r of reports) {
+    if (excludeReportId && r.id === excludeReportId) continue;
+    for (const m of r.conductedMeetings) {
+      const b = normalizeKpiBin(m.bin);
+      if (!b) continue;
+      if (isEnterpriseLeadMeetingType(m.type)) krupBins.add(b);
+      if (isNewMeetingType(m.type)) newBins.add(b);
+    }
+  }
+  return { newBins, krupBins };
+}
+
 function normalizeKpiText(value: string): string {
   return value.trim().toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ');
 }

@@ -113,6 +113,7 @@ import {
   isRepeatMeetingType,
   normalizeKpiMeetingType,
   resolveEnterpriseMeetingType,
+  collectConductedMeetingBins,
   shouldHidePlannedEnterpriseLead,
 } from './lib/kpiMetrics';
 import {
@@ -654,31 +655,72 @@ const App = () => {
         .map((c) => c.bin.replace(/\D/g, ''))
         .filter(Boolean),
     );
-    const priorKrupBins = new Set<string>();
-    const priorNewBins = new Set<string>();
-    for (const r of allReports) {
-      if (currentReportId && r.id === currentReportId) continue;
-      for (const m of [...r.assignedMeetings, ...r.conductedMeetings]) {
-        const b = m.bin.replace(/\D/g, '');
-        if (!b) continue;
-        if (isEnterpriseLeadMeetingType(m.type)) priorKrupBins.add(b);
-        if (isNewMeetingType(m.type)) priorNewBins.add(b);
-      }
-    }
-    const rewriteType = <T extends { bin: string; type: string }>(row: T): T => {
+    const priorFromDb = collectConductedMeetingBins(allReports, currentReportId);
+    const priorKrupBins = new Set(priorFromDb.krupBins);
+    const priorNewBins = new Set(priorFromDb.newBins);
+
+    const rewriteConductedType = <T extends { bin: string; type: string }>(row: T, rowIdx: number): T => {
       const b = row.bin.replace(/\D/g, '');
+      let hasPriorNew = priorNewBins.has(b);
+      let hasPriorKrup = priorKrupBins.has(b);
+      if (!hasPriorNew || !hasPriorKrup) {
+        for (let i = 0; i < rowIdx; i++) {
+          const prev = conductedMeetings[i];
+          const pb = prev.bin.replace(/\D/g, '');
+          if (pb !== b) continue;
+          if (!hasPriorNew && isNewMeetingType(prev.type)) hasPriorNew = true;
+          if (!hasPriorKrup && isEnterpriseLeadMeetingType(prev.type)) hasPriorKrup = true;
+        }
+      }
       const next = resolveEnterpriseMeetingType({
         type: row.type,
         isEnterprise: enterpriseBins.has(b),
-        hasPriorKrup: priorKrupBins.has(b),
-        hasPriorNew: priorNewBins.has(b),
+        hasPriorKrup,
+        hasPriorNew,
       });
       if (isEnterpriseLeadMeetingType(next)) priorKrupBins.add(b);
       if (isNewMeetingType(next)) priorNewBins.add(b);
       return next === row.type ? row : { ...row, type: next };
     };
-    const assignedSanitized = assignedForSave.map(rewriteType);
-    const conductedSanitized = conductedMeetings.map(rewriteType);
+
+    const rewriteAssignedType = <T extends { bin: string; type: string }>(row: T): T => {
+      const b = row.bin.replace(/\D/g, '');
+      let hasPriorNew = priorNewBins.has(b);
+      let hasPriorKrup = priorKrupBins.has(b);
+      if (!hasPriorNew) {
+        for (const m of conductedMeetings) {
+          if (m.bin.replace(/\D/g, '') === b && isNewMeetingType(m.type)) {
+            hasPriorNew = true;
+            break;
+          }
+        }
+      }
+      if (!hasPriorKrup) {
+        for (const m of conductedMeetings) {
+          if (m.bin.replace(/\D/g, '') === b && isEnterpriseLeadMeetingType(m.type)) {
+            hasPriorKrup = true;
+            break;
+          }
+        }
+      }
+      for (const m of assignedForSave) {
+        if (m === row) continue;
+        const pb = m.bin.replace(/\D/g, '');
+        if (pb !== b) continue;
+        if (!hasPriorNew && isNewMeetingType(m.type)) hasPriorNew = true;
+        if (!hasPriorKrup && isEnterpriseLeadMeetingType(m.type)) hasPriorKrup = true;
+      }
+      const next = resolveEnterpriseMeetingType({
+        type: row.type,
+        isEnterprise: enterpriseBins.has(b),
+        hasPriorKrup,
+        hasPriorNew,
+      });
+      return next === row.type ? row : { ...row, type: next };
+    };
+
+    const conductedSanitized = conductedMeetings.map((row, idx) => rewriteConductedType(row, idx));
+    const assignedSanitized = assignedForSave.map(rewriteAssignedType);
 
     const allEntries = [...assignedSanitized, ...conductedSanitized, ...confirmedOrders];
     const invalidEntry = allEntries.find((e) => !e.bin);
@@ -3092,6 +3134,42 @@ const MeetingTable = ({
     };
   };
 
+  const hasAnyConductedNewMeetingForCounterparty = (entityName: string, bin: string, selfIdx?: number): boolean => {
+    const targetBin = normalizeBin(bin);
+    const targetName = normalizeText(entityName);
+    const isSameCounterparty = (name: string, b: string) => {
+      const bNorm = normalizeBin(b);
+      if (targetBin && bNorm) return bNorm === targetBin;
+      return normalizeText(name) === targetName;
+    };
+
+    for (const report of allReports) {
+      if (report.conductedMeetings.some((m) => isNewMeetingType(m.type) && isSameCounterparty(m.entityName, m.bin))) return true;
+    }
+
+    for (let i = 0; i < currentConductedMeetings.length; i++) {
+      if (type === 'conducted' && selfIdx != null && i === selfIdx) continue;
+      const m = currentConductedMeetings[i];
+      if (isNewMeetingType(m.type) && isSameCounterparty(m.entityName, m.bin)) return true;
+    }
+    return false;
+  };
+
+  const hasAnyConductedKrupMeetingForCounterparty = (entityName: string, bin: string, selfIdx?: number): boolean => {
+    const isSame = counterpartyMatcher(entityName, bin);
+
+    for (const report of allReports) {
+      if (report.conductedMeetings.some((m) => isKrupType(m.type) && isSame(m.entityName, m.bin))) return true;
+    }
+
+    for (let i = 0; i < currentConductedMeetings.length; i++) {
+      if (type === 'conducted' && selfIdx != null && i === selfIdx) continue;
+      const m = currentConductedMeetings[i];
+      if (isKrupType(m.type) && isSame(m.entityName, m.bin)) return true;
+    }
+    return false;
+  };
+
   const hasAnyNewMeetingForCounterparty = (entityName: string, bin: string, selfIdx?: number): boolean => {
     const targetBin = normalizeBin(bin);
     const targetName = normalizeText(entityName);
@@ -3146,12 +3224,17 @@ const MeetingTable = ({
     bin: string,
     currentType: string,
     selfIdx?: number,
+    forConductedRow = false,
   ): string =>
     resolveEnterpriseMeetingType({
       type: currentType,
       isEnterprise: isEnterpriseCounterparty(bin),
-      hasPriorKrup: hasAnyKrupMeetingForCounterparty(entityName, bin, selfIdx),
-      hasPriorNew: hasAnyNewMeetingForCounterparty(entityName, bin, selfIdx),
+      hasPriorKrup: forConductedRow
+        ? hasAnyConductedKrupMeetingForCounterparty(entityName, bin, selfIdx)
+        : hasAnyKrupMeetingForCounterparty(entityName, bin, selfIdx),
+      hasPriorNew: forConductedRow
+        ? hasAnyConductedNewMeetingForCounterparty(entityName, bin, selfIdx)
+        : hasAnyNewMeetingForCounterparty(entityName, bin, selfIdx),
     });
 
   const isSameCounterparty = (name: string, bin: string, targetName: string, targetBin: string): boolean => {
@@ -3285,7 +3368,13 @@ const MeetingTable = ({
     const prevSig = rowSig(data[idx]);
     updated[idx].entityName = entityName;
     updated[idx].bin = bin;
-    updated[idx].type = applyEnterpriseMeetingType(entityName, bin, String(updated[idx].type ?? ''), idx);
+    updated[idx].type = applyEnterpriseMeetingType(
+      entityName,
+      bin,
+      String(updated[idx].type ?? ''),
+      idx,
+      type === 'conducted',
+    );
     if (type === 'conducted') {
       const forcedType = getForcedConductedTypeForCounterparty(entityName, bin, idx);
       if (forcedType) {
