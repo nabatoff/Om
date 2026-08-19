@@ -11,6 +11,7 @@ import {
   updateConductedMeetingById,
   updateConductedMeetingCpById,
 } from '../lib/crmApi';
+import { meetingTypesLinkable } from '../lib/kpiMetrics';
 import { ALL_TIME_FROM, ALL_TIME_TO, adminDateFilterBounds } from '../lib/periodBounds';
 import { PeriodFilterFields } from './PeriodFilterFields';
 
@@ -102,13 +103,12 @@ function matchesSameCounterparty(aName: string, aBin: string, bName: string, bBi
 }
 
 function hasAssignedMatchForConducted(conducted: UiConducted, manager: string, allReports: FullReport[]): boolean {
-  const conductedType = normalizeMeetingType(conducted.type);
   const conductedDate = meetingDateSortKey(conducted.date);
   for (const report of allReports) {
     if ((report.manager || '') !== manager) continue;
     for (const assigned of report.assignedMeetings) {
       if (!matchesSameCounterparty(assigned.entityName, assigned.bin, conducted.entityName, conducted.bin)) continue;
-      if (normalizeMeetingType(assigned.type) !== conductedType) continue;
+      if (!meetingTypesLinkable(assigned.type, conducted.type)) continue;
       const assignedDate = meetingDateSortKey(assigned.date);
       if (assignedDate <= conductedDate) return true;
     }
@@ -128,7 +128,7 @@ function assignedPlanColumnLabel(a: UiMeetingWithReport, allReports: FullReport[
     (m) =>
       m.bin.trim() === a.bin.trim() &&
       m.entityName.trim().toLowerCase() === a.entityName.trim().toLowerCase() &&
-      normalizeMeetingType(m.type) === normalizeMeetingType(a.type),
+      meetingTypesLinkable(m.type, a.type),
   );
   if (candidates.length === 0) return '—';
   const sorted = [...candidates].sort((x, y) => meetingDateSortKey(x.date).localeCompare(meetingDateSortKey(y.date)));
@@ -151,7 +151,7 @@ function assignmentDateYmd(a: UiMeetingWithReport, allReports: FullReport[]): st
     (m) =>
       m.bin.trim() === a.bin.trim() &&
       m.entityName.trim().toLowerCase() === a.entityName.trim().toLowerCase() &&
-      normalizeMeetingType(m.type) === normalizeMeetingType(a.type),
+      meetingTypesLinkable(m.type, a.type),
   );
   if (candidates.length === 0) return null;
   const sorted = [...candidates].sort((x, y) => meetingDateSortKey(x.date).localeCompare(meetingDateSortKey(y.date)));

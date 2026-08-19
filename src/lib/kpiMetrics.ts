@@ -22,6 +22,19 @@ export function isRepeatMeetingType(type: string): boolean {
   return n.startsWith('повтор');
 }
 
+/**
+ * Считаем план (assigned) и факт (conducted) одной и той же встречей, даже если тип отличается:
+ * «Новая»/«Повторная» — это одна и та же физическая встреча, тип которой мог автоматически
+ * пересчитаться на сохранении (см. resolveEnterpriseMeetingType). «Крупный лид» — отдельная
+ * категория и должна совпадать точно, чтобы не путать её с обычной встречей.
+ */
+export function meetingTypesLinkable(a: string, b: string): boolean {
+  if (normalizeKpiMeetingType(a) === normalizeKpiMeetingType(b)) return true;
+  const aOrdinary = isNewMeetingType(a) || isRepeatMeetingType(a);
+  const bOrdinary = isNewMeetingType(b) || isRepeatMeetingType(b);
+  return aOrdinary && bOrdinary;
+}
+
 /** Крупный клиент: первую встречу нельзя ставить «Новая» — только «Крупный лид», дальше «Повторная». */
 export function resolveEnterpriseMeetingType(opts: {
   type: string;

@@ -111,9 +111,9 @@ import {
   isEnterpriseLeadMeetingType,
   isNewMeetingType,
   isRepeatMeetingType,
-  normalizeKpiMeetingType,
   resolveEnterpriseMeetingType,
   collectConductedMeetingBins,
+  meetingTypesLinkable,
   shouldHidePlannedEnterpriseLead,
 } from './lib/kpiMetrics';
 import {
@@ -683,7 +683,7 @@ const App = () => {
       return next === row.type ? row : { ...row, type: next };
     };
 
-    const rewriteAssignedType = <T extends { bin: string; type: string }>(row: T): T => {
+    const rewriteAssignedType = (row: UiAssigned): UiAssigned => {
       const b = row.bin.replace(/\D/g, '');
       let hasPriorNew = priorNewBins.has(b);
       let hasPriorKrup = priorKrupBins.has(b);
@@ -1175,7 +1175,7 @@ const App = () => {
       const evidence = report.conductedMeetings.find(
         (cm) =>
           cm.bin === plannedMeeting.bin &&
-          cm.type === plannedMeeting.type &&
+          meetingTypesLinkable(cm.type, plannedMeeting.type) &&
           cm.entityName.trim().toLowerCase() === plannedMeeting.entityName.trim().toLowerCase() &&
           cm.date >= plannedMeeting.date,
       );
@@ -3257,7 +3257,7 @@ const MeetingTable = ({
 
   const conductedMatchesAssigned = (conducted: UiConducted, assigned: UiAssigned): boolean => {
     if (!isSameCounterparty(conducted.entityName, conducted.bin, assigned.entityName, assigned.bin)) return false;
-    if (normalizeKpiMeetingType(conducted.type) !== normalizeKpiMeetingType(assigned.type)) return false;
+    if (!meetingTypesLinkable(conducted.type, assigned.type)) return false;
     return toComparableYmd(conducted.date) >= toComparableYmd(assigned.date);
   };
 
