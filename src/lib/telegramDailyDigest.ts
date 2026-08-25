@@ -1,4 +1,5 @@
 import type { FullReport } from './crmApi';
+import { meetingTypesLinkable } from './kpiMetrics';
 import { resolveReportStaffDept } from './staffDept';
 
 type StaffProfile = { id: string; fullName: string; role: string };
@@ -82,13 +83,12 @@ function countConductedNewMeetings(report: FullReport, allReports: FullReport[])
     if (!isNewMeetingType(assigned.type)) continue;
     const plannedName = normalizeKpiText(assigned.entityName);
     const plannedBin = normalizeKpiBin(assigned.bin);
-    const plannedType = normalizeKpiMeetingType(assigned.type);
     const hasEvidence = targetReports.some((lr) =>
       lr.conductedMeetings.some(
         (cm) =>
           normalizeKpiBin(cm.bin) === plannedBin &&
           normalizeKpiText(cm.entityName) === plannedName &&
-          normalizeKpiMeetingType(cm.type) === plannedType &&
+          meetingTypesLinkable(cm.type, assigned.type) &&
           cm.date >= assigned.date,
       ),
     );
