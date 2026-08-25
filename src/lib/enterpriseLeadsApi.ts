@@ -79,13 +79,9 @@ export function isLeadWithoutScheduledMeeting(lead: EnterpriseLead): boolean {
   return !lead.meetingRequested && !lead.meetingDate && !lead.assignedMeetingId;
 }
 
-/** Активный лид в кабинете менеджера (ещё не проведён и не взят в работу). */
+/** Активный лид в кабинете менеджера (ещё не проведён). Взятый «в работу» остаётся видимым, пока встреча не проведена/отменена. */
 export function isActiveManagerEnterpriseLead(lead: EnterpriseLead): boolean {
-  return (
-    lead.routingStatus === 'assigned_to_manager' &&
-    lead.meetingStatus !== 'completed' &&
-    lead.meetingStatus !== 'in_work'
-  );
+  return lead.routingStatus === 'assigned_to_manager' && lead.meetingStatus !== 'completed';
 }
 
 export async function listEnterpriseLeadsApi(

@@ -87,7 +87,7 @@ export function ManagerEnterpriseLeadsPanel({ onChanged }: Props) {
             const busy = busyId === r.id;
             const done = r.meetingStatus === 'completed';
             const cancelled = r.meetingStatus === 'cancelled';
-            const takeInWork = isLeadWithoutScheduledMeeting(r) && !done && !cancelled;
+            const takeInWork = isLeadWithoutScheduledMeeting(r) && !r.meetingStatus;
 
             if (blocked) {
               return (
@@ -158,7 +158,9 @@ export function ManagerEnterpriseLeadsPanel({ onChanged }: Props) {
                         ? `Встреча: ${formatLeadDate(r.meetingDate)}`
                         : takeInWork
                           ? 'Без назначенной встречи'
-                          : 'Менеджер назначен'}
+                          : r.meetingStatus === 'in_work'
+                            ? 'В работе — назначьте итог встречи'
+                            : 'Менеджер назначен'}
                     </div>
                     <div className="text-[10px] font-mono text-gray-400">{r.bin}</div>
                   </div>
