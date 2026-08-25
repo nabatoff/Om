@@ -11,7 +11,7 @@ import { isAdminStaffName, type StaffDept } from '../lib/staffDept';
 import {
   buildRnpPaceRows,
   countAssignedNewMeetings,
-  countConductedNewMeetings,
+  countConductedNewOrKrupMeetings,
   countConductedRepeatMeetings,
   countCounterpartiesConductedNewWithOrder,
   dedupeReportsByDayManager,
@@ -163,7 +163,7 @@ export function KpiDashboard({
     for (const r of kpiRows) {
       conductedFact += r.conductedMeetings.length;
       assignedNew += countAssignedNewMeetings(r);
-      conductedNew += countConductedNewMeetings(r, allReports);
+      conductedNew += countConductedNewOrKrupMeetings(r, allReports);
       conductedRepeat += countConductedRepeatMeetings(r);
       transitions += r.stats.stageTransitions ?? 0;
     }
@@ -192,7 +192,7 @@ export function KpiDashboard({
       validated += r.stats.validatedTotal;
       conductedFact += r.conductedMeetings.length;
       assignedNew += countAssignedNewMeetings(r);
-      conductedNew += countConductedNewMeetings(r, allReports);
+      conductedNew += countConductedNewOrKrupMeetings(r, allReports);
       conductedRepeat += countConductedRepeatMeetings(r);
       transitions += r.stats.stageTransitions ?? 0;
     }
@@ -251,7 +251,7 @@ export function KpiDashboard({
         validated: r.stats.validatedTotal,
         conductedFact: r.conductedMeetings.length,
         assignedNew: countAssignedNewMeetings(r),
-        conductedNew: countConductedNewMeetings(r, allReports),
+        conductedNew: countConductedNewOrKrupMeetings(r, allReports),
         conductedRepeat: countConductedRepeatMeetings(r),
         transitions: r.stats.stageTransitions ?? 0,
       });

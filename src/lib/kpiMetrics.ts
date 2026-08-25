@@ -115,6 +115,16 @@ export function countConductedNewMeetings(report: FullReport, allReports: FullRe
   return count;
 }
 
+/** Проведённые «Крупный лид» — сами по себе первая встреча, привязки к плану не требуют. */
+export function countConductedKrupMeetings(report: FullReport): number {
+  return report.conductedMeetings.filter((m) => isEnterpriseLeadMeetingType(m.type)).length;
+}
+
+/** «Проведено новых» = обычные первые встречи + первые встречи с крупными («Крупный лид»). */
+export function countConductedNewOrKrupMeetings(report: FullReport, allReports: FullReport[]): number {
+  return countConductedNewMeetings(report, allReports) + countConductedKrupMeetings(report);
+}
+
 function collectCounterpartyKeysWithKpiConductedNew(summaryReports: FullReport[], allReports: FullReport[]): Set<string> {
   const keys = new Set<string>();
   for (const report of summaryReports) {
