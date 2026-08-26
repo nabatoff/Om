@@ -10,7 +10,7 @@ import { adminDateFilterBounds, reportDateMatchesAdminBounds } from '../lib/peri
 import { isAdminStaffName, type StaffDept } from '../lib/staffDept';
 import {
   buildRnpPaceRows,
-  countAssignedNewMeetings,
+  countAssignedNewOrKrupMeetings,
   countConductedNewOrKrupMeetings,
   countConductedRepeatMeetings,
   countCounterpartiesConductedNewWithOrder,
@@ -162,7 +162,7 @@ export function KpiDashboard({
     let transitions = 0;
     for (const r of kpiRows) {
       conductedFact += r.conductedMeetings.length;
-      assignedNew += countAssignedNewMeetings(r);
+      assignedNew += countAssignedNewOrKrupMeetings(r);
       conductedNew += countConductedNewOrKrupMeetings(r, allReports);
       conductedRepeat += countConductedRepeatMeetings(r);
       transitions += r.stats.stageTransitions ?? 0;
@@ -191,7 +191,7 @@ export function KpiDashboard({
       calls += r.stats.callsTotal;
       validated += r.stats.validatedTotal;
       conductedFact += r.conductedMeetings.length;
-      assignedNew += countAssignedNewMeetings(r);
+      assignedNew += countAssignedNewOrKrupMeetings(r);
       conductedNew += countConductedNewOrKrupMeetings(r, allReports);
       conductedRepeat += countConductedRepeatMeetings(r);
       transitions += r.stats.stageTransitions ?? 0;
@@ -250,7 +250,7 @@ export function KpiDashboard({
         calls: r.stats.callsTotal,
         validated: r.stats.validatedTotal,
         conductedFact: r.conductedMeetings.length,
-        assignedNew: countAssignedNewMeetings(r),
+        assignedNew: countAssignedNewOrKrupMeetings(r),
         conductedNew: countConductedNewOrKrupMeetings(r, allReports),
         conductedRepeat: countConductedRepeatMeetings(r),
         transitions: r.stats.stageTransitions ?? 0,

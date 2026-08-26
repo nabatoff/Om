@@ -92,6 +92,11 @@ export function countAssignedNewMeetings(report: FullReport): number {
   return report.assignedMeetings.filter((m) => isNewMeetingType(m.type)).length;
 }
 
+/** «Назначено встреч» = обычные назначенные «Новая» + назначенные «Крупный лид». */
+export function countAssignedNewOrKrupMeetings(report: FullReport): number {
+  return report.assignedMeetings.filter((m) => isNewMeetingType(m.type) || isEnterpriseLeadMeetingType(m.type)).length;
+}
+
 export function countConductedNewMeetings(report: FullReport, allReports: FullReport[]): number {
   const managerNorm = normalizeKpiText(report.manager);
   const targetReports = allReports.filter((r) => normalizeKpiText(r.manager) === managerNorm && r.date >= report.date);
