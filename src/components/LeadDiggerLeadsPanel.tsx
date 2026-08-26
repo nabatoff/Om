@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowRightCircle, Building2, Info, User } from 'lucide-react';
+import { ArrowRightCircle, Building2, Info, User, PackageCheck } from 'lucide-react';
 import { getSupabase } from '../lib/supabase';
+import { formatMoneyKzt } from '../lib/commission';
 import {
   formatLeadDate,
   leadDisplayStatus,
@@ -159,6 +160,12 @@ export function LeadDiggerLeadsPanel({ mode, dateFrom, dateTo, creatorId }: Prop
                       <span>На распределении</span>
                     )}
                   </div>
+                  {r.confirmedOrderCount > 0 ? (
+                    <div className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-1 rounded-lg">
+                      <PackageCheck size={12} />
+                      Заказ подтверждён: {formatMoneyKzt(r.confirmedOrderAmount)} ₸ · {r.confirmedOrderCount} шт.
+                    </div>
+                  ) : null}
                 </div>
               );
             })}
