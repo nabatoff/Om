@@ -165,7 +165,12 @@ export function LeadDiggerLeadsPanel({ mode, dateFrom, dateTo, creatorId }: Prop
                       <PackageCheck size={12} />
                       Заказ подтверждён: {formatMoneyKzt(r.confirmedOrderAmount)} ₸ · {r.confirmedOrderCount} шт.
                     </div>
-                  ) : null}
+                  ) : (
+                    <div className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-bold text-gray-400 bg-gray-50 border border-gray-100 px-2 py-1 rounded-lg">
+                      <PackageCheck size={12} />
+                      Заказ пока не подтверждён
+                    </div>
+                  )}
                 </div>
               );
             })}
