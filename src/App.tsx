@@ -3841,13 +3841,12 @@ const AdminDashboard = ({
   const hasConductedEvidence = (planned: UiAssigned, manager: string) => {
     const plannedName = normalizeText(planned.entityName);
     const plannedBin = normalizeBin(planned.bin);
-    const plannedType = normalizeText(planned.type);
     for (const report of reports) {
       if (report.manager !== manager) continue;
       const match = report.conductedMeetings.some(
         (cm) =>
           normalizeBin(cm.bin) === plannedBin &&
-          normalizeText(cm.type) === plannedType &&
+          meetingTypesLinkable(cm.type, planned.type) &&
           normalizeText(cm.entityName) === plannedName &&
           cm.date >= planned.date,
       );
