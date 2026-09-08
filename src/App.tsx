@@ -4224,11 +4224,9 @@ const OrdersHistoryDashboard = ({
 
   const uniqueCounterpartiesCount = useMemo(() => {
     if (isGroupedView) return groupedOrders.length;
-    const seen = new Set<string>();
-    for (const o of orders) {
-      seen.add(`${o.entityName.trim().toLowerCase()}|${o.bin.trim()}`);
-    }
-    return seen.size;
+    // Тот же ключ группировки, что и в «По контрагентам» (БИН, а не БИН+название) —
+    // иначе один контрагент, записанный под чуть разным названием, считается дважды.
+    return groupOrdersByCounterparty(orders).length;
   }, [orders, groupedOrders, isGroupedView]);
 
   const commissionForGroup = useCallback(
