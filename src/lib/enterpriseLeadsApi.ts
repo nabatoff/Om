@@ -113,10 +113,12 @@ export async function adminAssignEnterpriseLeadApi(leadId: string, managerId: st
 export async function managerSetLeadMeetingStatusApi(
   leadId: string,
   status: 'completed' | 'cancelled',
+  result?: string,
 ): Promise<void> {
   const { error } = await getSupabase().rpc('manager_set_lead_meeting_status', {
     p_lead_id: leadId,
     p_status: status,
+    p_result: result?.trim() || null,
   });
   if (error) throw error;
 }

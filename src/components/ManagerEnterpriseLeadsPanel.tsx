@@ -29,6 +29,7 @@ export function ManagerEnterpriseLeadsPanel({ onChanged }: Props) {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [resultModal, setResultModal] = useState<{ leadId: string; clientName: string; text: string } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -119,7 +120,7 @@ export function ManagerEnterpriseLeadsPanel({ onChanged }: Props) {
                       <button
                         type="button"
                         disabled={busy}
-                        onClick={() => void run(r.id, () => managerSetLeadMeetingStatusApi(r.id, 'completed'))}
+                        onClick={() => setResultModal({ leadId: r.id, clientName: r.clientName, text: '' })}
                         className="bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg text-xs font-bold transition disabled:opacity-40"
                       >
                         Состоялась
@@ -192,7 +193,7 @@ export function ManagerEnterpriseLeadsPanel({ onChanged }: Props) {
                       <button
                         type="button"
                         disabled={busy}
-                        onClick={() => void run(r.id, () => managerSetLeadMeetingStatusApi(r.id, 'completed'))}
+                        onClick={() => setResultModal({ leadId: r.id, clientName: r.clientName, text: '' })}
                         className="w-full bg-blue-50 text-blue-700 border border-blue-100 hover:bg-blue-600 hover:text-white py-2 rounded-xl text-sm font-bold transition disabled:opacity-40"
                       >
                         Провести встречу
@@ -223,6 +224,50 @@ export function ManagerEnterpriseLeadsPanel({ onChanged }: Props) {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {resultModal && (
+        <div
+          className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm z-[130] flex items-center justify-center p-4"
+          onClick={() => setResultModal(null)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 text-left"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="font-black text-gray-900 text-base mb-1">Итог встречи</h3>
+            <p className="text-xs text-gray-500 mb-4">{resultModal.clientName}</p>
+            <textarea
+              autoFocus
+              rows={4}
+              value={resultModal.text}
+              onChange={(e) => setResultModal((m) => (m ? { ...m, text: e.target.value } : m))}
+              placeholder="Опишите, как прошла встреча..."
+              className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-blue-300 resize-none"
+            />
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                type="button"
+                onClick={() => setResultModal(null)}
+                className="px-4 py-2 rounded-xl text-xs font-bold uppercase border border-gray-200 text-gray-600 hover:bg-gray-50"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                disabled={!resultModal.text.trim() || busyId === resultModal.leadId}
+                onClick={() => {
+                  const { leadId, text } = resultModal;
+                  setResultModal(null);
+                  void run(leadId, () => managerSetLeadMeetingStatusApi(leadId, 'completed', text));
+                }}
+                className="px-4 py-2 rounded-xl text-xs font-bold uppercase bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40"
+              >
+                Сохранить
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
