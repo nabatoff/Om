@@ -689,7 +689,7 @@ const App = () => {
       let hasPriorKrup = priorKrupBins.has(b);
       if (!hasPriorNew) {
         for (const m of conductedMeetings) {
-          if (m.bin.replace(/\D/g, '') === b && isNewMeetingType(m.type)) {
+          if (m.bin.replace(/\D/g, '') === b && isNewMeetingType(m.type) && m.date < row.date) {
             hasPriorNew = true;
             break;
           }
@@ -697,7 +697,7 @@ const App = () => {
       }
       if (!hasPriorKrup) {
         for (const m of conductedMeetings) {
-          if (m.bin.replace(/\D/g, '') === b && isEnterpriseLeadMeetingType(m.type)) {
+          if (m.bin.replace(/\D/g, '') === b && isEnterpriseLeadMeetingType(m.type) && m.date < row.date) {
             hasPriorKrup = true;
             break;
           }
