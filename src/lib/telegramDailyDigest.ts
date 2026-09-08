@@ -1,5 +1,5 @@
 import type { FullReport } from './crmApi';
-import { meetingTypesLinkable } from './kpiMetrics';
+import { getCachedEvidenceIndex } from './kpiMetrics';
 import { resolveReportStaffDept } from './staffDept';
 
 type StaffProfile = { id: string; fullName: string; role: string };
@@ -75,24 +75,12 @@ function normalizeKpiBin(value: string): string {
 }
 
 function countConductedNewMeetings(report: FullReport, allReports: FullReport[]): number {
-  const managerNorm = normalizeKpiText(report.manager);
-  const targetReports = allReports.filter((r) => normalizeKpiText(r.manager) === managerNorm && r.date >= report.date);
-  if (targetReports.length === 0) return 0;
+  const index = getCachedEvidenceIndex(allReports);
   let count = 0;
   for (const assigned of report.assignedMeetings) {
     if (!isNewMeetingType(assigned.type)) continue;
-    const plannedName = normalizeKpiText(assigned.entityName);
-    const plannedBin = normalizeKpiBin(assigned.bin);
-    const hasEvidence = targetReports.some((lr) =>
-      lr.conductedMeetings.some(
-        (cm) =>
-          normalizeKpiBin(cm.bin) === plannedBin &&
-          normalizeKpiText(cm.entityName) === plannedName &&
-          meetingTypesLinkable(cm.type, assigned.type) &&
-          cm.date >= assigned.date,
-      ),
-    );
-    if (hasEvidence) count += 1;
+    if (!assigned.id) continue;
+    if (index.assignedToConducted.has(`id:${assigned.id}`)) count += 1;
   }
   return count;
 }

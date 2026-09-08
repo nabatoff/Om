@@ -114,6 +114,7 @@ import {
   resolveEnterpriseMeetingType,
   collectConductedMeetingBins,
   meetingTypesLinkable,
+  getCachedEvidenceIndex,
   shouldHidePlannedEnterpriseLead,
 } from './lib/kpiMetrics';
 import {
@@ -1169,7 +1170,14 @@ const App = () => {
     }
   };
 
+  const meetingEvidenceIndex = useMemo(() => getCachedEvidenceIndex(allReports), [allReports]);
+
   const findSpecificConductedEvidence = (plannedMeeting: UiAssigned, manager: string) => {
+    if (plannedMeeting.id) {
+      const match = meetingEvidenceIndex.assignedToConducted.get(`id:${plannedMeeting.id}`);
+      if (match) return { evidence: match.conducted, reportDate: match.reportDate };
+    }
+    // Ещё не сохранённая (нет id) строка — ищем по старым правилам, без «потребления».
     for (const report of allReports) {
       if (report.manager !== manager) continue;
       const evidence = report.conductedMeetings.find(
@@ -3838,7 +3846,10 @@ const AdminDashboard = ({
     analyticsPeriod.isDefaultMonth ? ' · текущий месяц по умолчанию' : ''
   }`;
 
+  const meetingEvidenceIndex = useMemo(() => getCachedEvidenceIndex(reports), [reports]);
+
   const hasConductedEvidence = (planned: UiAssigned, manager: string) => {
+    if (planned.id) return meetingEvidenceIndex.assignedToConducted.has(`id:${planned.id}`);
     const plannedName = normalizeText(planned.entityName);
     const plannedBin = normalizeBin(planned.bin);
     for (const report of reports) {

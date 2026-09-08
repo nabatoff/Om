@@ -11,7 +11,7 @@ import {
   updateConductedMeetingById,
   updateConductedMeetingCpById,
 } from '../lib/crmApi';
-import { meetingTypesLinkable } from '../lib/kpiMetrics';
+import { getCachedEvidenceIndex, type MeetingEvidenceIndex } from '../lib/kpiMetrics';
 import { ALL_TIME_FROM, ALL_TIME_TO, adminDateFilterBounds } from '../lib/periodBounds';
 import { PeriodFilterFields } from './PeriodFilterFields';
 
@@ -77,64 +77,21 @@ function meetingTypeBadgeClass(type: string): string {
   return 'bg-amber-100 text-amber-800';
 }
 
-function meetingDateSortKey(raw: string): string {
-  const t = raw.trim();
-  if (/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0, 10);
-  const m = t.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
-  if (m) {
-    const d = m[1].padStart(2, '0');
-    const mo = m[2].padStart(2, '0');
-    return `${m[3]}-${mo}-${d}`;
-  }
-  const mDash = t.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
-  if (mDash) {
-    const d = mDash[1].padStart(2, '0');
-    const mo = mDash[2].padStart(2, '0');
-    return `${mDash[3]}-${mo}-${d}`;
-  }
-  return t;
+function hasAssignedMatchForConducted(conducted: UiConducted, evidenceIndex: MeetingEvidenceIndex): boolean {
+  if (!conducted.id) return false;
+  return evidenceIndex.consumedConducted.has(`id:${conducted.id}`);
 }
 
-function matchesSameCounterparty(aName: string, aBin: string, bName: string, bBin: string): boolean {
-  const binA = aBin.replace(/\D/g, '');
-  const binB = bBin.replace(/\D/g, '');
-  if (binA && binB) return binA === binB;
-  return aName.trim().toLowerCase() === bName.trim().toLowerCase();
-}
-
-function hasAssignedMatchForConducted(conducted: UiConducted, manager: string, allReports: FullReport[]): boolean {
-  const conductedDate = meetingDateSortKey(conducted.date);
-  for (const report of allReports) {
-    if ((report.manager || '') !== manager) continue;
-    for (const assigned of report.assignedMeetings) {
-      if (!matchesSameCounterparty(assigned.entityName, assigned.bin, conducted.entityName, conducted.bin)) continue;
-      if (!meetingTypesLinkable(assigned.type, conducted.type)) continue;
-      const assignedDate = meetingDateSortKey(assigned.date);
-      if (assignedDate <= conductedDate) return true;
-    }
-  }
-  return false;
-}
-
-/** Первая колонка «Все встречи»: назначенная дата; для строки «проведено» — план из assigned того же отчёта (БИН+название+тип), иначе «—». */
-function assignedPlanColumnLabel(a: UiMeetingWithReport, allReports: FullReport[]): string {
+/** Первая колонка «Все встречи»: назначенная дата; для строки «проведено» — план, который эта встреча закрывает, иначе «—». */
+function assignedPlanColumnLabel(a: UiMeetingWithReport, evidenceIndex: MeetingEvidenceIndex): string {
   if (a.source === 'assigned') {
     const y = toYmd(a.date);
     return y ? formatDisplayDate(y) : a.date;
   }
-  const report = allReports.find((r) => r.date === a.reportDate && r.manager === a.manager);
-  if (!report) return '—';
-  const candidates = report.assignedMeetings.filter(
-    (m) =>
-      m.bin.trim() === a.bin.trim() &&
-      m.entityName.trim().toLowerCase() === a.entityName.trim().toLowerCase() &&
-      meetingTypesLinkable(m.type, a.type),
-  );
-  if (candidates.length === 0) return '—';
-  const sorted = [...candidates].sort((x, y) => meetingDateSortKey(x.date).localeCompare(meetingDateSortKey(y.date)));
-  const d0 = sorted[0]!.date;
-  const y = toYmd(d0);
-  return y ? formatDisplayDate(y) : d0;
+  const planDate = a.id ? evidenceIndex.conductedToAssignedDate.get(`id:${a.id}`) : undefined;
+  if (!planDate) return '—';
+  const y = toYmd(planDate);
+  return y ? formatDisplayDate(y) : planDate;
 }
 
 /** Плановая дата в первой колонке; фактическая дата проведения — из проведённой встречи или «—». */
@@ -142,20 +99,11 @@ function isAllTimePeriodBounds(from: string, to: string): boolean {
   return from === ALL_TIME_FROM && to === ALL_TIME_TO;
 }
 
-/** YYYY-MM-DD даты назначения (для assigned — date строки; для conducted-only — из плана). */
-function assignmentDateYmd(a: UiMeetingWithReport, allReports: FullReport[]): string | null {
+/** YYYY-MM-DD даты назначения (для assigned — date строки; для conducted-only — из плана, который эта встреча закрывает). */
+function assignmentDateYmd(a: UiMeetingWithReport, evidenceIndex: MeetingEvidenceIndex): string | null {
   if (a.source === 'assigned') return toYmd(a.date);
-  const report = allReports.find((r) => r.date === a.reportDate && r.manager === a.manager);
-  if (!report) return null;
-  const candidates = report.assignedMeetings.filter(
-    (m) =>
-      m.bin.trim() === a.bin.trim() &&
-      m.entityName.trim().toLowerCase() === a.entityName.trim().toLowerCase() &&
-      meetingTypesLinkable(m.type, a.type),
-  );
-  if (candidates.length === 0) return null;
-  const sorted = [...candidates].sort((x, y) => meetingDateSortKey(x.date).localeCompare(meetingDateSortKey(y.date)));
-  return toYmd(sorted[0]!.date);
+  const planDate = a.id ? evidenceIndex.conductedToAssignedDate.get(`id:${a.id}`) : undefined;
+  return planDate ? toYmd(planDate) : null;
 }
 
 /** YYYY-MM-DD фактической даты проведения или null, если встреча ещё не проведена. */
@@ -379,6 +327,7 @@ type AdminMeetingEditState = {
 function resolveLinkedMeetingIds(
   row: UiMeetingWithReport,
   allReports: FullReport[],
+  evidenceIndex: MeetingEvidenceIndex,
 ): {
   reportId: string | null;
   assignedId: string | null;
@@ -392,38 +341,10 @@ function resolveLinkedMeetingIds(
   const report =
     allReports.find((r) => r.date === row.reportDate && (r.manager || '') === manager) ?? null;
 
-  if (row.source === 'assigned') {
-    for (const r of allReports) {
-      if ((r.manager || '') !== manager) continue;
-      const candidates = r.conductedMeetings
-        .filter(
-          (m) =>
-            matchesSameCounterparty(m.entityName, m.bin, row.entityName, row.bin) &&
-            normalizeMeetingType(m.type) === normalizeMeetingType(row.type) &&
-            meetingDateSortKey(m.date) >= meetingDateSortKey(row.date),
-        )
-        .sort((a, b) => meetingDateSortKey(a.date).localeCompare(meetingDateSortKey(b.date)));
-      if (candidates.length > 0) {
-        linkedConducted = candidates[0]!;
-        break;
-      }
-    }
-  } else {
-    for (const r of allReports) {
-      if ((r.manager || '') !== manager) continue;
-      const candidates = r.assignedMeetings
-        .filter(
-          (m) =>
-            matchesSameCounterparty(m.entityName, m.bin, row.entityName, row.bin) &&
-            normalizeMeetingType(m.type) === normalizeMeetingType(row.type) &&
-            meetingDateSortKey(m.date) <= meetingDateSortKey(row.date),
-        )
-        .sort((a, b) => meetingDateSortKey(b.date).localeCompare(meetingDateSortKey(a.date)));
-      if (candidates.length > 0) {
-        linkedAssigned = candidates[0]!;
-        break;
-      }
-    }
+  if (row.source === 'assigned' && row.id) {
+    linkedConducted = evidenceIndex.assignedToConducted.get(`id:${row.id}`)?.conducted ?? null;
+  } else if (row.source === 'conducted' && row.id) {
+    linkedAssigned = evidenceIndex.conductedToAssigned.get(`id:${row.id}`) ?? null;
   }
 
   const assignedId = (row.source === 'assigned' ? row.id : linkedAssigned?.id)?.trim() || null;
@@ -504,6 +425,8 @@ export function ManagerMeetingsPanel({
   const [editMeeting, setEditMeeting] = useState<AdminMeetingEditState | null>(null);
   const [editBusy, setEditBusy] = useState(false);
 
+  const meetingEvidenceIndex = useMemo(() => getCachedEvidenceIndex(allReports), [allReports]);
+
   const rows: UiMeetingWithReport[] = useMemo(() => {
     const out: UiMeetingWithReport[] = [];
     const seen = new Set<string>();
@@ -519,7 +442,7 @@ export function ManagerMeetingsPanel({
       for (const c of r.conductedMeetings) {
         // Не дублируем строку: если для проведенной уже есть соответствующая назначенная,
         // то показываем одну агрегированную строку через assigned + evidence.
-        if (hasAssignedMatchForConducted(c, mgr, allReports)) continue;
+        if (hasAssignedMatchForConducted(c, meetingEvidenceIndex)) continue;
         const row: UiMeetingWithReport = {
           id: c.id,
           entityName: c.entityName,
@@ -545,7 +468,7 @@ export function ManagerMeetingsPanel({
       return ax.localeCompare(ay) || x.entityName.localeCompare(y.entityName, 'ru');
     });
     return out;
-  }, [allReports]);
+  }, [allReports, meetingEvidenceIndex]);
 
   const tomorrowYmd = addDaysYmd(todayYmd, 1);
 
@@ -595,7 +518,7 @@ export function ManagerMeetingsPanel({
       if (variant === 'admin') {
         if (adminPeriodMode === 'assigned') {
           if (!isAllTimePeriodBounds(assignedFilterFrom, assignedFilterTo)) {
-            const assignYmd = assignmentDateYmd(a, allReports);
+            const assignYmd = assignmentDateYmd(a, meetingEvidenceIndex);
             if (!assignYmd) return false;
             if (assignedFilterFrom && assignYmd < assignedFilterFrom) return false;
             if (assignedFilterTo && assignYmd > assignedFilterTo) return false;
@@ -645,6 +568,7 @@ export function ManagerMeetingsPanel({
     assignedTypeFilter,
     assignedCounterpartyFilter,
     findEvidence,
+    meetingEvidenceIndex,
   ]);
 
   const firstMondayIndex = (() => {
@@ -681,7 +605,7 @@ export function ManagerMeetingsPanel({
   }, [variant, deletedMeetings, adminMeetingsManager, basketQuery]);
 
   const openAdminEditMeeting = (row: UiMeetingWithReport) => {
-    const linked = resolveLinkedMeetingIds(row, allReports);
+    const linked = resolveLinkedMeetingIds(row, allReports, meetingEvidenceIndex);
     if (!linked.assignedId && !linked.conductedId) {
       alert('Нельзя редактировать: у встречи нет id в БД (сначала сохраните отчёт).');
       return;
@@ -910,7 +834,7 @@ export function ManagerMeetingsPanel({
                   const resultText = meetingResultText(a, findEvidence);
                   return (
                     <tr key={`${a.manager}-${a.source}-${a.bin}-${a.date}-${idx}`} className="text-gray-800">
-                      <td className="py-3 text-gray-600 whitespace-nowrap">{assignedPlanColumnLabel(a, allReports)}</td>
+                      <td className="py-3 text-gray-600 whitespace-nowrap">{assignedPlanColumnLabel(a, meetingEvidenceIndex)}</td>
                       <td className="py-3 font-bold">
                         {a.entityName}
                         <div className="text-[10px] font-mono text-gray-400">{a.bin}</div>
@@ -1446,7 +1370,7 @@ export function ManagerMeetingsPanel({
                 const resultText = meetingResultText(a, findEvidence);
                 return (
                   <tr key={`${a.manager}-${a.source}-${a.bin}-${a.date}-${idx}`} className="text-gray-800">
-                    <td className="py-3 text-gray-600 whitespace-nowrap">{assignedPlanColumnLabel(a, allReports)}</td>
+                    <td className="py-3 text-gray-600 whitespace-nowrap">{assignedPlanColumnLabel(a, meetingEvidenceIndex)}</td>
                     <td className="py-3 font-bold">
                       {a.entityName}
                       <div className="text-[10px] font-mono text-gray-400">{a.bin}</div>

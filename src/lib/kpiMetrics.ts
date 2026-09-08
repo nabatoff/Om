@@ -1,4 +1,4 @@
-import type { FullReport } from './crmApi';
+import type { FullReport, UiAssigned, UiConducted } from './crmApi';
 import { calendarMonthFromYm, reportDateMatchesAdminBounds } from './periodBounds';
 import { isAdminStaffName } from './staffDept';
 
@@ -33,6 +33,111 @@ export function meetingTypesLinkable(a: string, b: string): boolean {
   const aOrdinary = isNewMeetingType(a) || isRepeatMeetingType(a);
   const bOrdinary = isNewMeetingType(b) || isRepeatMeetingType(b);
   return aOrdinary && bOrdinary;
+}
+
+export type MeetingEvidenceMatch = {
+  conducted: UiConducted;
+  reportDate: string;
+};
+
+/**
+ * Связывает планы (assignedMeetings) и факты (conductedMeetings) один-к-одному по всем отчётам
+ * менеджера: одна проведённая встреча закрывает не больше одного плана. Сначала пробуем пару
+ * в том же отчёте (план и факт внесены за один раз), иначе — ближайшую по дате ещё не занятую
+ * проведённую встречу с датой ≥ даты плана. Без этого «find первого попавшегося» жадно хватал
+ * самый свежий факт (отчёты идут от новых к старым) и подставлял его сразу нескольким старым
+ * планам одного контрагента.
+ */
+export type MeetingEvidenceIndex = {
+  assignedToConducted: Map<string, MeetingEvidenceMatch>;
+  consumedConducted: Set<string>;
+  /** Обратная связь: ключ проведённой встречи -> дата плана, который она закрывает. */
+  conductedToAssignedDate: Map<string, string>;
+  /** Обратная связь: ключ проведённой встречи -> сам план (для редактирования пары). */
+  conductedToAssigned: Map<string, UiAssigned>;
+};
+
+export function buildMeetingEvidenceIndex(reports: FullReport[]): MeetingEvidenceIndex {
+  type AssignedRef = { key: string; date: string; type: string; reportId: string; entry: UiAssigned };
+  type ConductedRef = {
+    key: string;
+    date: string;
+    type: string;
+    reportId: string;
+    reportDate: string;
+    entry: UiConducted;
+  };
+
+  const groups = new Map<string, { assigned: AssignedRef[]; conducted: ConductedRef[] }>();
+  const groupKey = (manager: string, bin: string) => `${normalizeKpiText(manager)}|${normalizeKpiBin(bin)}`;
+  const rowKey = (reportId: string, idx: number, prefix: string, id?: string) =>
+    id ? `id:${id}` : `${prefix}:${reportId}:${idx}`;
+
+  for (const report of reports) {
+    const gkBase = report.manager;
+    report.assignedMeetings.forEach((m, idx) => {
+      const gk = groupKey(gkBase, m.bin);
+      const g = groups.get(gk) ?? { assigned: [], conducted: [] };
+      if (!groups.has(gk)) groups.set(gk, g);
+      g.assigned.push({ key: rowKey(report.id, idx, 'a', m.id), date: m.date, type: m.type, reportId: report.id, entry: m });
+    });
+    report.conductedMeetings.forEach((m, idx) => {
+      const gk = groupKey(gkBase, m.bin);
+      const g = groups.get(gk) ?? { assigned: [], conducted: [] };
+      if (!groups.has(gk)) groups.set(gk, g);
+      g.conducted.push({
+        key: rowKey(report.id, idx, 'c', m.id),
+        date: m.date,
+        type: m.type,
+        reportId: report.id,
+        reportDate: report.date,
+        entry: m,
+      });
+    });
+  }
+
+  const assignedToConducted = new Map<string, MeetingEvidenceMatch>();
+  const consumedConducted = new Set<string>();
+  const conductedToAssignedDate = new Map<string, string>();
+  const conductedToAssigned = new Map<string, UiAssigned>();
+
+  for (const g of groups.values()) {
+    const assignedSorted = [...g.assigned].sort((a, b) => a.date.localeCompare(b.date));
+    const conductedSorted = [...g.conducted].sort((a, b) => a.date.localeCompare(b.date));
+    const used = new Set<string>();
+
+    const consume = (a: AssignedRef, c: ConductedRef) => {
+      used.add(c.key);
+      consumedConducted.add(c.key);
+      assignedToConducted.set(a.key, { conducted: c.entry, reportDate: c.reportDate });
+      conductedToAssignedDate.set(c.key, a.date);
+      conductedToAssigned.set(c.key, a.entry);
+    };
+
+    // Проход 1: план и факт из одного отчёта (внесены вместе).
+    for (const a of assignedSorted) {
+      const match = conductedSorted.find(
+        (c) => !used.has(c.key) && c.reportId === a.reportId && meetingTypesLinkable(c.type, a.type) && c.date >= a.date,
+      );
+      if (match) consume(a, match);
+    }
+
+    // Проход 2: ближайшая по дате ещё не занятая встреча из другого отчёта.
+    for (const a of assignedSorted) {
+      if (assignedToConducted.has(a.key)) continue;
+      const candidates = conductedSorted.filter(
+        (c) => !used.has(c.key) && meetingTypesLinkable(c.type, a.type) && c.date >= a.date,
+      );
+      if (candidates.length === 0) continue;
+      consume(a, candidates[0]);
+    }
+  }
+
+  return { assignedToConducted, consumedConducted, conductedToAssignedDate, conductedToAssigned };
+}
+
+export function meetingEvidenceRowKey(id: string | undefined, reportId: string, idx: number, prefix: 'a' | 'c'): string {
+  return id ? `id:${id}` : `${prefix}:${reportId}:${idx}`;
 }
 
 /** Крупный клиент: первую встречу нельзя ставить «Новая» — только «Крупный лид», дальше «Повторная». */
@@ -97,25 +202,28 @@ export function countAssignedNewOrKrupMeetings(report: FullReport): number {
   return report.assignedMeetings.filter((m) => isNewMeetingType(m.type) || isEnterpriseLeadMeetingType(m.type)).length;
 }
 
+/**
+ * Кэш индекса план→факт на время одного рендера/подсчёта: allReports — стабильная ссылка
+ * между вызовами countConductedNewMeetings в одном цикле, пересчитывать индекс на каждый
+ * отчёт заново незачем.
+ */
+const evidenceIndexCache = new WeakMap<FullReport[], MeetingEvidenceIndex>();
+export function getCachedEvidenceIndex(allReports: FullReport[]): MeetingEvidenceIndex {
+  let idx = evidenceIndexCache.get(allReports);
+  if (!idx) {
+    idx = buildMeetingEvidenceIndex(allReports);
+    evidenceIndexCache.set(allReports, idx);
+  }
+  return idx;
+}
+
 export function countConductedNewMeetings(report: FullReport, allReports: FullReport[]): number {
-  const managerNorm = normalizeKpiText(report.manager);
-  const targetReports = allReports.filter((r) => normalizeKpiText(r.manager) === managerNorm && r.date >= report.date);
-  if (targetReports.length === 0) return 0;
+  const index = getCachedEvidenceIndex(allReports);
   let count = 0;
   for (const assigned of report.assignedMeetings) {
     if (!isNewMeetingType(assigned.type)) continue;
-    const plannedName = normalizeKpiText(assigned.entityName);
-    const plannedBin = normalizeKpiBin(assigned.bin);
-    const hasEvidence = targetReports.some((lr) =>
-      lr.conductedMeetings.some(
-        (cm) =>
-          normalizeKpiBin(cm.bin) === plannedBin &&
-          normalizeKpiText(cm.entityName) === plannedName &&
-          meetingTypesLinkable(cm.type, assigned.type) &&
-          cm.date >= assigned.date,
-      ),
-    );
-    if (hasEvidence) count += 1;
+    if (!assigned.id) continue;
+    if (index.assignedToConducted.has(`id:${assigned.id}`)) count += 1;
   }
   return count;
 }
