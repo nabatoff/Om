@@ -25,6 +25,8 @@ export type EnterpriseLead = {
   confirmedOrderAmount: number;
   /** Количество подтверждённых заказов по БИН контрагента. */
   confirmedOrderCount: number;
+  /** Итог проведённой встречи (только для meetingStatus === 'completed'). */
+  meetingResult: string | null;
 };
 
 export type LeadEvent = {
@@ -68,6 +70,7 @@ function mapLead(r: Record<string, unknown>): EnterpriseLead {
     meetingDate: r.meeting_date ? String(r.meeting_date).slice(0, 10) : null,
     confirmedOrderAmount: Number(r.confirmed_order_amount ?? 0) || 0,
     confirmedOrderCount: Math.max(0, Number(r.confirmed_order_count ?? 0) || 0),
+    meetingResult: r.meeting_result ? String(r.meeting_result).trim() || null : null,
   };
 }
 
