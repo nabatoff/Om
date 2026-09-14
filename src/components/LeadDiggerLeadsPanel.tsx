@@ -40,6 +40,7 @@ export function LeadDiggerLeadsPanel({ mode, dateFrom, dateTo, creatorId }: Prop
   const [rows, setRows] = useState<EnterpriseLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  const [resultPreview, setResultPreview] = useState<{ clientName: string; text: string } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -171,11 +172,52 @@ export function LeadDiggerLeadsPanel({ mode, dateFrom, dateTo, creatorId }: Prop
                       Заказ пока не подтверждён
                     </div>
                   )}
+                  {r.meetingStatus === 'completed' ? (
+                    r.meetingResult ? (
+                      <button
+                        type="button"
+                        onClick={() => setResultPreview({ clientName: r.clientName, text: r.meetingResult! })}
+                        className="mt-2 block w-full text-left text-xs text-gray-600 hover:text-blue-700 underline-offset-2 hover:underline line-clamp-2"
+                      >
+                        <span className="font-bold text-gray-500">Итог встречи: </span>
+                        {r.meetingResult}
+                      </button>
+                    ) : (
+                      <p className="mt-2 text-xs text-gray-300">Итог встречи: —</p>
+                    )
+                  ) : null}
                 </div>
               );
             })}
           </div>
         )}
+
+        {resultPreview ? (
+          <div
+            className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm z-[130] flex items-center justify-center p-4"
+            onClick={() => setResultPreview(null)}
+          >
+            <div
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 text-left"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="font-black text-gray-900 text-base mb-1">Итог встречи</h3>
+              <p className="text-xs text-gray-500 mb-3">{resultPreview.clientName}</p>
+              <p className="text-sm text-gray-700 whitespace-pre-wrap max-h-[60vh] overflow-y-auto">
+                {resultPreview.text}
+              </p>
+              <div className="flex justify-end mt-4">
+                <button
+                  type="button"
+                  onClick={() => setResultPreview(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold uppercase border border-gray-200 text-gray-600 hover:bg-gray-50"
+                >
+                  Закрыть
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     );
   }
