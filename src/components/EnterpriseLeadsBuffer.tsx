@@ -42,7 +42,6 @@ export function EnterpriseLeadsBuffer({ managers, onAssigned }: Props) {
   const [pickManager, setPickManager] = useState<Record<string, string>>({});
   const [eventsFor, setEventsFor] = useState<string | null>(null);
   const [events, setEvents] = useState<LeadEvent[]>([]);
-  const [resultPreview, setResultPreview] = useState<{ clientName: string; text: string } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -215,7 +214,6 @@ export function EnterpriseLeadsBuffer({ managers, onAssigned }: Props) {
                   <th className="px-4 py-3 rounded-l-lg">Компания</th>
                   <th className="px-4 py-3">Инициатор (Лидоруб)</th>
                   <th className="px-4 py-3">{tab === 'returned' ? 'Дата возврата' : 'Дата создания'}</th>
-                  {tab === 'assigned' ? <th className="px-4 py-3">Итог встречи</th> : null}
                   <th className="px-4 py-3 rounded-r-lg text-right">Действие</th>
                 </tr>
               </thead>
@@ -241,21 +239,6 @@ export function EnterpriseLeadsBuffer({ managers, onAssigned }: Props) {
                       <td className="px-4 py-4 text-gray-500">
                         {formatLeadDate(tab === 'returned' ? r.returnedAt : r.transferredAt)}
                       </td>
-                      {tab === 'assigned' ? (
-                        <td className="px-4 py-4 text-gray-600 max-w-[260px]">
-                          {r.meetingStatus === 'completed' && r.meetingResult ? (
-                            <button
-                              type="button"
-                              onClick={() => setResultPreview({ clientName: r.clientName, text: r.meetingResult! })}
-                              className="text-left text-xs text-gray-700 hover:text-blue-700 underline-offset-2 hover:underline line-clamp-2"
-                            >
-                              {r.meetingResult}
-                            </button>
-                          ) : (
-                            <span className="text-xs text-gray-300">—</span>
-                          )}
-                        </td>
-                      ) : null}
                       <td className="px-4 py-4 text-right">
                         {tab === 'returned' ? (
                           <div className="inline-flex flex-wrap items-center justify-end gap-2">
@@ -351,35 +334,6 @@ export function EnterpriseLeadsBuffer({ managers, onAssigned }: Props) {
             ))}
             {events.length === 0 ? <li className="text-gray-400">Пусто</li> : null}
           </ul>
-        </div>
-      ) : null}
-
-      {resultPreview ? (
-        <div
-          className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm z-[130] flex items-center justify-center p-4"
-          onClick={() => setResultPreview(null)}
-        >
-          <div
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 text-left"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex justify-between items-start gap-3 mb-3">
-              <div>
-                <h3 className="font-black text-gray-900 text-base">Итог встречи</h3>
-                <p className="text-xs text-gray-500">{resultPreview.clientName}</p>
-              </div>
-              <button
-                type="button"
-                className="text-gray-400 hover:text-gray-600"
-                onClick={() => setResultPreview(null)}
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <p className="text-sm text-gray-700 whitespace-pre-wrap max-h-[60vh] overflow-y-auto">
-              {resultPreview.text}
-            </p>
-          </div>
         </div>
       ) : null}
     </div>
