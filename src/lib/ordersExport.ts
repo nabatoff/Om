@@ -20,6 +20,12 @@ function formatMoneyCell(value: number | null | undefined): string {
   return formatMoneyKzt(Number(value));
 }
 
+/** Без пробелов-разделителей тысяч — только цифры (для выгрузки «По контрагентам»). */
+function formatMoneyCellPlain(value: number | null | undefined): string {
+  if (value == null || Number.isNaN(Number(value))) return '';
+  return String(Math.round(Number(value)));
+}
+
 function formatReportDate(ymd: string): string {
   const m = ymd.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!m) return ymd;
@@ -153,10 +159,10 @@ export function exportGroupedOrdersToExcel(
       normalizeBin(g.bin),
       g.entityName,
       String(g.orderCount),
-      formatMoneyCell(g.totalAmount),
+      formatMoneyCellPlain(g.totalAmount),
     ];
     if (options.includeCommission) {
-      row.push(formatMoneyCell(commissionSum));
+      row.push(formatMoneyCellPlain(commissionSum));
     }
     rows.push(row);
   }
