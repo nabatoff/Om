@@ -4330,19 +4330,17 @@ const OrdersHistoryDashboard = ({
           <p className="text-[10px] font-bold text-gray-400 uppercase">Итого сумма по заказам</p>
           <p className="text-lg font-black text-emerald-700 whitespace-nowrap">{new Intl.NumberFormat('ru-RU').format(ordersTotalAmount)} ₸</p>
         </div>
-        {isAdmin ? (
-          <div>
-            <p className="text-[10px] font-bold text-gray-400 uppercase">Итого комиссия</p>
-            <p className="text-lg font-black text-blue-700 whitespace-nowrap">
-              {new Intl.NumberFormat('ru-RU').format(ordersCommissionTotal)} ₸
+        <div>
+          <p className="text-[10px] font-bold text-gray-400 uppercase">Итого комиссия</p>
+          <p className="text-lg font-black text-blue-700 whitespace-nowrap">
+            {new Intl.NumberFormat('ru-RU').format(ordersCommissionTotal)} ₸
+          </p>
+          {ordersWithoutCommissionCount > 0 ? (
+            <p className="text-[9px] text-gray-400 font-bold mt-0.5">
+              без комиссии: {ordersWithoutCommissionCount}
             </p>
-            {ordersWithoutCommissionCount > 0 ? (
-              <p className="text-[9px] text-gray-400 font-bold mt-0.5">
-                без комиссии: {ordersWithoutCommissionCount}
-              </p>
-            ) : null}
-          </div>
-        ) : null}
+          ) : null}
+        </div>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h2 className="text-sm font-bold text-gray-400 uppercase tracking-widest">Подтверждённые заказы</h2>
@@ -4450,7 +4448,7 @@ const OrdersHistoryDashboard = ({
                     <OrderSumCell
                       amount={group.totalAmount}
                       commission={commissionForGroup(group)}
-                      showCommission={isAdmin}
+                      showCommission
                     />
                   </tr>
                 ))
@@ -4486,7 +4484,7 @@ const OrdersHistoryDashboard = ({
                     <OrderSumCell
                       amount={order.totalAmount}
                       commission={resolveOrderCommissionTotal(order, clientKtpByBin)}
-                      showCommission={isAdmin}
+                      showCommission
                     />
                     {isAdmin && onEditOrder ? (
                       <td className="py-5 px-4 text-center">
