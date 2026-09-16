@@ -131,7 +131,7 @@ import {
   type OrderCommissionFields,
 } from './lib/commission';
 import { groupOrdersByCounterparty, type GroupedCounterpartyOrder } from './lib/ordersGrouping';
-import { exportOrdersToExcel } from './lib/ordersExport';
+import { exportGroupedOrdersToExcel, exportOrdersToExcel } from './lib/ordersExport';
 import {
   ATTRACTION_MONTH_OPTIONS,
   NEW_CATEGORY_VALUE,
@@ -4359,12 +4359,17 @@ const OrdersHistoryDashboard = ({
             <button
               type="button"
               onClick={() =>
-                exportOrdersToExcel(orders, {
-                  clientKtpByBin,
-                  includeCommission: true,
-                })
+                isGroupedView
+                  ? exportGroupedOrdersToExcel(sortedGroupedOrders, {
+                      clientKtpByBin,
+                      includeCommission: true,
+                    })
+                  : exportOrdersToExcel(orders, {
+                      clientKtpByBin,
+                      includeCommission: true,
+                    })
               }
-              disabled={orders.length === 0}
+              disabled={(isGroupedView ? sortedGroupedOrders.length : orders.length) === 0}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 bg-white text-[10px] font-bold uppercase tracking-wider text-gray-700 hover:bg-gray-50 disabled:opacity-50"
             >
               <Download size={14} />

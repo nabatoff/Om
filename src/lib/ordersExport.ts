@@ -1,5 +1,5 @@
-import type { OrderRow } from './ordersGrouping';
-import { formatMoneyKzt, orderLineAmounts, resolveOrderCommissionDisplay } from './commission';
+import type { GroupedCounterpartyOrder, OrderRow } from './ordersGrouping';
+import { formatMoneyKzt, orderLineAmounts, resolveOrderCommissionDisplay, resolveOrderCommissionTotal } from './commission';
 
 function xmlEscape(value: string): string {
   return value
@@ -103,12 +103,73 @@ export function exportOrdersToExcel(
     }
   }
 
-  const xml = buildExcelXml(rows);
+  downloadExcelXml(buildExcelXml(rows), `zakazy-${new Date().toISOString().slice(0, 10)}.xls`);
+}
+
+/** \u042D\u043A\u0441\u043F\u043E\u0440\u0442 \u0432\u0438\u0434\u0430 \u00AB\u041F\u043E \u043A\u043E\u043D\u0442\u0440\u0430\u0433\u0435\u043D\u0442\u0430\u043C\u00BB \u2014 \u043E\u0434\u043D\u0430 \u0441\u0442\u0440\u043E\u043A\u0430 \u043D\u0430 \u043A\u043E\u043D\u0442\u0440\u0430\u0433\u0435\u043D\u0442\u0430 (\u0430\u0433\u0440\u0435\u0433\u0438\u0440\u043E\u0432\u0430\u043D\u043D\u044B\u0435 \u043A\u043E\u043B-\u0432\u043E/\u0441\u0443\u043C\u043C\u0430/\u043A\u043E\u043C\u0438\u0441\u0441\u0438\u044F). */
+export function exportGroupedOrdersToExcel(
+  groups: GroupedCounterpartyOrder[],
+  options: {
+    clientKtpByBin: Map<string, boolean>;
+    includeCommission: boolean;
+  },
+): void {
+  const header = [
+    '\u0414\u0430\u0442\u0430',
+    '\u041C\u0435\u043D\u0435\u0434\u0436\u0435\u0440',
+    '\u0411\u0418\u041D/\u0418\u0418\u041D',
+    '\u041A\u043E\u043D\u0442\u0440\u0430\u0433\u0435\u043D\u0442',
+    '\u041A\u043E\u043B-\u0432\u043E',
+    '\u0421\u0443\u043C\u043C\u0430',
+    ...(options.includeCommission ? ['\u041A\u043E\u043C\u0438\u0441\u0441\u0438\u044F'] : []),
+  ];
+
+  const sorted = [...groups].sort((a, b) => {
+    const dateCmp = b.date.localeCompare(a.date);
+    if (dateCmp !== 0) return dateCmp;
+    return a.entityName.localeCompare(b.entityName, 'ru');
+  });
+
+  const rows: string[][] = [header];
+
+  for (const g of sorted) {
+    let commissionSum: number | null = null;
+    if (options.includeCommission) {
+      let sum = 0;
+      let hasAny = false;
+      for (const o of g.sourceOrders) {
+        const total = resolveOrderCommissionTotal(o, options.clientKtpByBin);
+        if (total != null) {
+          sum += total;
+          hasAny = true;
+        }
+      }
+      commissionSum = hasAny ? sum : null;
+    }
+
+    const row = [
+      formatReportDate(g.date),
+      g.manager,
+      normalizeBin(g.bin),
+      g.entityName,
+      String(g.orderCount),
+      formatMoneyCell(g.totalAmount),
+    ];
+    if (options.includeCommission) {
+      row.push(formatMoneyCell(commissionSum));
+    }
+    rows.push(row);
+  }
+
+  downloadExcelXml(buildExcelXml(rows), `zakazy-po-kontragentam-${new Date().toISOString().slice(0, 10)}.xls`);
+}
+
+function downloadExcelXml(xml: string, filename: string): void {
   const blob = new Blob([`\uFEFF${xml}`], { type: 'application/vnd.ms-excel;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `zakazy-${new Date().toISOString().slice(0, 10)}.xls`;
+  a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
 }
