@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { RefreshCw, Trash2 } from 'lucide-react';
 import { getSupabase } from '../lib/supabase';
 import {
@@ -7,9 +7,11 @@ import {
   formatLeadDate,
   leadDisplayStatus,
   leadStatusSelectValue,
+  leadTransferredDay,
   listEnterpriseLeadsApi,
   type EnterpriseLead,
 } from '../lib/enterpriseLeadsApi';
+import { buildMonthSelectOptions } from '../lib/periodBounds';
 
 type LeadStatusValue = 'waiting' | 'in_work' | 'completed' | 'cancelled';
 
@@ -32,6 +34,13 @@ export function EnterpriseLeadsAllPanel({ canDelete = false, onDeleted }: Props)
   const [err, setErr] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [statusBusyId, setStatusBusyId] = useState<string | null>(null);
+  const [filterMonth, setFilterMonth] = useState('');
+
+  const monthOptions = useMemo(() => buildMonthSelectOptions(24), []);
+  const filteredRows = useMemo(() => {
+    if (!filterMonth) return rows;
+    return rows.filter((r) => leadTransferredDay(r).slice(0, 7) === filterMonth);
+  }, [rows, filterMonth]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -118,22 +127,38 @@ export function EnterpriseLeadsAllPanel({ canDelete = false, onDeleted }: Props)
               : 'Все лиды в воронке крупного бизнеса (только просмотр)'}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => void load()}
-          disabled={loading}
-          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 text-xs font-bold uppercase text-gray-600 hover:bg-gray-50 disabled:opacity-50"
-        >
-          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-          Обновить
-        </button>
+        <div className="flex items-center gap-2">
+          <select
+            className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-700 outline-none"
+            value={filterMonth}
+            onChange={(e) => setFilterMonth(e.target.value)}
+          >
+            <option value="">Все месяцы</option>
+            {monthOptions.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => void load()}
+            disabled={loading}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 text-xs font-bold uppercase text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+          >
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            Обновить
+          </button>
+        </div>
       </div>
 
       {err ? <p className="text-sm font-bold text-red-600">{err}</p> : null}
       {loading && rows.length === 0 ? (
         <p className="text-sm text-gray-400">Загрузка…</p>
-      ) : rows.length === 0 ? (
-        <p className="text-sm text-gray-400">Нет переданных лидов</p>
+      ) : filteredRows.length === 0 ? (
+        <p className="text-sm text-gray-400">
+          {filterMonth ? 'Нет переданных лидов за выбранный месяц' : 'Нет переданных лидов'}
+        </p>
       ) : (
         <div className="overflow-x-auto -mx-1 om-scroll">
           <table className="w-full text-left border-collapse min-w-[780px]">
@@ -149,7 +174,7 @@ export function EnterpriseLeadsAllPanel({ canDelete = false, onDeleted }: Props)
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => {
+              {filteredRows.map((r) => {
                 const st = leadDisplayStatus(r);
                 return (
                   <tr key={r.id} className="border-b border-gray-50 text-sm">
