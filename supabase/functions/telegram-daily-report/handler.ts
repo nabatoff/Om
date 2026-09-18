@@ -5,12 +5,12 @@ import {
   buildTelegramReportText,
   type DiggerReportRow,
 } from "./_shared/reportText.ts";
+import { renderTelegramReportPng } from "./_shared/renderReportPng.ts";
+import type { ReportManagerRow, TelegramReportPayload } from "./_shared/telegramReportTypes.ts";
 
 // Временно отключено по просьбе заказчика — сводка лидорубов не шлётся в Telegram.
 // Чтобы вернуть, поставить true.
 const DIGGER_SUMMARY_ENABLED = false;
-import { renderTelegramReportPng } from "./_shared/renderReportPng.ts";
-import type { ReportManagerRow, TelegramReportPayload } from "./_shared/telegramReportTypes.ts";
 
 /** Дата календаря в указанном IANA TZ → YYYY-MM-DD */
 function dateYmdInTz(d: Date, timeZone: string): string {
@@ -171,30 +171,23 @@ export async function handleCronReport(req: Request): Promise<Response> {
     let reportDate = dateYmdInTz(new Date(), tz);
     const urlDate = (url.searchParams.get("report_date") ?? url.searchParams.get("p_date") ?? "").trim();
     if (urlDate && isYmd(urlDate)) reportDate = urlDate;
+    let section = (url.searchParams.get("section") ?? "").trim().toLowerCase();
     try {
       const ct = (req.headers.get("content-type") ?? "").toLowerCase();
       if (ct.includes("application/json")) {
-        const j = (await req.json()) as { report_date?: string; p_date?: string; preview?: boolean };
+        const j = (await req.json()) as { report_date?: string; p_date?: string; preview?: boolean; section?: string };
         const raw = (j.report_date ?? j.p_date ?? "").trim();
         if (raw && isYmd(raw)) reportDate = raw;
+        if (!section && j.section) section = String(j.section).trim().toLowerCase();
       }
     } catch {
       /* пустое тело — отчёт за сегодня */
     }
+    // "results" — отдельный более поздний запуск (~18:15), шлёт только «Итоги дня».
+    // По умолчанию ("full") — основная сводка, без «Итогов дня» (для неё свой cron-запуск).
+    const onlyResults = section === "results";
     const reportDateLabel = formatDateDisplay(reportDate);
     const payload = await loadReportPayload(supabase, reportDate, tz, reportDateLabel);
-    const text = buildTelegramReportText(payload);
-
-    let diggerRows: DiggerReportRow[] = [];
-    let diggerText = "";
-    if (DIGGER_SUMMARY_ENABLED) {
-      const { data: diggerData, error: diggerError } = await supabase.rpc("telegram_daily_digger_rows", {
-        p_date: reportDate,
-      });
-      if (diggerError) throw diggerError;
-      diggerRows = (diggerData ?? []) as DiggerReportRow[];
-      diggerText = diggerRows.length > 0 ? buildTelegramDiggerReportText(reportDateLabel, diggerRows) : "";
-    }
 
     if (previewPng) {
       const png = await renderTelegramReportPng(payload);
@@ -207,11 +200,25 @@ export async function handleCronReport(req: Request): Promise<Response> {
       });
     }
 
-    await sendTelegramMessage(botToken, chatId, text);
-    await sendTelegramMessage(botToken, chatId, buildTelegramDailyResultsText(payload));
+    let diggerRows: DiggerReportRow[] = [];
 
-    if (diggerText) {
-      await sendTelegramMessage(botToken, chatId, diggerText);
+    if (onlyResults) {
+      await sendTelegramMessage(botToken, chatId, buildTelegramDailyResultsText(payload));
+    } else {
+      const text = buildTelegramReportText(payload);
+      await sendTelegramMessage(botToken, chatId, text);
+
+      if (DIGGER_SUMMARY_ENABLED) {
+        const { data: diggerData, error: diggerError } = await supabase.rpc("telegram_daily_digger_rows", {
+          p_date: reportDate,
+        });
+        if (diggerError) throw diggerError;
+        diggerRows = (diggerData ?? []) as DiggerReportRow[];
+        const diggerText = diggerRows.length > 0 ? buildTelegramDiggerReportText(reportDateLabel, diggerRows) : "";
+        if (diggerText) {
+          await sendTelegramMessage(botToken, chatId, diggerText);
+        }
+      }
     }
 
     return new Response(
@@ -219,6 +226,7 @@ export async function handleCronReport(req: Request): Promise<Response> {
         ok: true,
         reportDate,
         reportDateLabel,
+        section: onlyResults ? "results" : "full",
         chatId,
         managers: payload.rows.length,
         diggers: diggerRows.length,
