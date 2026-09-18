@@ -86,6 +86,8 @@ export type FullReport = {
   date: string;
   manager: string;
   managerId: string | null;
+  /** Отдел (менеджер/лидоруб/админ), зафиксированный на отчёте при создании — не меняется задним числом, если сотруднику потом сменили роль или уволили. */
+  staffDept: 'managers' | 'diggers' | 'admin' | null;
   stats: FormStats;
   assignedMeetings: UiAssigned[];
   conductedMeetings: UiConducted[];
@@ -97,6 +99,7 @@ type ReportRow = {
   report_date: string;
   manager: string;
   manager_id: string | null;
+  staff_dept: string | null;
   processed_total: number;
   new_in_work: number;
   calls_total: number;
@@ -144,6 +147,8 @@ function mapReport(r: ReportRow): FullReport {
     date: r.report_date,
     manager: r.manager,
     managerId: r.manager_id,
+    staffDept:
+      r.staff_dept === 'managers' || r.staff_dept === 'diggers' || r.staff_dept === 'admin' ? r.staff_dept : null,
     stats: {
       processedTotal: r.processed_total,
       newInWork: r.new_in_work,
@@ -201,7 +206,7 @@ function mapReport(r: ReportRow): FullReport {
 }
 
 const reportSelect = `
-  id, report_date, manager, manager_id,
+  id, report_date, manager, manager_id, staff_dept,
   processed_total, new_in_work, calls_total, validated_total, stage_transitions,
   crm_assigned_meetings ( id, entity_name, bin, meeting_date, meeting_type, sort_order ),
   crm_conducted_meetings ( id, entity_name, bin, meeting_date, meeting_type, result, sort_order, cp_sent, cp_quantity, cp_paid ),

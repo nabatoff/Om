@@ -8,7 +8,7 @@ export const STAFF_DEPT_OPTIONS: Array<{ value: StaffDept; label: string }> = [
 
 export type StaffProfile = { id: string; fullName: string; role: string };
 
-type ReportLike = { managerId?: string | null; manager?: string };
+type ReportLike = { managerId?: string | null; manager?: string; staffDept?: 'managers' | 'diggers' | 'admin' | null };
 
 export type StaffDeptKind = 'managers' | 'diggers' | 'admin' | 'unknown';
 
@@ -42,6 +42,9 @@ export function isAdminStaff(report: ReportLike, profiles: StaffProfile[]): bool
 }
 
 export function resolveReportStaffDept(report: ReportLike, profiles: StaffProfile[]): StaffDeptKind {
+  // Зафиксировано на отчёте при создании — не пересчитываем задним числом, если у сотрудника
+  // потом сменилась роль или он был уволен (иначе старые отчёты «уезжают» в другую вкладку).
+  if (report.staffDept) return report.staffDept;
   if (report.managerId) {
     const byId = profiles.find((p) => p.id === report.managerId);
     if (byId) {
