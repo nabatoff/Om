@@ -43,11 +43,6 @@ function isYmd(s: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(s);
 }
 
-function reportAsImageEnabled(): boolean {
-  const raw = (Deno.env.get("TELEGRAM_REPORT_AS_IMAGE") ?? "true").trim().toLowerCase();
-  return raw !== "0" && raw !== "false" && raw !== "no";
-}
-
 async function sendTelegramMessage(botToken: string, chatId: string, text: string): Promise<void> {
   const tgRes = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
     method: "POST",
@@ -61,24 +56,6 @@ async function sendTelegramMessage(botToken: string, chatId: string, text: strin
   });
   const tg = await tgRes.json();
   if (!tg?.ok) throw new Error(`telegram sendMessage failed: ${JSON.stringify(tg)}`);
-}
-
-async function sendTelegramPhoto(
-  botToken: string,
-  chatId: string,
-  png: Uint8Array,
-  caption?: string,
-): Promise<void> {
-  const form = new FormData();
-  form.append("chat_id", chatId);
-  form.append("photo", new Blob([png], { type: "image/png" }), "crm-report.png");
-  if (caption) form.append("caption", caption);
-  const tgRes = await fetch(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
-    method: "POST",
-    body: form,
-  });
-  const tg = await tgRes.json();
-  if (!tg?.ok) throw new Error(`telegram sendPhoto failed: ${JSON.stringify(tg)}`);
 }
 
 /** Cron (`x-cron-key`) или JWT администратора. */
@@ -202,7 +179,6 @@ export async function handleCronReport(req: Request): Promise<Response> {
     const reportDateLabel = formatDateDisplay(reportDate);
     const payload = await loadReportPayload(supabase, reportDate, tz, reportDateLabel);
     const text = buildTelegramReportText(payload);
-    const caption = `Сводка менеджеров за ${reportDateLabel}`;
 
     const { data: diggerData, error: diggerError } = await supabase.rpc("telegram_daily_digger_rows", {
       p_date: reportDate,
@@ -224,23 +200,7 @@ export async function handleCronReport(req: Request): Promise<Response> {
       });
     }
 
-    let delivery: "both" | "photo" | "text" = "text";
-    let imageError: string | undefined;
-    if (reportAsImageEnabled()) {
-      let photoSent = false;
-      try {
-        const png = await renderTelegramReportPng(payload);
-        await sendTelegramPhoto(botToken, chatId, png, caption);
-        photoSent = true;
-      } catch (imgErr) {
-        imageError = errText(imgErr);
-        console.error("[telegram-daily-report] image failed:", imageError);
-      }
-      await sendTelegramMessage(botToken, chatId, text);
-      delivery = photoSent ? "both" : "text";
-    } else {
-      await sendTelegramMessage(botToken, chatId, text);
-    }
+    await sendTelegramMessage(botToken, chatId, text);
 
     if (diggerText) {
       await sendTelegramMessage(botToken, chatId, diggerText);
@@ -254,8 +214,6 @@ export async function handleCronReport(req: Request): Promise<Response> {
         chatId,
         managers: payload.rows.length,
         diggers: diggerRows.length,
-        delivery,
-        imageError,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
