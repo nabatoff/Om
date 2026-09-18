@@ -66,6 +66,44 @@ export function buildTelegramReportText(payload: TelegramReportPayload): string 
   return lines.join("\n");
 }
 
+function pluralOrders(n: number): string {
+  const abs = Math.abs(n) % 100;
+  const last = abs % 10;
+  if (abs >= 11 && abs <= 14) return "заказов";
+  if (last === 1) return "заказ";
+  if (last >= 2 && last <= 4) return "заказа";
+  return "заказов";
+}
+
+/** Короткая ежедневная сводка по подтверждённым заказам — день/месяц + личный зачёт менеджеров. */
+export function buildTelegramDailyResultsText(payload: TelegramReportPayload): string {
+  const { reportDateLabel, todayOrdersSum, monthOrdersSum, rows } = payload;
+  const dayMonth = reportDateLabel.slice(0, 5).replace("-", ".");
+
+  const lines: string[] = [];
+  lines.push(`🔹 Итоги дня | ${escHtml(dayMonth)} 🔹`);
+  lines.push("Общий результат:");
+  lines.push(`💰 За день: ${money(todayOrdersSum)} ₸`);
+  lines.push(`📈 За месяц: ${money(monthOrdersSum)} ₸`);
+  lines.push("Личные итоги (подтверждено):");
+
+  const withOrders = rows
+    .filter((r) => Number(r.confirmed_orders_count ?? 0) > 0)
+    .sort((a, b) => Number(b.confirmed_orders_sum ?? 0) - Number(a.confirmed_orders_sum ?? 0));
+
+  if (withOrders.length === 0) {
+    lines.push("• Нет подтверждённых заказов за день");
+  } else {
+    for (const r of withOrders) {
+      const name = escHtml((r.manager ?? "").trim() || "Без имени");
+      const cnt = Number(r.confirmed_orders_count ?? 0);
+      lines.push(`⭐️ ${name}: ${money(Number(r.confirmed_orders_sum ?? 0))} ₸ (${cnt} ${pluralOrders(cnt)})`);
+    }
+  }
+
+  return lines.join("\n");
+}
+
 export type DiggerReportRow = {
   digger: string;
   processed_total: number;

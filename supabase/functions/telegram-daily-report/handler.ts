@@ -1,9 +1,14 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
+  buildTelegramDailyResultsText,
   buildTelegramDiggerReportText,
   buildTelegramReportText,
   type DiggerReportRow,
 } from "./_shared/reportText.ts";
+
+// Временно отключено по просьбе заказчика — сводка лидорубов не шлётся в Telegram.
+// Чтобы вернуть, поставить true.
+const DIGGER_SUMMARY_ENABLED = false;
 import { renderTelegramReportPng } from "./_shared/renderReportPng.ts";
 import type { ReportManagerRow, TelegramReportPayload } from "./_shared/telegramReportTypes.ts";
 
@@ -180,14 +185,16 @@ export async function handleCronReport(req: Request): Promise<Response> {
     const payload = await loadReportPayload(supabase, reportDate, tz, reportDateLabel);
     const text = buildTelegramReportText(payload);
 
-    const { data: diggerData, error: diggerError } = await supabase.rpc("telegram_daily_digger_rows", {
-      p_date: reportDate,
-    });
-    if (diggerError) throw diggerError;
-    const diggerRows = (diggerData ?? []) as DiggerReportRow[];
-    const diggerText = diggerRows.length > 0
-      ? buildTelegramDiggerReportText(reportDateLabel, diggerRows)
-      : "";
+    let diggerRows: DiggerReportRow[] = [];
+    let diggerText = "";
+    if (DIGGER_SUMMARY_ENABLED) {
+      const { data: diggerData, error: diggerError } = await supabase.rpc("telegram_daily_digger_rows", {
+        p_date: reportDate,
+      });
+      if (diggerError) throw diggerError;
+      diggerRows = (diggerData ?? []) as DiggerReportRow[];
+      diggerText = diggerRows.length > 0 ? buildTelegramDiggerReportText(reportDateLabel, diggerRows) : "";
+    }
 
     if (previewPng) {
       const png = await renderTelegramReportPng(payload);
@@ -201,6 +208,7 @@ export async function handleCronReport(req: Request): Promise<Response> {
     }
 
     await sendTelegramMessage(botToken, chatId, text);
+    await sendTelegramMessage(botToken, chatId, buildTelegramDailyResultsText(payload));
 
     if (diggerText) {
       await sendTelegramMessage(botToken, chatId, diggerText);
