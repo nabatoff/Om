@@ -21,10 +21,8 @@ import {
   Send,
   Loader2,
   Settings,
-  BarChart2,
   ClipboardCheck,
   BookOpen,
-  FileSpreadsheet,
   Edit2,
   ChevronUp,
   ChevronDown,
@@ -82,7 +80,6 @@ import { buildClientListRows, filterReportsForManager } from './lib/clientCpStat
 import { ClientDirectoryPanel } from './components/ClientDirectoryPanel';
 import { EnsTruCheckPanel } from './components/EnsTruCheckPanel';
 import { SupplierRegistryPanel } from './components/SupplierRegistryPanel';
-import { GoszakupContractsPanel } from './components/GoszakupContractsPanel';
 import { AdminOrderEditModal } from './components/AdminOrderEditModal';
 import { AdminOrderCreateModal } from './components/AdminOrderCreateModal';
 import { EnterpriseLeadsBuffer } from './components/EnterpriseLeadsBuffer';
@@ -106,7 +103,6 @@ import {
 } from './lib/staffDept';
 import type { OrderRow } from './lib/ordersGrouping';
 import { AdminSettingsPanel } from './components/AdminSettingsPanel';
-import { SalesComparisonDashboard } from './components/SalesComparisonDashboard';
 import {
   isEnterpriseLeadMeetingType,
   isNewMeetingType,
@@ -196,7 +192,6 @@ type CurrentView =
   | 'clients'
   | 'clientsOrders'
   | 'registry'
-  | 'goszakupContracts'
   | 'ensTru'
   | 'diggerLeads';
 type ClientsOrdersSubView = 'clients' | 'orders';
@@ -209,7 +204,6 @@ function getSavedCurrentView(): CurrentView {
     raw === 'clients' ||
     raw === 'clientsOrders' ||
     raw === 'registry' ||
-    raw === 'goszakupContracts' ||
     raw === 'ensTru' ||
     raw === 'diggerLeads'
   ) {
@@ -223,7 +217,6 @@ function getSavedClientsOrdersSubView(): ClientsOrdersSubView {
 }
 
 function getSavedAdminSubView():
-  | 'salesDashboard'
   | 'dashboard'
   | 'kpi'
   | 'staff'
@@ -233,8 +226,7 @@ function getSavedAdminSubView():
   | 'enterpriseLeadsAll'
   | 'diggerConversion' {
   const raw = localStorage.getItem(LS_ADMIN_SUBVIEW);
-  return raw === 'salesDashboard' ||
-    raw === 'dashboard' ||
+  return raw === 'dashboard' ||
     raw === 'kpi' ||
     raw === 'staff' ||
     raw === 'meetings' ||
@@ -243,7 +235,7 @@ function getSavedAdminSubView():
     raw === 'enterpriseLeadsAll' ||
     raw === 'diggerConversion'
     ? raw
-    : 'salesDashboard';
+    : 'kpi';
 }
 
 function getSavedManagerOrdersSection(): 'calendar' | 'meetings' | 'orders' {
@@ -331,7 +323,6 @@ const App = () => {
   const [saving, setSaving] = useState(false);
   const [booting, setBooting] = useState(true);
   const [adminSubView, setAdminSubView] = useState<
-    | 'salesDashboard'
     | 'dashboard'
     | 'kpi'
     | 'staff'
@@ -480,12 +471,6 @@ const App = () => {
     if (!isAdmin && currentView === 'registry') {
       setCurrentView('manager');
     }
-    if (!isAdmin && currentView === 'goszakupContracts') {
-      setCurrentView('manager');
-    }
-    if (isAdmin && !canAdminWrite && currentView === 'goszakupContracts') {
-      setCurrentView('clientsOrders');
-    }
     if (isAdmin && currentView === 'clients') {
       setCurrentView('clientsOrders');
       setClientsOrdersSubView('clients');
@@ -533,13 +518,8 @@ const App = () => {
   }, [isClientModalOpen, isAdmin]);
 
   useEffect(() => {
-    if (currentView !== 'admin' || !canAdminWrite) return;
-    setAdminSubView('salesDashboard');
-  }, [currentView, canAdminWrite]);
-
-  useEffect(() => {
     if (!adminAnalyticsTabEnabled && adminSubView === 'dashboard') {
-      setAdminSubView('salesDashboard');
+      setAdminSubView('kpi');
     }
   }, [adminAnalyticsTabEnabled, adminSubView]);
 
@@ -1422,7 +1402,7 @@ const App = () => {
                   type="button"
                   onClick={() => {
                     setCurrentView('admin');
-                    setAdminSubView(canAdminWrite ? 'salesDashboard' : 'kpi');
+                    setAdminSubView('kpi');
                   }}
                   className={navPill(isAdminCoreView)}
                 >
@@ -1439,15 +1419,6 @@ const App = () => {
               {isAdmin && (
                 <button type="button" onClick={() => setCurrentView('registry')} className={navPill(currentView === 'registry')}>
                   <BookOpen size={16} /> Реестр
-                </button>
-              )}
-              {isAdmin && canAdminWrite && (
-                <button
-                  type="button"
-                  onClick={() => setCurrentView('goszakupContracts')}
-                  className={navPill(currentView === 'goszakupContracts')}
-                >
-                  <FileSpreadsheet size={16} /> Госзакуп
                 </button>
               )}
               {!isAdmin && (
@@ -1480,16 +1451,6 @@ const App = () => {
           {isAdmin && isAdminCoreView ? (
             <div className="flex flex-col sm:flex-row sm:items-center gap-2 py-2 border-t border-gray-100">
               <div className="om-pill-track bg-gray-50/80 min-w-0 flex-1">
-                {canAdminWrite ? (
-                  <button
-                    type="button"
-                    onClick={() => setAdminSubView('salesDashboard')}
-                    className={`om-subpill ${adminSubView === 'salesDashboard' ? 'om-subpill-active' : 'om-subpill-idle'}`}
-                  >
-                    <BarChart2 size={16} />
-                    Дашборд
-                  </button>
-                ) : null}
                 {canAdminWrite && adminAnalyticsTabEnabled ? (
                   <button
                     type="button"
@@ -1667,19 +1628,6 @@ const App = () => {
 
         {isAdmin && currentView === 'admin' && (
           <div className="space-y-6">
-            {adminSubView === 'salesDashboard' && canAdminWrite && (
-              <SalesComparisonDashboard
-                allReports={adminDeptReports}
-                filterManager={adminFilterManager}
-                setFilterManager={setAdminFilterManager}
-                managerOptions={adminDeptManagerOptions}
-                staffDept={adminStaffDept}
-                setStaffDept={(dept) => {
-                  setAdminStaffDept(dept);
-                  setAdminFilterManager('Все');
-                }}
-              />
-            )}
             {adminAnalyticsTabEnabled && adminSubView === 'dashboard' && canAdminWrite && (
               <AdminDashboard
                 reports={filteredReports}
@@ -1757,8 +1705,6 @@ const App = () => {
             onOpenClient={(c) => setClientHistoryFor(c)}
           />
         )}
-
-        {isAdmin && canAdminWrite && currentView === 'goszakupContracts' && <GoszakupContractsPanel />}
 
         {!isAdmin && currentView === 'ensTru' && <EnsTruCheckPanel />}
 

@@ -12,11 +12,10 @@
 | `clients` | admin | Каталог контрагентов (см. "Клиентский справочник" ниже) |
 | `clientsOrders` | manager | Объединённый экран менеджера: свои клиенты + свои заказы (переключатель `clientsOrdersSubView`) |
 | `registry` | manager | `SupplierRegistryPanel` — аналитика по поставщикам (когорты/по годам) |
-| `goszakupContracts` | admin (write) | Выгрузка контрагента по Госзакупу в Excel |
 | `ensTru` | admin | Проверка кодов ЕНС ТРУ (внутри приложения) |
 | `diggerLeads` | lead_digger | `LeadDiggerLeadsPanel` — лиды лидоруба, передача в "Крупный лид" |
 
-`adminSubView`: `salesDashboard`, `dashboard`, `kpi`, `staff`, `meetings`, `enterpriseLeads`, `enterpriseLeadsAll`, `diggerConversion`, `settings`.
+`adminSubView`: `dashboard`, `kpi`, `staff`, `meetings`, `enterpriseLeads`, `enterpriseLeadsAll`, `diggerConversion`, `settings`.
 
 ## Компоненты (`src/components/`)
 
@@ -38,12 +37,10 @@
 | `DiggerTransferModal.tsx` | Модалка пакетной передачи лидов лидорубом (БИН/имя/флаг "встреча назначена" на каждую строку) |
 | `KpiDashboard.tsx` | Главный админский КПИ-дашборд: звонки/квалификация/встречи/заказы по менеджерам, встраивает `AdminBlockersPanel` и `RnpPacePanel` |
 | `RnpPacePanel.tsx` | "РНП" — дневная динамика темпа звонков/встреч по менеджеру, цветовая индикация относительно плана |
-| `SalesComparisonDashboard.tsx` | Сравнение месяц-к-месяцу по воронке: карточки метрик, сравнение воронок, "симулятор гипотез" (что если поднять конверсию/звонки) |
 | `ClientDirectoryPanel.tsx` | Каталог контрагентов: поиск, КТП-флаг, назначенный менеджер, счётчик ЦП |
 | `ClientCpEditor.tsx` | Редактор ЦП (коммерческих предложений) — по встрече и "без встречи" (standalone), плюс отметка "оплачено" |
 | `ClientHistoryModal.tsx` | История контрагента: все встречи/заказы по всем отчётам + редактирование профиля клиента |
 | `SupplierRegistryPanel.tsx` | Производная аналитика по поставщикам — когорты по месяцу первого заказа или разбивка по году, с CSV-экспортом |
-| `GoszakupContractsPanel.tsx` | Выгрузка публичных контрактов поставщика с goszakup.gov.kz в Excel (скрейпинг, не официальный API) |
 | `EnsTruCheckPanel.tsx` | Проверка списка кодов ЕНС ТРУ по справочнику `crm_ens_tru_codes` |
 | `AdminOrderCreateModal.tsx` / `AdminOrderEditModal.tsx` | Ручное создание/редактирование подтверждённого заказа админом (вне обычного флоу отчёта менеджера) |
 | `PeriodFilterFields.tsx` | Переиспользуемый фильтр периода (пресеты: сегодня/неделя/месяц/N дней/произвольный диапазон) |
@@ -66,7 +63,6 @@
 | `clientCpStats.ts` | Подсчёт статистики ЦП по клиенту |
 | `crmClientHistory.ts` | Фильтрация истории контрагента (встречи/заказы) из массива всех отчётов по БИН |
 | `supplierRegistry.ts` | Построение строк реестра поставщиков (когорты/по годам) + CSV-экспорт |
-| `goszakupContractsApi.ts` / `goszakupParse.ts` | Клиент + HTML-парсер для скрейпинга goszakup.gov.kz |
 | `ensTruApi.ts` | Обёртка над RPC `check_ens_tru_codes`/`normalize_ens_tru_code` |
 | `managerBlockersApi.ts` | Обёртка над RPC блокеров |
 | `managerWorkItemsApi.ts` | Обёртка над RPC work items |
@@ -84,6 +80,5 @@
 | `revoke-staff-access` | Деактивация сотрудника (бан в Auth + `is_active=false`) | те же |
 | `telegram-daily-report` | Ежедневный отчёт в Telegram (полный + отдельно "Итоги дня"), вызывается `pg_cron` | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `TELEGRAM_CRON_SECRET`, `REPORT_TIMEZONE`, `SUPABASE_SERVICE_ROLE_KEY` |
 | `telegram-enterprise-lead` | Уведомление в Telegram о новом лиде "Крупный бизнес" | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` |
-| `goszakup-contracts-export` | Прокси-скрейпинг goszakup.gov.kz из прода (rate-limited) | — |
 
 Подробности деплоя и секретов — `docs/DEPLOYMENT.md`.

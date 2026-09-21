@@ -54,7 +54,6 @@ npx supabase functions deploy set-staff-password --project-ref <НОВЫЙ_REF>
 npx supabase functions deploy revoke-staff-access --project-ref <НОВЫЙ_REF>
 npx supabase functions deploy telegram-daily-report --project-ref <НОВЫЙ_REF>
 npx supabase functions deploy telegram-enterprise-lead --project-ref <НОВЫЙ_REF>
-npx supabase functions deploy goszakup-contracts-export --project-ref <НОВЫЙ_REF>
 ```
 
 И задаёт **свои собственные** секреты (см. полный список в `docs/DEPLOYMENT.md`):

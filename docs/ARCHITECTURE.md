@@ -29,7 +29,6 @@ supabase/
     revoke-staff-access/
     telegram-daily-report/
     telegram-enterprise-lead/
-    goszakup-contracts-export/
     _shared/              — общий код для telegram-daily-report (текст отчёта, PNG-рендер, типы)
 ```
 
@@ -40,10 +39,10 @@ supabase/
 ```ts
 type CurrentView =
   | 'manager' | 'admin' | 'orders' | 'clients' | 'clientsOrders'
-  | 'registry' | 'goszakupContracts' | 'ensTru' | 'diggerLeads';
+  | 'registry' | 'ensTru' | 'diggerLeads';
 ```
 
-плюс вложенный `adminSubView` для вкладок внутри админки (`salesDashboard`, `dashboard`, `kpi`, `staff`, `meetings`, `settings`, `enterpriseLeads`, `enterpriseLeadsAll`, `diggerConversion`). Текущий вид сохраняется в `localStorage` (`om.currentView`, `om.adminSubView` и т.д.), поэтому при перезагрузке страницы пользователь остаётся там же, где был — но URL в адресной строке при этом не меняется (кроме `/enstru`).
+плюс вложенный `adminSubView` для вкладок внутри админки (`dashboard`, `kpi`, `staff`, `meetings`, `settings`, `enterpriseLeads`, `enterpriseLeadsAll`, `diggerConversion`). Текущий вид сохраняется в `localStorage` (`om.currentView`, `om.adminSubView` и т.д.), поэтому при перезагрузке страницы пользователь остаётся там же, где был — но URL в адресной строке при этом не меняется (кроме `/enstru`).
 
 Единственное исключение из этой модели — `src/main.tsx` вручную проверяет `window.location.pathname === '/enstru'` и рендерит `PublicEnsTruPage` вместо `App`, минуя всю авторизацию. Это единственный публичный (без логина) маршрут в приложении.
 

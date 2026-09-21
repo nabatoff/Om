@@ -1,5 +1,4 @@
 import type { FullReport, UiAssigned, UiConducted } from './crmApi';
-import { calendarMonthFromYm, reportDateMatchesAdminBounds } from './periodBounds';
 import { isAdminStaffName } from './staffDept';
 
 export function normalizeKpiMeetingType(value: string): string {
@@ -317,99 +316,6 @@ export function dedupeReportsByDayManager(reports: FullReport[]): FullReport[] {
     if (curScore >= prevScore) byKey.set(key, r);
   }
   return Array.from(byKey.values());
-}
-
-export type SalesDashboardPeriod = {
-  ym: string;
-  name: string;
-  metrics: {
-    worked: number;
-    newTaken: number;
-    calls: number;
-    qualification: number;
-    newScheduled: number;
-    newConducted: number;
-    repeatConducted: number;
-    confirmedOrders: number;
-  };
-  conversions: {
-    qualificationRate: number | null;
-    scheduledGepRate: number | null;
-    conductedGepRate: number | null;
-    confirmedOrderRate: number | null;
-  };
-};
-
-function formatMonthName(ym: string): string {
-  const [yy, mm] = ym.split('-').map(Number);
-  const d = new Date(yy, mm - 1, 1);
-  const raw = d.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
-  return raw.charAt(0).toUpperCase() + raw.slice(1);
-}
-
-export function buildSalesDashboardPeriod(
-  allReports: FullReport[],
-  monthYm: string,
-  filterManager: string,
-): SalesDashboardPeriod | null {
-  const bounds = calendarMonthFromYm(monthYm);
-  if (!bounds) return null;
-
-  const source = allReports.filter((r) => {
-    const matchManager = filterManager === 'Все' || r.manager === filterManager;
-    return matchManager && reportDateMatchesAdminBounds(r.date, bounds);
-  });
-
-  const summaryReports = dedupeReportsByDayManager(source);
-
-  let worked = 0;
-  let newTaken = 0;
-  let calls = 0;
-  let qualification = 0;
-  let newScheduled = 0;
-  let newConducted = 0;
-  let repeatConducted = 0;
-
-  for (const r of summaryReports) {
-    worked += r.stats.processedTotal;
-    newTaken += r.stats.newInWork;
-    calls += r.stats.callsTotal;
-    qualification += r.stats.validatedTotal;
-    newScheduled += countAssignedNewMeetings(r);
-    newConducted += countConductedNewMeetings(r, allReports);
-    repeatConducted += countConductedRepeatMeetings(r);
-  }
-
-  const confirmedOrders = countCounterpartiesConductedNewWithOrder(summaryReports, allReports);
-
-  return {
-    ym: monthYm,
-    name: formatMonthName(monthYm),
-    metrics: {
-      worked,
-      newTaken,
-      calls,
-      qualification,
-      newScheduled,
-      newConducted,
-      repeatConducted,
-      confirmedOrders,
-    },
-    conversions: {
-      qualificationRate: kpiConversionPercent(qualification, calls),
-      scheduledGepRate: kpiConversionPercent(newScheduled, qualification),
-      conductedGepRate: kpiConversionPercent(newConducted, newScheduled),
-      confirmedOrderRate: kpiConversionPercent(confirmedOrders, newConducted),
-    },
-  };
-}
-
-export function collectReportMonthYms(allReports: FullReport[]): string[] {
-  const seen = new Set<string>();
-  for (const r of allReports) {
-    if (r.date.length >= 7) seen.add(r.date.slice(0, 7));
-  }
-  return Array.from(seen).sort((a, b) => b.localeCompare(a));
 }
 
 export const DAILY_CALL_GOAL = 22;

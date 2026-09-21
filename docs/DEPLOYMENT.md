@@ -33,7 +33,7 @@ npx supabase db push --project-ref <ваш-project-ref>
 npx supabase functions deploy <имя-функции> --project-ref <ваш-project-ref>
 ```
 
-Список функций: `create-staff`, `set-staff-password`, `revoke-staff-access`, `telegram-daily-report`, `telegram-enterprise-lead`, `goszakup-contracts-export`. **Каждый раз после правки кода в `supabase/functions/<name>/` нужно вручную передеплоить именно эту функцию** — иначе прод продолжит работать на старой версии, а git будет "врать", что всё обновлено.
+Список функций: `create-staff`, `set-staff-password`, `revoke-staff-access`, `telegram-daily-report`, `telegram-enterprise-lead`. **Каждый раз после правки кода в `supabase/functions/<name>/` нужно вручную передеплоить именно эту функцию** — иначе прод продолжит работать на старой версии, а git будет "врать", что всё обновлено.
 
 ### Секреты Edge Functions (Dashboard → Edge Functions → Secrets, или `supabase secrets set`)
 
@@ -78,7 +78,7 @@ npm install
 npm run dev
 ```
 
-Нужен `.env.local` (не коммитится) с `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` — см. `env.example`. Для скрейпинга Госзакупа локально `vite.config.ts` проксирует `/goszakup-origin` напрямую на `goszakup.gov.kz` (обходя edge-функцию, работает если у разработчика казахстанский IP или VPN — с EU-адресов сайт часто отдаёт таймаут).
+Нужен `.env.local` (не коммитится) с `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` — см. `env.example`.
 
 ## Проверка перед тем как считать деплой готовым
 
