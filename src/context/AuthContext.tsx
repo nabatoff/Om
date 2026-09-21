@@ -134,7 +134,7 @@ function AuthProviderInner({ children }: { children: ReactNode }) {
         profileRequestId.current += 1;
         setSession(s);
         setUser(s?.user ?? null);
-        if (s?.user) void loadProfile(s.user.id);
+        if (s?.user) await loadProfile(s.user.id);
       } catch (e) {
         console.error(e);
       } finally {
@@ -153,8 +153,11 @@ function AuthProviderInner({ children }: { children: ReactNode }) {
         profileRequestId.current += 1;
         setSession(s);
         setUser(s?.user ?? null);
-        if (s?.user) void loadProfile(s.user.id);
-        else setProfile(null);
+        if (s?.user) {
+          await loadProfile(s.user.id);
+        } else {
+          setProfile(null);
+        }
         setReady(true);
       },
     );
