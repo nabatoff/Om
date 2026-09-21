@@ -38,6 +38,25 @@ type AuthCtx = {
 
 const Ctx = createContext<AuthCtx | null>(null);
 
+/** Не даёт экрану загрузки виснуть навсегда, если запрос профиля подвиснет (напр. протухший токен в localStorage). */
+const PROFILE_LOAD_TIMEOUT_MS = 6000;
+
+function raceWithTimeout<T>(promise: Promise<T>, ms: number): Promise<T | undefined> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(undefined), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      () => {
+        clearTimeout(timer);
+        resolve(undefined);
+      },
+    );
+  });
+}
+
 const UNCONFIG: AuthCtx = {
   session: null,
   user: null,
@@ -134,7 +153,7 @@ function AuthProviderInner({ children }: { children: ReactNode }) {
         profileRequestId.current += 1;
         setSession(s);
         setUser(s?.user ?? null);
-        if (s?.user) await loadProfile(s.user.id);
+        if (s?.user) await raceWithTimeout(loadProfile(s.user.id), PROFILE_LOAD_TIMEOUT_MS);
       } catch (e) {
         console.error(e);
       } finally {
@@ -149,16 +168,23 @@ function AuthProviderInner({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!getSupabaseOptional()) return;
     const { data: { subscription } } = getSupabase().auth.onAuthStateChange(
-      async (_event, s) => {
-        profileRequestId.current += 1;
-        setSession(s);
-        setUser(s?.user ?? null);
-        if (s?.user) {
-          await loadProfile(s.user.id);
-        } else {
-          setProfile(null);
-        }
-        setReady(true);
+      (_event, s) => {
+        // supabase-js держит внутренний lock, пока выполняется этот колбэк — если внутри
+        // синхронно (через await) дождаться ещё одного запроса к Supabase, это может
+        // задедлочиться на обновлении токена. Поэтому выносим работу за пределы колбэка.
+        setTimeout(() => {
+          void (async () => {
+            profileRequestId.current += 1;
+            setSession(s);
+            setUser(s?.user ?? null);
+            if (s?.user) {
+              await raceWithTimeout(loadProfile(s.user.id), PROFILE_LOAD_TIMEOUT_MS);
+            } else {
+              setProfile(null);
+            }
+            setReady(true);
+          })();
+        }, 0);
       },
     );
     return () => subscription.unsubscribe();
