@@ -38,5 +38,23 @@ yarn-error.log*
 # vercel
 .vercel
 
+# local MCP server config (contains Supabase service_role key)
+.mcp.json
+
 # typescript
 *.tsbuildinfo
+
+# local IDE / CLI state
+.cursor/
+supabase/.temp/
+
+# ad-hoc debug/deploy scratch files (do not commit — use scripts/ for real tooling)
+/.deploy-*.json
+/.mcp-*.json
+/.payload-*.json
+/deploy-*.json
+/mcp-*.json
+/built-payload.json
+/tmp-*.json
+/tmp-*.txt
+/*.tmp.sql
