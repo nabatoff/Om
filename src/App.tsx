@@ -1226,7 +1226,7 @@ const App = () => {
         if (ordersFilterDateFrom && order.reportDate < ordersFilterDateFrom) return;
         if (ordersFilterDateTo && order.reportDate > ordersFilterDateTo) return;
         const { reportDate, ...rest } = order;
-        orders.push({ ...rest, date: reportDate });
+        orders.push({ ...rest, date: reportDate, isInherited: true });
       });
     }
     return orders;
@@ -1842,7 +1842,9 @@ const App = () => {
                 viewMode={ordersViewMode}
                 setViewMode={setOrdersViewMode}
                 clientKtpByBin={clientKtpByBin}
-                totalOrdersCount={allFilteredOrders.reduce((sum, order) => sum + order.orderCount, 0)}
+                totalOrdersCount={allFilteredOrders
+                  .filter((order) => !order.isInherited)
+                  .reduce((sum, order) => sum + order.orderCount, 0)}
                 filterManager={ordersFilterManager}
                 setFilterManager={setOrdersFilterManager}
                 filterDateFrom={ordersFilterDateFrom}
@@ -4172,32 +4174,36 @@ const OrdersHistoryDashboard = ({
     });
   }, [groupedOrders, sortConfig]);
 
+  // Унаследованные заказы (от прежнего менеджера контрагента) видны в таблице, но не должны
+  // раздувать сводные показатели — иначе выглядит так, будто у менеджера внезапно выросли продажи.
+  const ownOrders = useMemo(() => orders.filter((o) => !o.isInherited), [orders]);
+
   const ordersTotalAmount = useMemo(
-    () => orders.reduce((sum, o) => sum + o.totalAmount, 0),
-    [orders],
+    () => ownOrders.reduce((sum, o) => sum + o.totalAmount, 0),
+    [ownOrders],
   );
 
   const ordersCommissionTotal = useMemo(
     () =>
-      orders.reduce((sum, o) => {
+      ownOrders.reduce((sum, o) => {
         const total = resolveOrderCommissionTotal(o, clientKtpByBin);
         if (total == null) return sum;
         return sum + total;
       }, 0),
-    [orders, clientKtpByBin],
+    [ownOrders, clientKtpByBin],
   );
 
   const ordersWithoutCommissionCount = useMemo(
-    () => orders.reduce((sum, o) => sum + countOrderLinesWithoutCommission(o, clientKtpByBin), 0),
-    [orders, clientKtpByBin],
+    () => ownOrders.reduce((sum, o) => sum + countOrderLinesWithoutCommission(o, clientKtpByBin), 0),
+    [ownOrders, clientKtpByBin],
   );
 
-  const uniqueCounterpartiesCount = useMemo(() => {
-    if (isGroupedView) return groupedOrders.length;
+  const uniqueCounterpartiesCount = useMemo(
     // Тот же ключ группировки, что и в «По контрагентам» (БИН, а не БИН+название) —
     // иначе один контрагент, записанный под чуть разным названием, считается дважды.
-    return groupOrdersByCounterparty(orders).length;
-  }, [orders, groupedOrders, isGroupedView]);
+    () => groupOrdersByCounterparty(ownOrders).length,
+    [ownOrders],
+  );
 
   const commissionForGroup = useCallback(
     (group: GroupedCounterpartyOrder): number | null => {

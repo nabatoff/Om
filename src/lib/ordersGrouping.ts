@@ -1,7 +1,8 @@
 import type { UiOrder } from './crmApi';
 import { orderLineAmounts } from './commission';
 
-export type OrderRow = UiOrder & { manager: string; date: string; reportId: string };
+/** `isInherited` — заказ по контрагенту, закреплённому за текущим менеджером, но сделанный другим (см. list_managed_client_orders в docs/BUSINESS_LOGIC.md). Виден в списке, но не должен попадать в сводные суммы. */
+export type OrderRow = UiOrder & { manager: string; date: string; reportId: string; isInherited?: boolean };
 
 export type GroupedCounterpartyOrder = {
   bin: string;
