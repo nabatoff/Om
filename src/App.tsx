@@ -4101,7 +4101,7 @@ const OrdersHistoryDashboard = ({
 
   const [sortConfig, setSortConfig] = useState<{ key: OrdersSortKey; direction: 'asc' | 'desc' } | null>(null);
 
-  const isGroupedView = isAdmin && viewMode === 'byCounterparty';
+  const isGroupedView = viewMode === 'byCounterparty';
   const displayRowCount = isGroupedView ? groupedOrders.length : orders.length;
 
   const handleSort = (key: OrdersSortKey) => {
@@ -4322,8 +4322,7 @@ const OrdersHistoryDashboard = ({
               Выгрузить в Excel
             </button>
           ) : null}
-          {isAdmin ? (
-            <div className="inline-flex rounded-xl border border-gray-200 bg-gray-50 p-1">
+          <div className="inline-flex rounded-xl border border-gray-200 bg-gray-50 p-1">
             <button
               type="button"
               onClick={() => setViewMode('records')}
@@ -4343,7 +4342,6 @@ const OrdersHistoryDashboard = ({
               По контрагентам
             </button>
           </div>
-          ) : null}
         </div>
       </div>
       <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-x-auto text-left">
