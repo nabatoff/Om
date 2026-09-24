@@ -40,6 +40,8 @@ import {
   type UiConducted,
   type UiOrder,
   type DeletedMeeting,
+  type ManagedClientOrder,
+  fetchManagedClientOrdersApi,
   fetchClientsApi,
   fetchClientsAdminApi,
   fetchClientCategoriesApi,
@@ -265,6 +267,8 @@ const App = () => {
   const [assignedMeetings, setAssignedMeetings] = useState<UiAssigned[]>([]);
   const [conductedMeetings, setConductedMeetings] = useState<UiConducted[]>([]);
   const [confirmedOrders, setConfirmedOrders] = useState<UiOrder[]>([]);
+  /** Заказы по клиентам, которые сейчас закреплены за мной, но сделаны другим (в т.ч. уволенным) менеджером — история видна, в КПИ не входит. */
+  const [managedClientOrders, setManagedClientOrders] = useState<ManagedClientOrder[]>([]);
   const [managerReportDate, setManagerReportDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [isMeetingModalOpen, setIsMeetingModalOpen] = useState(false);
   const [activeMeetingIndex, setActiveMeetingIndex] = useState<number | null>(null);
@@ -408,7 +412,7 @@ const App = () => {
     }
     setLoadError(null);
     try {
-      const [c, r, basket, standalone, mrp, analyticsTabEnabled, cats, weeklyForecast] = await Promise.all([
+      const [c, r, basket, standalone, mrp, analyticsTabEnabled, cats, weeklyForecast, managedOrders] = await Promise.all([
         isAdmin ? fetchClientsAdminApi() : fetchClientsApi(),
         fetchReportsApi(),
         isAdmin ? fetchDeletedMeetingsApi() : Promise.resolve([]),
@@ -417,6 +421,7 @@ const App = () => {
         isAdmin ? fetchAdminAnalyticsTabEnabledApi().catch(() => true) : Promise.resolve(true),
         isAdmin ? fetchClientCategoriesApi().catch(() => [] as ClientCategory[]) : Promise.resolve([]),
         isAdmin ? fetchTelegramWeeklyForecastApi().catch(() => 0) : Promise.resolve(0),
+        !isAdmin ? fetchManagedClientOrdersApi().catch(() => [] as ManagedClientOrder[]) : Promise.resolve([] as ManagedClientOrder[]),
       ]);
       setMrpKzt(mrp);
       if (isAdmin) {
@@ -441,6 +446,7 @@ const App = () => {
       setAllReports(r);
       setDeletedMeetings(basket);
       setStandaloneCp(standalone);
+      setManagedClientOrders(managedOrders);
       return r;
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Ошибка загрузки');
@@ -1215,8 +1221,18 @@ const App = () => {
         orders.push({ ...order, manager: report.manager, date: report.date, reportId: report.id });
       });
     });
+    if (!isAdmin) {
+      managedClientOrders.forEach((order) => {
+        if (ordersFilterDateFrom && order.reportDate < ordersFilterDateFrom) return;
+        if (ordersFilterDateTo && order.reportDate > ordersFilterDateTo) return;
+        const { reportDate, ...rest } = order;
+        orders.push({ ...rest, date: reportDate });
+      });
+    }
     return orders;
-  }, [reportsForOrders]);
+  }, [reportsForOrders, isAdmin, managedClientOrders, ordersFilterDateFrom, ordersFilterDateTo]);
+
+  const hasManagedClientOrders = !isAdmin && managedClientOrders.length > 0;
 
   const ordersCounterpartyOptions = useMemo(() => {
     const seen = new Set<string>();
@@ -1295,13 +1311,18 @@ const App = () => {
     return clientListRows.filter((r) => r.managerNames.includes(adminClientsFilterManager));
   }, [clientListRows, isAdmin, adminClientsFilterManager]);
 
-  const clientHistoryAggregated = useMemo(
-    () =>
-      clientHistoryFor
-        ? buildClientCrmHistory(clientHistoryFor.bin, reportsForClientScope)
-        : { conducted: [], orders: [] },
-    [clientHistoryFor, reportsForClientScope],
-  );
+  const clientHistoryAggregated = useMemo(() => {
+    if (!clientHistoryFor) return { conducted: [], orders: [] };
+    const base = buildClientCrmHistory(clientHistoryFor.bin, reportsForClientScope);
+    if (isAdmin) return base;
+    const bin = clientHistoryFor.bin.trim();
+    const extraOrders = managedClientOrders.filter((o) => o.bin.trim() === bin);
+    if (extraOrders.length === 0) return base;
+    return {
+      conducted: base.conducted,
+      orders: [...base.orders, ...extraOrders].sort((a, b) => b.reportDate.localeCompare(a.reportDate)),
+    };
+  }, [clientHistoryFor, reportsForClientScope, isAdmin, managedClientOrders]);
 
   if (supabaseOk && !authReady) {
     return (
@@ -1815,6 +1836,7 @@ const App = () => {
             {(isAdmin || managerOrdersSection === 'orders') && (
               <OrdersHistoryDashboard
                 isAdmin={isAdmin}
+                showManagerColumn={isAdmin || hasManagedClientOrders}
                 orders={allFilteredOrders}
                 groupedOrders={groupedFilteredOrders}
                 viewMode={ordersViewMode}
@@ -4054,6 +4076,7 @@ const OrderSumCell = ({
 
 const OrdersHistoryDashboard = ({
   isAdmin,
+  showManagerColumn,
   orders,
   groupedOrders,
   viewMode,
@@ -4076,6 +4099,7 @@ const OrdersHistoryDashboard = ({
   onCreateOrder,
 }: {
   isAdmin: boolean;
+  showManagerColumn: boolean;
   orders: OrderRow[];
   groupedOrders: GroupedCounterpartyOrder[];
   viewMode: 'records' | 'byCounterparty';
@@ -4349,7 +4373,7 @@ const OrdersHistoryDashboard = ({
           <thead>
             <tr className="bg-gray-50/50 text-[10px] font-bold text-gray-400 border-b border-gray-100">
               <th className="py-6 px-8">Дата</th>
-              {isAdmin && <th className="py-6 px-4">Менеджер</th>}
+              {showManagerColumn && <th className="py-6 px-4">Менеджер</th>}
               <th className="py-6 px-4">БИН/ИИН</th>
               <th className="py-6 px-4">Контрагент</th>
               <th className="py-6 px-4">Заказ через (ЮЛ)</th>
@@ -4379,7 +4403,7 @@ const OrdersHistoryDashboard = ({
               ? sortedGroupedOrders.map((group, idx) => (
                   <tr key={idx} className="hover:bg-gray-50/50 text-sm">
                     <td className="py-5 px-8 text-gray-500 whitespace-nowrap">{formatDisplayDate(group.date)}</td>
-                    {isAdmin && (
+                    {showManagerColumn && (
                       <td className="py-5 px-4 font-bold text-gray-800 whitespace-nowrap">{group.manager}</td>
                     )}
                     <td className="py-5 px-4 font-mono text-gray-400 text-[11px]">{group.bin}</td>
@@ -4404,7 +4428,7 @@ const OrdersHistoryDashboard = ({
               : sortedOrders.map((order, idx) => (
                   <tr key={idx} className="hover:bg-gray-50/50 text-sm">
                     <td className="py-5 px-8 text-gray-500 whitespace-nowrap">{formatDisplayDate(order.date)}</td>
-                    {isAdmin && (
+                    {showManagerColumn && (
                       <td className="py-5 px-4 font-bold text-gray-800 whitespace-nowrap">{order.manager}</td>
                     )}
                     <td className="py-5 px-4 font-mono text-gray-400 text-[11px]">{order.bin}</td>

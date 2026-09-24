@@ -52,7 +52,7 @@
 | Файл | Назначение |
 |---|---|
 | `supabase.ts` | Инициализация клиента Supabase (`getSupabase`/`getSupabaseOptional`/`isSupabaseConfigured`) |
-| `crmApi.ts` | Основной слой доступа к данным: типы `FullReport`/`ReportRow`, загрузка/сохранение отчётов, клиентов и т.д. через RPC |
+| `crmApi.ts` | Основной слой доступа к данным: типы `FullReport`/`ReportRow`, загрузка/сохранение отчётов, клиентов и т.д. через RPC. Также `fetchManagedClientOrdersApi` — история заказов по "унаследованным" клиентам (см. `docs/BUSINESS_LOGIC.md`, раздел 9) |
 | `kpiMetrics.ts` | **Ядро бизнес-логики.** Классификация типов встреч, построение индекса план↔факт (`buildMeetingEvidenceIndex`), все счётчики КПИ, воронка для дашбордов сравнения, РНП. См. `docs/BUSINESS_LOGIC.md` |
 | `staffDept.ts` | Определение отдела сотрудника (`managers`/`diggers`/`admin`) для отчёта — с приоритетом замороженного `staff_dept` |
 | `enterpriseLeadsApi.ts` | Все операции с воронкой "Крупный лид": назначение, взятие в работу, итог встречи, статистика конверсии лидорубов |

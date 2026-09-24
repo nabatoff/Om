@@ -213,6 +213,52 @@ const reportSelect = `
   crm_confirmed_orders ( id, entity_name, bin, via_entity_name, via_bin, order_count, amounts, total_amount, sort_order, mrp_kzt_applied, is_ktp_applied, commission_amount )
 `;
 
+/** Заказ по контрагенту, который сейчас закреплён за менеджером, но создан другим (в т.ч. уволенным) менеджером. */
+export type ManagedClientOrder = UiOrder & { reportId: string; reportDate: string; manager: string };
+
+type ManagedClientOrderRow = {
+  id: string;
+  report_id: string;
+  entity_name: string;
+  bin: string;
+  via_entity_name?: string | null;
+  via_bin?: string | null;
+  order_count: number;
+  amounts: string[] | number[] | null;
+  total_amount: string | number;
+  mrp_kzt_applied?: string | number | null;
+  is_ktp_applied?: boolean | null;
+  commission_amount?: string | number | null;
+  report_date: string;
+  manager: string;
+};
+
+/** История заказов по «унаследованным» клиентам — см. миграцию list_managed_client_orders. */
+export async function fetchManagedClientOrdersApi(): Promise<ManagedClientOrder[]> {
+  const { data, error } = await getSupabase().rpc('list_managed_client_orders');
+  if (error) throw error;
+  return ((data || []) as ManagedClientOrderRow[]).map((o) => {
+    const amts = (o.amounts as number[] | null) || [];
+    return {
+      id: o.id,
+      reportId: o.report_id,
+      entityName: o.entity_name,
+      bin: o.bin?.trim() || '',
+      viaEntityName: (o.via_entity_name ?? '').trim(),
+      viaBin: (o.via_bin ?? '').trim(),
+      orderCount: o.order_count,
+      amounts: amts.map((n) => Number(n)),
+      totalAmount: Number(o.total_amount),
+      commissionAmount:
+        o.commission_amount == null || o.commission_amount === '' ? null : Number(o.commission_amount),
+      mrpKztApplied: o.mrp_kzt_applied == null || o.mrp_kzt_applied === '' ? null : Number(o.mrp_kzt_applied),
+      isKtpApplied: o.is_ktp_applied == null ? null : Boolean(o.is_ktp_applied),
+      reportDate: o.report_date,
+      manager: o.manager,
+    };
+  });
+}
+
 function mapClientRow(c: {
   name: string;
   bin: string;

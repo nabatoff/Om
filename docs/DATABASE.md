@@ -38,11 +38,16 @@
 
 ## RLS-модель
 
-RLS включена на всех таблицах, но политики почти везде — «разрешено всем `authenticated`» (`ALL`/`SELECT`/`INSERT`/… для роли `authenticated`, без построчной фильтрации по владельцу). Это значит: **реальная авторизация («менеджер видит только своё», «только админ может…») реализована не в RLS, а внутри RPC-функций** (проверки `is_admin()`, сравнение `manager_id = auth.uid()` и т.д.) и частично на фронтенде. Это осознанное архитектурное решение в проекте — при доработках проверяйте права внутри новых RPC, не полагаясь на RLS.
+RLS включена на всех таблицах. Реальная построчная фильтрация есть почти везде, но реализована по-разному — важно понимать, какая именно, прежде чем что-то менять:
 
-Единственное исключение — `profiles`: там RLS реально ограничивает `SELECT`/`INSERT`/`UPDATE` только собственной строкой (`profiles_self_*`), поэтому список сотрудников для админки читается не напрямую, а через отдельные функции/edge functions с `service_role`.
+- **По владению отчётом** (`crm_reports`, `crm_assigned_meetings`, `crm_conducted_meetings`, `crm_confirmed_orders`, `crm_manager_work_items`, `crm_kpi_field_history`) — политика вызывает `user_may_access_crm_report(report_id)`/аналог, который разрешает доступ только если `crm_reports.manager_id = auth.uid()` (или `is_admin()`). **Это значит: обычный менеджер физически не может получить через обычный `select` строки отчётов/встреч/заказов другого менеджера — Postgres отфильтрует их до того, как они попадут в приложение.** Если нужно показать одному менеджеру данные, реально принадлежащие другому (например, историю контрагента, перешедшего от уволенного сотрудника) — обходить это не через ослабление RLS вручную на клиенте (бесполезно), а через отдельный `SECURITY DEFINER` RPC с точечным условием (см. `list_managed_client_orders` ниже — пример именно такого обхода).
+- **По прямому владению строкой** (`crm_client_standalone_cp`, `crm_manager_blockers`, `crm_enterprise_leads`, `crm_lead_events`) — `manager_id = auth.uid()` / `creator_id`/`assigned_manager_id = auth.uid()` / `is_admin()`.
+- **`profiles`** — только собственная строка (`id = auth.uid()`) либо `is_admin()`; массовое управление сотрудниками поэтому идёт не напрямую, а через edge functions с `service_role` (создание/смена пароля/деактивация).
+- **Действительно открытые всем `authenticated` без построчного фильтра** — только `crm_clients`, `crm_client_categories` (SELECT), `crm_settings` (SELECT). Для них авторизация на запись реализована внутри RPC (`is_admin_write()` и т.д.), а не в RLS.
 
-## Каталог RPC-функций (76 шт, все в схеме `public`)
+При добавлении новой таблицы/RPC — явно решайте, к какой из этих моделей она относится, не полагайтесь на "как у соседней таблицы".
+
+## Каталог RPC-функций (77 шт, все в схеме `public`)
 
 ### Роли/доступ
 `is_admin`, `is_admin_write`, `is_lead_digger`, `is_sales_manager`, `user_may_access_crm_report(rid)`, `user_may_write_crm_report_row(m|mid)`
@@ -60,6 +65,8 @@ RLS включена на всех таблицах, но политики по�
 `admin_create_confirmed_order`, `admin_update_confirmed_order`, `calc_order_commission(amount, is_ktp, mrp)`, `count_order_line_items`, `sum_order_line_commissions`, `count_orders_without_commission`, `backfill_order_commissions(overwrite)`, `recalc_order_commissions_for_client_bin(bin)`, `recalc_order_commissions_for_month(year, month)`, `crm_order_commission_is_ktp`, `crm_validate_order_via`, `crm_confirmed_orders_validate_via` (триггер на `crm_confirmed_orders`)
 
 > Комиссия считается по формуле в `calc_order_commission`, зависит от того, КТП ли клиент (`is_ktp`) и текущего МРП (`crm_settings`). См. `docs/BUSINESS_LOGIC.md`.
+
+`list_managed_client_orders()` — заказы по контрагентам, которые сейчас закреплены за вызывающим менеджером (`crm_clients.manager_id = auth.uid()`), но были созданы **другим** менеджером (в т.ч. уволенным). Целенаправленный обход RLS-ограничения на `crm_reports`/`crm_confirmed_orders` (см. раздел RLS выше) — нужен при передаче клиента от одного менеджера другому: новый менеджер видит полную историю заказов по контрагенту, но эти заказы не засчитываются в его КПИ (физически остаются в отчётах прежнего менеджера). См. `docs/BUSINESS_LOGIC.md`.
 
 ### Воронка "Крупный лид" (enterprise leads)
 `admin_assign_enterprise_lead`, `admin_clear_returned_leads`, `admin_delete_enterprise_lead`, `admin_delete_returned_lead`, `admin_set_enterprise_lead_status`, `digger_transfer_enterprise_batch(report_date, items)` — лидоруб передаёт пачку лидов, `list_enterprise_leads(filter)`, `list_lead_events(lead_id)`, `log_crm_lead_event`, `manager_return_lead_to_smb`, `manager_set_lead_meeting_status(lead_id, status, result)`, `manager_take_enterprise_lead_in_work`, `sync_enterprise_lead_for_krup_meeting` + триггеры `trg_sync_enterprise_lead_from_meeting` на `crm_assigned_meetings`/`crm_conducted_meetings` (держат `crm_enterprise_leads` в консистентном состоянии при правках встреч), `lead_digger_conversion_stats`
