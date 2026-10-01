@@ -9,6 +9,7 @@ import {
   Clock,
   ShieldCheck,
   ShieldAlert,
+  Factory,
   CalendarCheck,
   Target,
   ShoppingBag,
@@ -83,6 +84,7 @@ import { buildClientListRows, filterReportsForManager } from './lib/clientCpStat
 import { ClientDirectoryPanel } from './components/ClientDirectoryPanel';
 import { EnsTruCheckPanel } from './components/EnsTruCheckPanel';
 import { NationalExemptionCheckPanel } from './components/NationalExemptionCheckPanel';
+import { BinEnsTruCheckPanel } from './components/BinEnsTruCheckPanel';
 import { SupplierRegistryPanel } from './components/SupplierRegistryPanel';
 import { AdminOrderEditModal } from './components/AdminOrderEditModal';
 import { AdminOrderCreateModal } from './components/AdminOrderCreateModal';
@@ -198,6 +200,7 @@ type CurrentView =
   | 'registry'
   | 'ensTru'
   | 'nationalExemption'
+  | 'binCheck'
   | 'diggerLeads';
 type ClientsOrdersSubView = 'clients' | 'orders';
 
@@ -211,6 +214,7 @@ function getSavedCurrentView(): CurrentView {
     raw === 'registry' ||
     raw === 'ensTru' ||
     raw === 'nationalExemption' ||
+    raw === 'binCheck' ||
     raw === 'diggerLeads'
   ) {
     return raw;
@@ -476,6 +480,9 @@ const App = () => {
       setCurrentView(canAdminWrite ? 'admin' : 'clientsOrders');
     }
     if (isAdmin && currentView === 'nationalExemption') {
+      setCurrentView(canAdminWrite ? 'admin' : 'clientsOrders');
+    }
+    if (isAdmin && currentView === 'binCheck') {
       setCurrentView(canAdminWrite ? 'admin' : 'clientsOrders');
     }
     if (!isAdmin && currentView === 'clientsOrders') {
@@ -1470,6 +1477,14 @@ const App = () => {
                     <ShieldAlert size={16} />
                     Нацизъятие
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentView('binCheck')}
+                    className={navPill(currentView === 'binCheck')}
+                  >
+                    <Factory size={16} />
+                    Проверка по БИН
+                  </button>
                   {isLeadDigger ? (
                     <button
                       type="button"
@@ -1745,6 +1760,8 @@ const App = () => {
         {!isAdmin && currentView === 'ensTru' && <EnsTruCheckPanel />}
 
         {!isAdmin && currentView === 'nationalExemption' && <NationalExemptionCheckPanel />}
+
+        {!isAdmin && currentView === 'binCheck' && <BinEnsTruCheckPanel />}
 
         {isLeadDigger && currentView === 'diggerLeads' && (
           <LeadDiggerLeadsPanel mode="history" creatorId={sessionUserId ?? undefined} />

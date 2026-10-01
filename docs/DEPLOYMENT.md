@@ -33,7 +33,7 @@ npx supabase db push --project-ref <ваш-project-ref>
 npx supabase functions deploy <имя-функции> --project-ref <ваш-project-ref>
 ```
 
-Список функций: `create-staff`, `set-staff-password`, `revoke-staff-access`, `telegram-daily-report`, `telegram-enterprise-lead`. **Каждый раз после правки кода в `supabase/functions/<name>/` нужно вручную передеплоить именно эту функцию** — иначе прод продолжит работать на старой версии, а git будет "врать", что всё обновлено.
+Список функций: `create-staff`, `set-staff-password`, `revoke-staff-access`, `telegram-daily-report`, `telegram-enterprise-lead`, `bin-ens-tru-check`. **Каждый раз после правки кода в `supabase/functions/<name>/` нужно вручную передеплоить именно эту функцию** — иначе прод продолжит работать на старой версии, а git будет "врать", что всё обновлено.
 
 ### Секреты Edge Functions (Dashboard → Edge Functions → Secrets, или `supabase secrets set`)
 

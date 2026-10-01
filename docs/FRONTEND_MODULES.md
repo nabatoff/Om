@@ -14,6 +14,7 @@
 | `registry` | manager | `SupplierRegistryPanel` — аналитика по поставщикам (когорты/по годам) |
 | `ensTru` | manager/lead_digger | Проверка кодов ЕНС ТРУ по основному справочнику (внутри приложения; есть также публичная версия на `/enstru`, см. `PublicEnsTruPage.tsx`) |
 | `nationalExemption` | manager/lead_digger | `NationalExemptionCheckPanel` — проверка по отдельному справочнику "Нацизъятие" (коды под изъятием из нацрежима), см. `docs/BUSINESS_LOGIC.md` |
+| `binCheck` | manager/lead_digger | `BinEnsTruCheckPanel` — по БИН поставщика ищет его коды ЕНС ТРУ (e-ondiris.gov.kz) и объём госзакупок по ним (zakup.gov.kz), см. `docs/BUSINESS_LOGIC.md` |
 | `diggerLeads` | lead_digger | `LeadDiggerLeadsPanel` — лиды лидоруба, передача в "Крупный лид" |
 
 `adminSubView`: `dashboard`, `kpi`, `staff`, `meetings`, `enterpriseLeads`, `enterpriseLeadsAll`, `diggerConversion`, `settings`.
@@ -44,6 +45,7 @@
 | `SupplierRegistryPanel.tsx` | Производная аналитика по поставщикам — когорты по месяцу первого заказа или разбивка по году, с CSV-экспортом |
 | `EnsTruCheckPanel.tsx` | Проверка списка кодов ЕНС ТРУ по справочнику `crm_ens_tru_codes` |
 | `NationalExemptionCheckPanel.tsx` | Проверка списка кодов по отдельному справочнику "Нацизъятие" (`crm_ens_tru_national_exemption_codes`) — коды, изъятые из нацрежима закупок |
+| `BinEnsTruCheckPanel.tsx` | По БИН поставщика — его коды ЕНС ТРУ (e-ondiris.gov.kz) + количество/сумма госконтрактов по каждому коду за год (zakup.gov.kz), через Edge Function `bin-ens-tru-check` |
 | `AdminOrderCreateModal.tsx` / `AdminOrderEditModal.tsx` | Ручное создание/редактирование подтверждённого заказа админом (вне обычного флоу отчёта менеджера) |
 | `PeriodFilterFields.tsx` | Переиспользуемый фильтр периода (пресеты: сегодня/неделя/месяц/N дней/произвольный диапазон) |
 
@@ -72,6 +74,7 @@
 | `staffAuth.ts` | Хелперы логин-кода / синтетического email для входа |
 | `telegramDailyDigest.ts` | Выбор "лучшего" отчёта менеджера за день для дайджеста (не сама отправка) |
 | `telegramEnterpriseLead.ts` | Уведомление в Telegram о новом лиде "Крупный бизнес" — вебхук или Edge Function `telegram-enterprise-lead` |
+| `binEnsTruCheckApi.ts` | Обёртка над Edge Function `bin-ens-tru-check` («Проверка по БИН») |
 
 ## Edge Functions (`supabase/functions/`)
 
@@ -82,5 +85,6 @@
 | `revoke-staff-access` | Деактивация сотрудника (бан в Auth + `is_active=false`) | те же |
 | `telegram-daily-report` | Ежедневный отчёт в Telegram (полный + отдельно "Итоги дня"), вызывается `pg_cron` | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `TELEGRAM_CRON_SECRET`, `REPORT_TIMEZONE`, `SUPABASE_SERVICE_ROLE_KEY` |
 | `telegram-enterprise-lead` | Уведомление в Telegram о новом лиде "Крупный бизнес" | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` |
+| `bin-ens-tru-check` | «Проверка по БИН»: проксирует e-ondiris.gov.kz и zakup.gov.kz (у обоих нет CORS для стороннего фронтенда) | — (только `SUPABASE_URL`/`SUPABASE_ANON_KEY`, уже доступны функции по умолчанию) |
 
 Подробности деплоя и секретов — `docs/DEPLOYMENT.md`.
