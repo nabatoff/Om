@@ -8,11 +8,12 @@
 |---|---|---|
 | `manager` | все роли (свой контент) | Ежедневный отчёт менеджера/лидоруба: шапка КПИ, встречи (план/факт), заказы, work items |
 | `admin` | admin | Многовкладочная админка (см. `adminSubView` ниже) |
-| `orders` | admin | Реестр всех подтверждённых заказов, фильтры, Excel-экспорт (по записям и по контрагентам) |
-| `clients` | admin | Каталог контрагентов (см. "Клиентский справочник" ниже) |
+| `orders` | manager | Реестр заказов менеджера, фильтры, переключение "по записям"/"по контрагентам" (admin редиректится на `clientsOrders`) |
+| `clients` | manager | Каталог "Мои клиенты" (admin редиректится на `clientsOrders`) |
 | `clientsOrders` | manager | Объединённый экран менеджера: свои клиенты + свои заказы (переключатель `clientsOrdersSubView`) |
 | `registry` | manager | `SupplierRegistryPanel` — аналитика по поставщикам (когорты/по годам) |
-| `ensTru` | admin | Проверка кодов ЕНС ТРУ (внутри приложения) |
+| `ensTru` | manager/lead_digger | Проверка кодов ЕНС ТРУ по основному справочнику (внутри приложения; есть также публичная версия на `/enstru`, см. `PublicEnsTruPage.tsx`) |
+| `nationalExemption` | manager/lead_digger | `NationalExemptionCheckPanel` — проверка по отдельному справочнику "Нацизъятие" (коды под изъятием из нацрежима), см. `docs/BUSINESS_LOGIC.md` |
 | `diggerLeads` | lead_digger | `LeadDiggerLeadsPanel` — лиды лидоруба, передача в "Крупный лид" |
 
 `adminSubView`: `dashboard`, `kpi`, `staff`, `meetings`, `enterpriseLeads`, `enterpriseLeadsAll`, `diggerConversion`, `settings`.
@@ -42,6 +43,7 @@
 | `ClientHistoryModal.tsx` | История контрагента: все встречи/заказы по всем отчётам + редактирование профиля клиента |
 | `SupplierRegistryPanel.tsx` | Производная аналитика по поставщикам — когорты по месяцу первого заказа или разбивка по году, с CSV-экспортом |
 | `EnsTruCheckPanel.tsx` | Проверка списка кодов ЕНС ТРУ по справочнику `crm_ens_tru_codes` |
+| `NationalExemptionCheckPanel.tsx` | Проверка списка кодов по отдельному справочнику "Нацизъятие" (`crm_ens_tru_national_exemption_codes`) — коды, изъятые из нацрежима закупок |
 | `AdminOrderCreateModal.tsx` / `AdminOrderEditModal.tsx` | Ручное создание/редактирование подтверждённого заказа админом (вне обычного флоу отчёта менеджера) |
 | `PeriodFilterFields.tsx` | Переиспользуемый фильтр периода (пресеты: сегодня/неделя/месяц/N дней/произвольный диапазон) |
 
@@ -63,7 +65,7 @@
 | `clientCpStats.ts` | Подсчёт статистики ЦП по клиенту |
 | `crmClientHistory.ts` | Фильтрация истории контрагента (встречи/заказы) из массива всех отчётов по БИН |
 | `supplierRegistry.ts` | Построение строк реестра поставщиков (когорты/по годам) + CSV-экспорт |
-| `ensTruApi.ts` | Обёртка над RPC `check_ens_tru_codes`/`normalize_ens_tru_code` |
+| `ensTruApi.ts` | Обёртка над RPC `check_ens_tru_codes` и `check_ens_tru_national_exemption_codes` (два независимых справочника, общий парсер ввода `parseEnsTruInput`) |
 | `managerBlockersApi.ts` | Обёртка над RPC блокеров |
 | `managerWorkItemsApi.ts` | Обёртка над RPC work items |
 | `periodBounds.ts` | Границы периодов (месяц/квартал/произвольный диапазон), форматирование дат в локальной таймзоне |

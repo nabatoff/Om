@@ -39,7 +39,7 @@ supabase/
 ```ts
 type CurrentView =
   | 'manager' | 'admin' | 'orders' | 'clients' | 'clientsOrders'
-  | 'registry' | 'ensTru' | 'diggerLeads';
+  | 'registry' | 'ensTru' | 'nationalExemption' | 'diggerLeads';
 ```
 
 плюс вложенный `adminSubView` для вкладок внутри админки (`dashboard`, `kpi`, `staff`, `meetings`, `settings`, `enterpriseLeads`, `enterpriseLeadsAll`, `diggerConversion`). Текущий вид сохраняется в `localStorage` (`om.currentView`, `om.adminSubView` и т.д.), поэтому при перезагрузке страницы пользователь остаётся там же, где был — но URL в адресной строке при этом не меняется (кроме `/enstru`).

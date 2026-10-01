@@ -8,6 +8,7 @@ import {
   X,
   Clock,
   ShieldCheck,
+  ShieldAlert,
   CalendarCheck,
   Target,
   ShoppingBag,
@@ -81,6 +82,7 @@ import { buildClientCrmHistory } from './lib/crmClientHistory';
 import { buildClientListRows, filterReportsForManager } from './lib/clientCpStats';
 import { ClientDirectoryPanel } from './components/ClientDirectoryPanel';
 import { EnsTruCheckPanel } from './components/EnsTruCheckPanel';
+import { NationalExemptionCheckPanel } from './components/NationalExemptionCheckPanel';
 import { SupplierRegistryPanel } from './components/SupplierRegistryPanel';
 import { AdminOrderEditModal } from './components/AdminOrderEditModal';
 import { AdminOrderCreateModal } from './components/AdminOrderCreateModal';
@@ -195,6 +197,7 @@ type CurrentView =
   | 'clientsOrders'
   | 'registry'
   | 'ensTru'
+  | 'nationalExemption'
   | 'diggerLeads';
 type ClientsOrdersSubView = 'clients' | 'orders';
 
@@ -207,6 +210,7 @@ function getSavedCurrentView(): CurrentView {
     raw === 'clientsOrders' ||
     raw === 'registry' ||
     raw === 'ensTru' ||
+    raw === 'nationalExemption' ||
     raw === 'diggerLeads'
   ) {
     return raw;
@@ -469,6 +473,9 @@ const App = () => {
       setCurrentView('manager');
     }
     if (isAdmin && currentView === 'ensTru') {
+      setCurrentView(canAdminWrite ? 'admin' : 'clientsOrders');
+    }
+    if (isAdmin && currentView === 'nationalExemption') {
       setCurrentView(canAdminWrite ? 'admin' : 'clientsOrders');
     }
     if (!isAdmin && currentView === 'clientsOrders') {
@@ -1455,6 +1462,14 @@ const App = () => {
                     <span className="sm:hidden">ЕНС ТРУ</span>
                     <span className="hidden sm:inline">Проверка ЕНС ТРУ</span>
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentView('nationalExemption')}
+                    className={navPill(currentView === 'nationalExemption')}
+                  >
+                    <ShieldAlert size={16} />
+                    Нацизъятие
+                  </button>
                   {isLeadDigger ? (
                     <button
                       type="button"
@@ -1728,6 +1743,8 @@ const App = () => {
         )}
 
         {!isAdmin && currentView === 'ensTru' && <EnsTruCheckPanel />}
+
+        {!isAdmin && currentView === 'nationalExemption' && <NationalExemptionCheckPanel />}
 
         {isLeadDigger && currentView === 'diggerLeads' && (
           <LeadDiggerLeadsPanel mode="history" creatorId={sessionUserId ?? undefined} />

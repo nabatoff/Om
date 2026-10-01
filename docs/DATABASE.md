@@ -32,6 +32,7 @@
 | `crm_manager_blockers` | "Стопперы" менеджера по конкретному контрагенту | `manager_id`, `bin`, `description`, `status` (`active`/…), `resolved_at`, `resolved_report_date` |
 | `crm_manager_work_items` | Активные "в работе" пункты менеджера, привязаны к отчёту | `status`, `next_step`, `deadline`, `blockers` |
 | `crm_ens_tru_codes` | Справочник кодов ЕНС ТРУ (для проверки на публичной странице) | `code`, `name`, `category` |
+| `crm_ens_tru_national_exemption_codes` | Отдельный справочник "Нацизъятие" — коды, подлежащие изъятию из национального режима (закупка только у отечественных товаропроизводителей). Своя проверка внутри приложения, не публичная | `code` (PK), `name`, `characteristic`, `industry`, `basis`, `valid_until` |
 | `crm_settings` | Универсальный key/value для настроек | `key`, `value_numeric` (МРП, недельный прогноз для Telegram и т.д.) |
 
 Внешние ключи почти все указывают на `profiles.id` (кто менеджер/лидоруб/автор) и на `crm_reports.id` (владеющий отчёт дня). `crm_enterprise_leads.bin` ссылается на `crm_clients.bin`.
@@ -47,7 +48,7 @@ RLS включена на всех таблицах. Реальная постр
 
 При добавлении новой таблицы/RPC — явно решайте, к какой из этих моделей она относится, не полагайтесь на "как у соседней таблицы".
 
-## Каталог RPC-функций (77 шт, все в схеме `public`)
+## Каталог RPC-функций (78 шт, все в схеме `public`)
 
 ### Роли/доступ
 `is_admin`, `is_admin_write`, `is_lead_digger`, `is_sales_manager`, `user_may_access_crm_report(rid)`, `user_may_write_crm_report_row(m|mid)`
@@ -81,7 +82,7 @@ RLS включена на всех таблицах. Реальная постр
 `get_crm_mrp`/`set_crm_mrp`, `get_crm_telegram_weekly_forecast`/`set_crm_telegram_weekly_forecast`, `get_crm_admin_analytics_tab_enabled`/`set_crm_admin_analytics_tab_enabled`
 
 ### ЕНС ТРУ
-`check_ens_tru_codes(codes[])`, `normalize_ens_tru_code(raw)`
+`check_ens_tru_codes(codes[])`, `normalize_ens_tru_code(raw)`, `check_ens_tru_national_exemption_codes(codes[])` (отдельная проверка "Нацизъятие", см. `docs/BUSINESS_LOGIC.md`)
 
 ### Telegram-отчёты (вызываются из edge function `telegram-daily-report`)
 `telegram_daily_analytics_rows(date)`, `telegram_daily_manager_rows(date)`, `telegram_daily_digger_rows(date)`, `telegram_confirmed_orders_totals(tz[, date])`

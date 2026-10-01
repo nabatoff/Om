@@ -50,6 +50,44 @@ export function parseEnsTruInput(raw: string): ParsedEnsTruInput {
   return { codes, invalid };
 }
 
+export type NationalExemptionCheckResult = {
+  inputCode: string;
+  found: boolean;
+  entries: Array<{ name: string; characteristic: string; industry: string }>;
+};
+
+/** Проверка по справочнику "Нацизъятие" (отдельная база, см. docs/BUSINESS_LOGIC.md). */
+export async function checkEnsTruNationalExemptionCodesApi(
+  codes: string[],
+): Promise<NationalExemptionCheckResult[]> {
+  if (codes.length === 0) return [];
+  const { data, error } = await getSupabase().rpc('check_ens_tru_national_exemption_codes', { p_codes: codes });
+  if (error) throw error;
+  const rows = (data ?? []) as Array<{
+    input_code: string;
+    found: boolean;
+    name: string | null;
+    characteristic: string | null;
+    industry: string | null;
+  }>;
+
+  const byCode = new Map<string, Array<{ name: string; characteristic: string; industry: string }>>();
+  for (const r of rows) {
+    if (!r.found || !r.name) continue;
+    const list = byCode.get(r.input_code) ?? [];
+    list.push({ name: r.name, characteristic: r.characteristic ?? '', industry: r.industry ?? '' });
+    byCode.set(r.input_code, list);
+  }
+
+  return codes.map((code) => {
+    const entries = byCode.get(code);
+    if (entries && entries.length > 0) {
+      return { inputCode: code, found: true, entries };
+    }
+    return { inputCode: code, found: false, entries: [] };
+  });
+}
+
 export async function checkEnsTruCodesApi(codes: string[]): Promise<EnsTruCheckResult[]> {
   if (codes.length === 0) return [];
   const { data, error } = await getSupabase().rpc('check_ens_tru_codes', { p_codes: codes });
