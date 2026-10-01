@@ -3,6 +3,7 @@ import { getSupabase } from './supabase';
 export type BinEnsTruCodeResult = {
   code: string;
   names: string[];
+  canonicalName: string | null;
   contractCount: number;
   contractSum: number | null;
   sumCapped: boolean;

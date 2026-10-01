@@ -113,18 +113,19 @@ async function resolveYearId(year: number): Promise<number | null> {
 async function countAndSumContracts(
   code: string,
   yearId: number,
-): Promise<{ count: number; sum: number | null; capped: boolean }> {
+): Promise<{ count: number; sum: number | null; capped: boolean; sampleContractId: number | null }> {
   type ContractsPage = {
     count: number;
-    results: Array<{ contract_price_with_vat?: number | string | null }>;
+    results: Array<{ id: number; contract_price_with_vat?: number | string | null }>;
   };
 
   const priceFilter = `&contract_price_with_vat__lte=${MAX_CONTRACT_PRICE}`;
   const firstUrl = `${ZAKUP_BASE}/api/core/api/public/contracts/?limit=1&offset=0&enstru_code=${encodeURIComponent(code)}&year_id=${yearId}${priceFilter}`;
   const first = await fetchJson<ContractsPage>(firstUrl);
   const count = first.count ?? 0;
-  if (count === 0) return { count: 0, sum: 0, capped: false };
-  if (count > SUM_CAP) return { count, sum: null, capped: true };
+  const sampleContractId = first.results?.[0]?.id ?? null;
+  if (count === 0) return { count: 0, sum: 0, capped: false, sampleContractId: null };
+  if (count > SUM_CAP) return { count, sum: null, capped: true, sampleContractId };
 
   const pageSize = 100;
   let sum = 0;
@@ -138,7 +139,21 @@ async function countAndSumContracts(
     }
     offset += pageSize;
   }
-  return { count, sum, capped: false };
+  return { count, sum, capped: false, sampleContractId };
+}
+
+/**
+ * Официальное название кода ЕНС ТРУ берётся не из списка договоров (там его нет), а из
+ * позиций ("предметов") одного конкретного договора, где этот код встречается —
+ * название в справочнике одно и то же для всех договоров, доставать его из каждого смысла нет.
+ */
+async function fetchCanonicalCodeName(code: string, contractId: number): Promise<string | null> {
+  type Subject = { plan_item?: { enstru?: { code?: string; name_ru?: string; short_description_ru?: string } } };
+  const subjects = await fetchJson<Subject[]>(`${ZAKUP_BASE}/api/core/api/public/contracts/${contractId}/subjects/`);
+  const match = subjects.find((s) => s.plan_item?.enstru?.code === code);
+  const enstru = match?.plan_item?.enstru;
+  if (!enstru?.name_ru) return null;
+  return enstru.short_description_ru ? `${enstru.name_ru} — ${enstru.short_description_ru}` : enstru.name_ru;
 }
 
 Deno.serve(async (req: Request) => {
@@ -232,6 +247,7 @@ Deno.serve(async (req: Request) => {
     const results: Array<{
       code: string;
       names: string[];
+      canonicalName: string | null;
       contractCount: number;
       contractSum: number | null;
       sumCapped: boolean;
@@ -241,10 +257,15 @@ Deno.serve(async (req: Request) => {
     // Последовательно, по одному коду — не перегружаем внешний сайт параллельными запросами.
     for (const entry of codes) {
       try {
-        const { count, sum, capped } = await countAndSumContracts(entry.code, yearId);
+        const { count, sum, capped, sampleContractId } = await countAndSumContracts(entry.code, yearId);
+        let canonicalName: string | null = null;
+        if (sampleContractId != null) {
+          canonicalName = await fetchCanonicalCodeName(entry.code, sampleContractId).catch(() => null);
+        }
         results.push({
           code: entry.code,
           names: Array.from(entry.names),
+          canonicalName,
           contractCount: count,
           contractSum: sum,
           sumCapped: capped,
@@ -253,6 +274,7 @@ Deno.serve(async (req: Request) => {
         results.push({
           code: entry.code,
           names: Array.from(entry.names),
+          canonicalName: null,
           contractCount: 0,
           contractSum: null,
           sumCapped: false,

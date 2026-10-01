@@ -144,10 +144,11 @@ export function BinEnsTruCheckPanel() {
             </p>
           ) : (
           <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[760px]">
+            <table className="w-full text-left border-collapse min-w-[940px]">
               <thead>
                 <tr className="bg-gray-50/50 text-[10px] font-bold text-gray-400 border-b border-gray-100 uppercase tracking-wider">
                   <th className="py-4 px-6">Код ЕНС ТРУ</th>
+                  <th className="py-4 px-4">Наименование (ЕНС ТРУ)</th>
                   <th className="py-4 px-4">Товар (по реестру)</th>
                   <th
                     className="py-4 px-4 text-center cursor-pointer hover:bg-gray-100/80 select-none"
@@ -173,6 +174,9 @@ export function BinEnsTruCheckPanel() {
                 {sortedCodes.map((row) => (
                   <tr key={row.code} className="hover:bg-gray-50/50 text-sm">
                     <td className="py-4 px-6 font-mono font-bold text-gray-900 whitespace-nowrap">{row.code}</td>
+                    <td className="py-4 px-4 text-gray-800 text-xs font-bold max-w-xs">
+                      {row.canonicalName ?? <span className="text-gray-400 font-normal">—</span>}
+                    </td>
                     <td className="py-4 px-4 text-gray-600 text-xs max-w-sm">
                       {row.names.length > 0 ? row.names.join('; ') : '—'}
                     </td>
