@@ -14,6 +14,7 @@ export type BinEnsTruCheckResponse = {
   bin: string;
   year: number;
   sumCap: number;
+  maxContractPrice: number;
   codes: BinEnsTruCodeResult[];
   message?: string;
 };

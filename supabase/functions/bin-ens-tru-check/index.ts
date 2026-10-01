@@ -19,7 +19,9 @@ const cors: Record<string, string> = {
 const ONDIRIS_BASE = "https://e-ondiris.gov.kz";
 const ZAKUP_BASE = "https://zakup.gov.kz";
 const TARGET_YEAR = 2025;
-/** Если за код в целевом году больше стольких договоров — не считаем сумму, только количество. */
+/** Учитываем только договоры дешевле этого порога (₸) — верхняя граница суммы договора. */
+const MAX_CONTRACT_PRICE = 17_300_000;
+/** Если за код в целевом году больше стольких договоров (после фильтра по сумме) — не считаем сумму, только количество. */
 const SUM_CAP = 500;
 const FETCH_TIMEOUT_MS = 12000;
 const CODE_RE = /\d{6}\.\d{3}\.\d{6}/g;
@@ -117,7 +119,8 @@ async function countAndSumContracts(
     results: Array<{ contract_price_with_vat?: number | string | null }>;
   };
 
-  const firstUrl = `${ZAKUP_BASE}/api/core/api/public/contracts/?limit=1&offset=0&enstru_code=${encodeURIComponent(code)}&year_id=${yearId}`;
+  const priceFilter = `&contract_price_with_vat__lte=${MAX_CONTRACT_PRICE}`;
+  const firstUrl = `${ZAKUP_BASE}/api/core/api/public/contracts/?limit=1&offset=0&enstru_code=${encodeURIComponent(code)}&year_id=${yearId}${priceFilter}`;
   const first = await fetchJson<ContractsPage>(firstUrl);
   const count = first.count ?? 0;
   if (count === 0) return { count: 0, sum: 0, capped: false };
@@ -127,7 +130,7 @@ async function countAndSumContracts(
   let sum = 0;
   let offset = 0;
   while (offset < count) {
-    const url = `${ZAKUP_BASE}/api/core/api/public/contracts/?limit=${pageSize}&offset=${offset}&enstru_code=${encodeURIComponent(code)}&year_id=${yearId}`;
+    const url = `${ZAKUP_BASE}/api/core/api/public/contracts/?limit=${pageSize}&offset=${offset}&enstru_code=${encodeURIComponent(code)}&year_id=${yearId}${priceFilter}`;
     const page = await fetchJson<ContractsPage>(url);
     for (const row of page.results ?? []) {
       const v = row.contract_price_with_vat;
@@ -261,7 +264,14 @@ Deno.serve(async (req: Request) => {
     results.sort((a, b) => (b.contractCount || 0) - (a.contractCount || 0));
 
     return new Response(
-      JSON.stringify({ ok: true, bin, year: TARGET_YEAR, sumCap: SUM_CAP, codes: results }),
+      JSON.stringify({
+        ok: true,
+        bin,
+        year: TARGET_YEAR,
+        sumCap: SUM_CAP,
+        maxContractPrice: MAX_CONTRACT_PRICE,
+        codes: results,
+      }),
       { headers: { ...cors, "Content-Type": "application/json" } },
     );
   } catch (e) {

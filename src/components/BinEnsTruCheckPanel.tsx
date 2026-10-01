@@ -1,10 +1,12 @@
-import { useState } from 'react';
-import { Factory, Loader2, Search } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { ChevronDown, ChevronUp, Factory, Loader2, Search } from 'lucide-react';
 import { checkBinEnsTruContractsApi, type BinEnsTruCodeResult } from '../lib/binEnsTruCheckApi';
 
 function formatMoney(n: number): string {
   return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(n);
 }
+
+type SortKey = 'contractCount' | 'contractSum';
 
 export function BinEnsTruCheckPanel() {
   const [bin, setBin] = useState('');
@@ -12,8 +14,10 @@ export function BinEnsTruCheckPanel() {
   const [codes, setCodes] = useState<BinEnsTruCodeResult[]>([]);
   const [year, setYear] = useState<number | null>(null);
   const [sumCap, setSumCap] = useState<number | null>(null);
+  const [maxContractPrice, setMaxContractPrice] = useState<number | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' } | null>(null);
 
   const handleCheck = async () => {
     const trimmed = bin.trim();
@@ -32,6 +36,7 @@ export function BinEnsTruCheckPanel() {
       setCodes(res.codes);
       setYear(res.year ?? null);
       setSumCap(res.sumCap ?? null);
+      setMaxContractPrice(res.maxContractPrice ?? null);
       setMessage(res.message ?? null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Не удалось выполнить проверку');
@@ -41,9 +46,40 @@ export function BinEnsTruCheckPanel() {
     }
   };
 
-  const totalContracts = codes.reduce((sum, c) => sum + c.contractCount, 0);
-  const totalSum = codes.reduce((sum, c) => (c.contractSum != null ? sum + c.contractSum : sum), 0);
-  const hasCapped = codes.some((c) => c.sumCapped);
+  const visibleCodes = useMemo(() => codes.filter((c) => c.contractCount > 0), [codes]);
+
+  const sortedCodes = useMemo(() => {
+    if (!sortConfig) return visibleCodes;
+    const { key, direction } = sortConfig;
+    const mul = direction === 'asc' ? 1 : -1;
+    return [...visibleCodes].sort((a, b) => {
+      const av = key === 'contractCount' ? a.contractCount : a.contractSum ?? -1;
+      const bv = key === 'contractCount' ? b.contractCount : b.contractSum ?? -1;
+      return (av - bv) * mul;
+    });
+  }, [visibleCodes, sortConfig]);
+
+  const handleSort = (key: SortKey) => {
+    setSortConfig((prev) => {
+      if (prev?.key === key) {
+        return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+      }
+      return { key, direction: 'desc' };
+    });
+  };
+
+  const SortIcon = ({ col }: { col: SortKey }) =>
+    sortConfig?.key === col ? (
+      sortConfig.direction === 'asc' ? (
+        <ChevronUp size={14} className="ml-1 text-indigo-600" />
+      ) : (
+        <ChevronDown size={14} className="ml-1 text-indigo-600" />
+      )
+    ) : null;
+
+  const totalContracts = visibleCodes.reduce((sum, c) => sum + c.contractCount, 0);
+  const totalSum = visibleCodes.reduce((sum, c) => (c.contractSum != null ? sum + c.contractSum : sum), 0);
+  const hasCapped = visibleCodes.some((c) => c.sumCapped);
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-500 text-left">
@@ -89,26 +125,52 @@ export function BinEnsTruCheckPanel() {
 
       {codes.length > 0 && (
         <div className="space-y-3">
+          {maxContractPrice != null ? (
+            <p className="text-[11px] text-gray-400 font-medium">
+              Учитываются договоры стоимостью до {formatMoney(maxContractPrice)} ₸
+            </p>
+          ) : null}
           <p className="text-xs text-gray-500 font-bold">
-            Кодов найдено: <span className="text-indigo-700">{codes.length}</span>
+            Кодов с договорами: <span className="text-indigo-700">{visibleCodes.length}</span>
             {' · '}
             Договоров за {year}: <span className="text-indigo-700">{totalContracts}</span>
             {' · '}
             Сумма{hasCapped ? ' (без кодов с превышением лимита)' : ''}:{' '}
             <span className="text-emerald-700">{formatMoney(totalSum)} ₸</span>
           </p>
+          {visibleCodes.length === 0 ? (
+            <p className="text-sm text-gray-400 font-medium">
+              По найденным кодам ЕНС ТРУ договоров за {year} год не было.
+            </p>
+          ) : (
           <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-x-auto">
             <table className="w-full text-left border-collapse min-w-[760px]">
               <thead>
                 <tr className="bg-gray-50/50 text-[10px] font-bold text-gray-400 border-b border-gray-100 uppercase tracking-wider">
                   <th className="py-4 px-6">Код ЕНС ТРУ</th>
                   <th className="py-4 px-4">Товар (по реестру)</th>
-                  <th className="py-4 px-4 text-center">Договоров за {year}</th>
-                  <th className="py-4 px-6 text-right">Сумма</th>
+                  <th
+                    className="py-4 px-4 text-center cursor-pointer hover:bg-gray-100/80 select-none"
+                    onClick={() => handleSort('contractCount')}
+                  >
+                    <div className="flex items-center justify-center">
+                      Договоров за {year}
+                      <SortIcon col="contractCount" />
+                    </div>
+                  </th>
+                  <th
+                    className="py-4 px-6 text-right cursor-pointer hover:bg-gray-100/80 select-none"
+                    onClick={() => handleSort('contractSum')}
+                  >
+                    <div className="flex items-center justify-end">
+                      Сумма
+                      <SortIcon col="contractSum" />
+                    </div>
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {codes.map((row) => (
+                {sortedCodes.map((row) => (
                   <tr key={row.code} className="hover:bg-gray-50/50 text-sm">
                     <td className="py-4 px-6 font-mono font-bold text-gray-900 whitespace-nowrap">{row.code}</td>
                     <td className="py-4 px-4 text-gray-600 text-xs max-w-sm">
@@ -131,6 +193,7 @@ export function BinEnsTruCheckPanel() {
               </tbody>
             </table>
           </div>
+          )}
         </div>
       )}
     </div>
