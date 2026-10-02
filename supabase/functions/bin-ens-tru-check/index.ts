@@ -23,6 +23,8 @@ const TARGET_YEAR = 2025;
 const MAX_CONTRACT_PRICE = 17_300_000;
 /** Если за код в целевом году больше стольких договоров (после фильтра по сумме) — не считаем сумму, только количество. */
 const SUM_CAP = 500;
+/** Для собственных договоров поставщика — до скольких договоров за год считаем суммы (по 100 на запрос). */
+const SUPPLIER_SUM_CAP = 3000;
 const FETCH_TIMEOUT_MS = 12000;
 const CODE_RE = /\d{6}\.\d{3}\.\d{6}/g;
 
@@ -103,6 +105,56 @@ async function collectFromFullKzRegistry(bin: string, codes: Map<string, CodeEnt
     if (!data.meta?.hasNextPage) break;
     page += 1;
   }
+}
+
+type SupplierStats = {
+  name: string;
+  count: number;
+  sum: number | null;
+  avgCheck: number | null;
+  /** Договоры не дороже MAX_CONTRACT_PRICE. */
+  underCount: number;
+  underSum: number | null;
+  /** Договоров слишком много — суммы не считались, только количество. */
+  capped: boolean;
+};
+
+/** Собственные договоры поставщика (он — сторона-поставщик) за год: количество, сумма, средний чек. */
+async function fetchSupplierStats(bin: string, yearId: number): Promise<SupplierStats | null> {
+  const orgs = await fetchJson<Array<{ id: number; iin_bin?: string; name?: string }>>(
+    `${ZAKUP_BASE}/api/core/api/public/organizations/?q=${encodeURIComponent(bin)}`,
+  );
+  const org = (Array.isArray(orgs) ? orgs : []).find((o) => o.iin_bin === bin);
+  if (!org) return null;
+
+  type Page = { count: number; results: Array<{ contract_price_with_vat?: number | string | null }> };
+  const base = `${ZAKUP_BASE}/api/core/api/public/contracts/?supplier_organization_id=${org.id}&year_id=${yearId}`;
+  const first = await fetchJson<Page>(`${base}&limit=1&offset=0`);
+  const count = first.count ?? 0;
+  const name = org.name ?? "";
+  if (count === 0) {
+    return { name, count: 0, sum: 0, avgCheck: null, underCount: 0, underSum: 0, capped: false };
+  }
+  if (count > SUPPLIER_SUM_CAP) {
+    const under = await fetchJson<Page>(`${base}&limit=1&offset=0&contract_price_with_vat__lte=${MAX_CONTRACT_PRICE}`);
+    return { name, count, sum: null, avgCheck: null, underCount: under.count ?? 0, underSum: null, capped: true };
+  }
+
+  let sum = 0;
+  let underCount = 0;
+  let underSum = 0;
+  for (let offset = 0; offset < count; offset += 100) {
+    const page = await fetchJson<Page>(`${base}&limit=100&offset=${offset}`);
+    for (const row of page.results ?? []) {
+      const v = Number(row.contract_price_with_vat) || 0;
+      sum += v;
+      if (v <= MAX_CONTRACT_PRICE) {
+        underCount += 1;
+        underSum += v;
+      }
+    }
+  }
+  return { name, count, sum, avgCheck: count > 0 ? sum / count : null, underCount, underSum, capped: false };
 }
 
 async function resolveYearId(year: number): Promise<number | null> {
@@ -219,28 +271,40 @@ Deno.serve(async (req: Request) => {
 
   try {
     const codeMap = new Map<string, CodeEntry>();
-    await Promise.all([
-      collectFromRegistryFront(bin, codeMap).catch((e) => {
-        console.error("registry-front failed", e);
-      }),
-      collectFromFullKzRegistry(bin, codeMap).catch((e) => {
-        console.error("full_kz registry failed", e);
-      }),
-    ]);
-
-    if (codeMap.size === 0) {
-      return new Response(
-        JSON.stringify({ ok: true, bin, codes: [], message: "В реестрах товаропроизводителей по этому БИН ничего не найдено" }),
-        { headers: { ...cors, "Content-Type": "application/json" } },
-      );
-    }
-
     const yearId = await resolveYearId(TARGET_YEAR);
     if (yearId == null) {
       return new Response(JSON.stringify({ error: `Не удалось определить код года ${TARGET_YEAR} на zakup.gov.kz` }), {
         status: 502,
         headers: { ...cors, "Content-Type": "application/json" },
       });
+    }
+
+    const [, , supplier] = await Promise.all([
+      collectFromRegistryFront(bin, codeMap).catch((e) => {
+        console.error("registry-front failed", e);
+      }),
+      collectFromFullKzRegistry(bin, codeMap).catch((e) => {
+        console.error("full_kz registry failed", e);
+      }),
+      fetchSupplierStats(bin, yearId).catch((e) => {
+        console.error("supplier stats failed", e);
+        return null;
+      }),
+    ]);
+
+    if (codeMap.size === 0) {
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          bin,
+          year: TARGET_YEAR,
+          maxContractPrice: MAX_CONTRACT_PRICE,
+          supplier,
+          codes: [],
+          message: "В реестрах товаропроизводителей по этому БИН ничего не найдено",
+        }),
+        { headers: { ...cors, "Content-Type": "application/json" } },
+      );
     }
 
     const codes = Array.from(codeMap.values());
@@ -292,6 +356,7 @@ Deno.serve(async (req: Request) => {
         year: TARGET_YEAR,
         sumCap: SUM_CAP,
         maxContractPrice: MAX_CONTRACT_PRICE,
+        supplier,
         codes: results,
       }),
       { headers: { ...cors, "Content-Type": "application/json" } },

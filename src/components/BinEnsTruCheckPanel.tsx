@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp, Factory, Loader2, Search } from 'lucide-react';
-import { checkBinEnsTruContractsApi, type BinEnsTruCodeResult } from '../lib/binEnsTruCheckApi';
+import { checkBinEnsTruContractsApi, type BinEnsTruCodeResult, type BinSupplierStats } from '../lib/binEnsTruCheckApi';
 
 function formatMoney(n: number): string {
   return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(n);
@@ -15,6 +15,8 @@ export function BinEnsTruCheckPanel() {
   const [year, setYear] = useState<number | null>(null);
   const [sumCap, setSumCap] = useState<number | null>(null);
   const [maxContractPrice, setMaxContractPrice] = useState<number | null>(null);
+  const [supplier, setSupplier] = useState<BinSupplierStats | null>(null);
+  const [checked, setChecked] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' } | null>(null);
@@ -24,6 +26,8 @@ export function BinEnsTruCheckPanel() {
     if (!/^\d{12}$/.test(trimmed)) {
       setError('БИН/ИИН должен состоять из 12 цифр');
       setCodes([]);
+      setSupplier(null);
+      setChecked(false);
       setMessage(null);
       return;
     }
@@ -37,10 +41,14 @@ export function BinEnsTruCheckPanel() {
       setYear(res.year ?? null);
       setSumCap(res.sumCap ?? null);
       setMaxContractPrice(res.maxContractPrice ?? null);
+      setSupplier(res.supplier ?? null);
+      setChecked(true);
       setMessage(res.message ?? null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Не удалось выполнить проверку');
       setCodes([]);
+      setSupplier(null);
+      setChecked(false);
     } finally {
       setChecking(false);
     }
@@ -118,6 +126,68 @@ export function BinEnsTruCheckPanel() {
           {checking ? 'Проверка… (может занять до минуты)' : 'Проверить'}
         </button>
       </section>
+
+      {checked && supplier ? (
+        <section className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm space-y-4">
+          <div>
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+              Договоры самого поставщика за {year}
+            </p>
+            <p className="text-sm font-black text-gray-900 mt-0.5">{supplier.name}</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="rounded-xl border border-gray-100 bg-gray-50/60 p-4 space-y-2">
+              <p className="text-[10px] font-bold text-gray-400 uppercase">Все договоры</p>
+              <div className="flex flex-wrap gap-x-8 gap-y-2">
+                <div>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase">Кол-во</p>
+                  <p className="text-lg font-black text-gray-900">{supplier.count}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase">Сумма</p>
+                  <p className="text-lg font-black text-emerald-700 whitespace-nowrap">
+                    {supplier.sum != null ? `${formatMoney(supplier.sum)} ₸` : 'не считали'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase">Средний чек</p>
+                  <p className="text-lg font-black text-indigo-700 whitespace-nowrap">
+                    {supplier.avgCheck != null ? `${formatMoney(supplier.avgCheck)} ₸` : '—'}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="rounded-xl border border-gray-100 bg-gray-50/60 p-4 space-y-2">
+              <p className="text-[10px] font-bold text-gray-400 uppercase">
+                Договоры до {maxContractPrice != null ? formatMoney(maxContractPrice) : '—'} ₸
+              </p>
+              <div className="flex flex-wrap gap-x-8 gap-y-2">
+                <div>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase">Кол-во</p>
+                  <p className="text-lg font-black text-gray-900">{supplier.underCount}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase">Сумма</p>
+                  <p className="text-lg font-black text-emerald-700 whitespace-nowrap">
+                    {supplier.underSum != null ? `${formatMoney(supplier.underSum)} ₸` : 'не считали'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+          {supplier.capped ? (
+            <p className="text-[11px] text-amber-600 font-medium">
+              Договоров очень много — суммы не считались, показано только количество.
+            </p>
+          ) : null}
+        </section>
+      ) : null}
+
+      {checked && !supplier && !error ? (
+        <p className="text-sm text-gray-500 font-medium max-w-xl">
+          На zakup.gov.kz организация с этим БИН не найдена — собственных договоров поставщика нет.
+        </p>
+      ) : null}
 
       {message ? (
         <p className="text-sm text-gray-500 font-medium max-w-xl">{message}</p>

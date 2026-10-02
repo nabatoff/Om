@@ -10,12 +10,24 @@ export type BinEnsTruCodeResult = {
   error?: string;
 };
 
+/** Собственные договоры поставщика (он — сторона-поставщик) за год. */
+export type BinSupplierStats = {
+  name: string;
+  count: number;
+  sum: number | null;
+  avgCheck: number | null;
+  underCount: number;
+  underSum: number | null;
+  capped: boolean;
+};
+
 export type BinEnsTruCheckResponse = {
   ok: true;
   bin: string;
   year: number;
   sumCap: number;
   maxContractPrice: number;
+  supplier: BinSupplierStats | null;
   codes: BinEnsTruCodeResult[];
   message?: string;
 };
