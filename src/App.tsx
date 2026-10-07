@@ -657,13 +657,18 @@ const App = () => {
         .filter(Boolean),
     );
     const priorFromDb = collectConductedMeetingBins(allReports, currentReportId);
+    // priorKrupBins/priorNewBins — только история из ДРУГИХ отчётов (для планов). Проведённые встречи
+    // этого же отчёта копим в отдельных наборах, иначе сегодняшний факт «Новая» превращает
+    // сегодняшний же план «Новая» в «Повторная».
     const priorKrupBins = new Set(priorFromDb.krupBins);
     const priorNewBins = new Set(priorFromDb.newBins);
+    const conductedKrupBins = new Set(priorFromDb.krupBins);
+    const conductedNewBins = new Set(priorFromDb.newBins);
 
     const rewriteConductedType = <T extends { bin: string; type: string }>(row: T, rowIdx: number): T => {
       const b = row.bin.replace(/\D/g, '');
-      let hasPriorNew = priorNewBins.has(b);
-      let hasPriorKrup = priorKrupBins.has(b);
+      let hasPriorNew = conductedNewBins.has(b);
+      let hasPriorKrup = conductedKrupBins.has(b);
       if (!hasPriorNew || !hasPriorKrup) {
         for (let i = 0; i < rowIdx; i++) {
           const prev = conductedMeetings[i];
@@ -679,8 +684,8 @@ const App = () => {
         hasPriorKrup,
         hasPriorNew,
       });
-      if (isEnterpriseLeadMeetingType(next)) priorKrupBins.add(b);
-      if (isNewMeetingType(next)) priorNewBins.add(b);
+      if (isEnterpriseLeadMeetingType(next)) conductedKrupBins.add(b);
+      if (isNewMeetingType(next)) conductedNewBins.add(b);
       return next === row.type ? row : { ...row, type: next };
     };
 
