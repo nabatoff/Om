@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
-import { ChevronDown, ChevronUp, Factory, Loader2, Search } from 'lucide-react';
+import { ChevronDown, ChevronUp, Download, Factory, Loader2, Search } from 'lucide-react';
 import { checkBinEnsTruContractsApi, type BinEnsTruCodeResult, type BinSupplierStats } from '../lib/binEnsTruCheckApi';
+import { exportBinCheckToExcel } from '../lib/binEnsTruExport';
 
 function formatMoney(n: number): string {
   return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(n);
@@ -17,6 +18,7 @@ export function BinEnsTruCheckPanel() {
   const [maxContractPrice, setMaxContractPrice] = useState<number | null>(null);
   const [supplier, setSupplier] = useState<BinSupplierStats | null>(null);
   const [checked, setChecked] = useState(false);
+  const [checkedBin, setCheckedBin] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' } | null>(null);
@@ -43,6 +45,7 @@ export function BinEnsTruCheckPanel() {
       setMaxContractPrice(res.maxContractPrice ?? null);
       setSupplier(res.supplier ?? null);
       setChecked(true);
+      setCheckedBin(trimmed);
       setMessage(res.message ?? null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Не удалось выполнить проверку');
@@ -125,6 +128,25 @@ export function BinEnsTruCheckPanel() {
           {checking ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
           {checking ? 'Проверка… (может занять до минуты)' : 'Проверить'}
         </button>
+        {checked && (supplier || visibleCodes.length > 0) ? (
+          <button
+            type="button"
+            onClick={() =>
+              exportBinCheckToExcel({
+                bin: checkedBin,
+                year,
+                maxContractPrice,
+                sumCap,
+                supplier,
+                codes: sortedCodes,
+              })
+            }
+            className="ml-2 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-700 text-xs font-bold uppercase tracking-wider hover:bg-gray-50"
+          >
+            <Download size={14} />
+            Выгрузить в Excel
+          </button>
+        ) : null}
       </section>
 
       {checked && supplier ? (

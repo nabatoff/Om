@@ -75,6 +75,7 @@
 | `telegramDailyDigest.ts` | Выбор "лучшего" отчёта менеджера за день для дайджеста (не сама отправка) |
 | `telegramEnterpriseLead.ts` | Уведомление в Telegram о новом лиде "Крупный бизнес" — вебхук или Edge Function `telegram-enterprise-lead` |
 | `binEnsTruCheckApi.ts` | Обёртка над Edge Function `bin-ens-tru-check` («Проверка по БИН») |
+| `binEnsTruExport.ts` | Выгрузка результата «Проверка по БИН» в Excel (XML 2003, `.xls`): сводка по поставщику + таблица кодов в текущей сортировке; числа пишутся как Number |
 
 ## Edge Functions (`supabase/functions/`)
 
