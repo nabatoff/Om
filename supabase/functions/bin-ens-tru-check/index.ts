@@ -162,13 +162,20 @@ async function resolveYearId(year: number): Promise<number | null> {
   return years.find((y) => y.year === year)?.id ?? null;
 }
 
+type MethodTotals = Map<string, { count: number; sum: number }>;
+
 async function countAndSumContracts(
   code: string,
   yearId: number,
+  methods: MethodTotals,
 ): Promise<{ count: number; sum: number | null; capped: boolean; sampleContractId: number | null }> {
   type ContractsPage = {
     count: number;
-    results: Array<{ id: number; contract_price_with_vat?: number | string | null }>;
+    results: Array<{
+      id: number;
+      contract_price_with_vat?: number | string | null;
+      purchase_method_name?: string | null;
+    }>;
   };
 
   const priceFilter = `&contract_price_with_vat__lte=${MAX_CONTRACT_PRICE}`;
@@ -187,7 +194,13 @@ async function countAndSumContracts(
     const page = await fetchJson<ContractsPage>(url);
     for (const row of page.results ?? []) {
       const v = row.contract_price_with_vat;
-      if (v != null) sum += Number(v) || 0;
+      const value = v != null ? Number(v) || 0 : 0;
+      sum += value;
+      const method = row.purchase_method_name?.trim() || "Не указан";
+      const m = methods.get(method) ?? { count: 0, sum: 0 };
+      m.count += 1;
+      m.sum += value;
+      methods.set(method, m);
     }
     offset += pageSize;
   }
@@ -318,10 +331,11 @@ Deno.serve(async (req: Request) => {
       error?: string;
     }> = [];
 
+    const methodTotals: MethodTotals = new Map();
     // Последовательно, по одному коду — не перегружаем внешний сайт параллельными запросами.
     for (const entry of codes) {
       try {
-        const { count, sum, capped, sampleContractId } = await countAndSumContracts(entry.code, yearId);
+        const { count, sum, capped, sampleContractId } = await countAndSumContracts(entry.code, yearId, methodTotals);
         let canonicalName: string | null = null;
         if (sampleContractId != null) {
           canonicalName = await fetchCanonicalCodeName(entry.code, sampleContractId).catch(() => null);
@@ -349,6 +363,11 @@ Deno.serve(async (req: Request) => {
 
     results.sort((a, b) => (b.contractCount || 0) - (a.contractCount || 0));
 
+    // Способы закупки — только по кодам, у которых суммы считались (договоры подгружались целиком).
+    const methods = Array.from(methodTotals, ([name, v]) => ({ name, count: v.count, sum: v.sum })).sort(
+      (a, b) => b.sum - a.sum,
+    );
+
     return new Response(
       JSON.stringify({
         ok: true,
@@ -357,6 +376,7 @@ Deno.serve(async (req: Request) => {
         sumCap: SUM_CAP,
         maxContractPrice: MAX_CONTRACT_PRICE,
         supplier,
+        methods,
         codes: results,
       }),
       { headers: { ...cors, "Content-Type": "application/json" } },

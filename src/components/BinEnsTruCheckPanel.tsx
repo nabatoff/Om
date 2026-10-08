@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp, Download, Factory, Loader2, Search } from 'lucide-react';
-import { checkBinEnsTruContractsApi, type BinEnsTruCodeResult, type BinSupplierStats } from '../lib/binEnsTruCheckApi';
+import { checkBinEnsTruContractsApi, type BinEnsTruCodeResult, type BinPurchaseMethodStat, type BinSupplierStats } from '../lib/binEnsTruCheckApi';
 import { exportBinCheckToExcel } from '../lib/binEnsTruExport';
 
 function formatMoney(n: number): string {
@@ -17,6 +17,7 @@ export function BinEnsTruCheckPanel() {
   const [sumCap, setSumCap] = useState<number | null>(null);
   const [maxContractPrice, setMaxContractPrice] = useState<number | null>(null);
   const [supplier, setSupplier] = useState<BinSupplierStats | null>(null);
+  const [methods, setMethods] = useState<BinPurchaseMethodStat[]>([]);
   const [checked, setChecked] = useState(false);
   const [checkedBin, setCheckedBin] = useState('');
   const [message, setMessage] = useState<string | null>(null);
@@ -29,6 +30,7 @@ export function BinEnsTruCheckPanel() {
       setError('БИН/ИИН должен состоять из 12 цифр');
       setCodes([]);
       setSupplier(null);
+      setMethods([]);
       setChecked(false);
       setMessage(null);
       return;
@@ -44,6 +46,7 @@ export function BinEnsTruCheckPanel() {
       setSumCap(res.sumCap ?? null);
       setMaxContractPrice(res.maxContractPrice ?? null);
       setSupplier(res.supplier ?? null);
+      setMethods(res.methods ?? []);
       setChecked(true);
       setCheckedBin(trimmed);
       setMessage(res.message ?? null);
@@ -51,6 +54,7 @@ export function BinEnsTruCheckPanel() {
       setError(e instanceof Error ? e.message : 'Не удалось выполнить проверку');
       setCodes([]);
       setSupplier(null);
+      setMethods([]);
       setChecked(false);
     } finally {
       setChecking(false);
@@ -91,6 +95,8 @@ export function BinEnsTruCheckPanel() {
   const totalContracts = visibleCodes.reduce((sum, c) => sum + c.contractCount, 0);
   const totalSum = visibleCodes.reduce((sum, c) => (c.contractSum != null ? sum + c.contractSum : sum), 0);
   const hasCapped = visibleCodes.some((c) => c.sumCapped);
+  const methodsCount = methods.reduce((a, m) => a + m.count, 0);
+  const methodsSum = methods.reduce((a, m) => a + m.sum, 0);
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-500 text-left">
@@ -230,6 +236,57 @@ export function BinEnsTruCheckPanel() {
             Сумма{hasCapped ? ' (без кодов с превышением лимита)' : ''}:{' '}
             <span className="text-emerald-700">{formatMoney(totalSum)} ₸</span>
           </p>
+          {methods.length > 0 ? (
+            <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-x-auto">
+              <div className="px-6 pt-5">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                  Способы закупки за {year}
+                </p>
+              </div>
+              <table className="w-full text-left border-collapse min-w-[640px]">
+                <thead>
+                  <tr className="text-[10px] font-bold text-gray-400 border-b border-gray-100 uppercase tracking-wider">
+                    <th className="py-3 px-6">Способ закупки</th>
+                    <th className="py-3 px-4 text-center">Договоров</th>
+                    <th className="py-3 px-4">Доля по сумме</th>
+                    <th className="py-3 px-6 text-right">Сумма</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {methods.map((m) => {
+                    const share = methodsSum > 0 ? (m.sum / methodsSum) * 100 : 0;
+                    return (
+                      <tr key={m.name} className="text-sm">
+                        <td className="py-3 px-6 font-bold text-gray-800">{m.name}</td>
+                        <td className="py-3 px-4 text-center font-bold text-gray-800">
+                          {m.count}
+                          <span className="text-gray-400 font-medium text-xs ml-1">
+                            ({methodsCount > 0 ? ((m.count / methodsCount) * 100).toFixed(1) : '0'}%)
+                          </span>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-3">
+                            <div className="h-2 w-32 rounded-full bg-gray-100 overflow-hidden">
+                              <div className="h-full bg-indigo-500" style={{ width: `${share}%` }} />
+                            </div>
+                            <span className="text-xs font-bold text-gray-700">{share.toFixed(2)}%</span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-6 text-right font-bold text-emerald-700 whitespace-nowrap">
+                          {formatMoney(m.sum)} ₸
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {hasCapped ? (
+                <p className="px-6 py-3 text-[11px] text-amber-600 font-medium">
+                  Не включены коды с превышением лимита (суммы по ним не считались).
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           {visibleCodes.length === 0 ? (
             <p className="text-sm text-gray-400 font-medium">
               По найденным кодам ЕНС ТРУ договоров за {year} год не было.

@@ -21,6 +21,9 @@ export type BinSupplierStats = {
   capped: boolean;
 };
 
+/** Разбивка договоров по способу закупки (по кодам, у которых суммы считались). */
+export type BinPurchaseMethodStat = { name: string; count: number; sum: number };
+
 export type BinEnsTruCheckResponse = {
   ok: true;
   bin: string;
@@ -28,6 +31,7 @@ export type BinEnsTruCheckResponse = {
   sumCap: number;
   maxContractPrice: number;
   supplier: BinSupplierStats | null;
+  methods?: BinPurchaseMethodStat[];
   codes: BinEnsTruCodeResult[];
   message?: string;
 };
