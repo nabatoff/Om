@@ -1,4 +1,4 @@
-import type { BinEnsTruCodeResult, BinSupplierStats } from './binEnsTruCheckApi';
+import type { BinEnsTruCodeResult, BinPurchaseMethodStat, BinSupplierStats } from './binEnsTruCheckApi';
 
 type Cell = string | number | null | undefined;
 
@@ -51,9 +51,10 @@ export function exportBinCheckToExcel(opts: {
   maxContractPrice: number | null;
   sumCap: number | null;
   supplier: BinSupplierStats | null;
+  methods: BinPurchaseMethodStat[];
   codes: BinEnsTruCodeResult[];
 }): void {
-  const { bin, year, maxContractPrice, sumCap, supplier, codes } = opts;
+  const { bin, year, maxContractPrice, sumCap, supplier, methods, codes } = opts;
   const rows: Cell[][] = [];
 
   rows.push(['БИН/ИИН', bin]);
@@ -76,6 +77,23 @@ export function exportBinCheckToExcel(opts: {
       supplier.underSum ?? 'не считали',
       '',
     ]);
+    rows.push([]);
+  }
+
+  if (methods.length > 0) {
+    const totalSum = methods.reduce((a, m) => a + m.sum, 0);
+    const totalCount = methods.reduce((a, m) => a + m.count, 0);
+    rows.push([`Способы закупки за ${year ?? ''}`]);
+    rows.push(['Способ закупки', 'Договоров', 'Доля по кол-ву, %', 'Сумма, ₸', 'Доля по сумме, %']);
+    for (const m of methods) {
+      rows.push([
+        m.name,
+        m.count,
+        totalCount > 0 ? Math.round((m.count / totalCount) * 10000) / 100 : 0,
+        Math.round(m.sum),
+        totalSum > 0 ? Math.round((m.sum / totalSum) * 10000) / 100 : 0,
+      ]);
+    }
     rows.push([]);
   }
 

@@ -144,6 +144,7 @@ export function BinEnsTruCheckPanel() {
                 maxContractPrice,
                 sumCap,
                 supplier,
+                methods,
                 codes: sortedCodes,
               })
             }
