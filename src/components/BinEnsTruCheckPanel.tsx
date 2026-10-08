@@ -225,11 +225,11 @@ export function BinEnsTruCheckPanel() {
       {codes.length > 0 && (
         <div className="space-y-3">
           {maxContractPrice != null ? (
-            <p className="text-[11px] text-gray-400 font-medium">
+            <p className="text-sm text-gray-500 font-medium">
               Учитываются договоры стоимостью до {formatMoney(maxContractPrice)} ₸
             </p>
           ) : null}
-          <p className="text-xs text-gray-500 font-bold">
+          <p className="text-base text-gray-600 font-bold">
             Кодов с договорами: <span className="text-indigo-700">{visibleCodes.length}</span>
             {' · '}
             Договоров за {year}: <span className="text-indigo-700">{totalContracts}</span>
