@@ -79,7 +79,6 @@ function style(
   );
 }
 
-const MONEY_FMT = '#,##0\\ &quot;₸&quot;';
 const ALT = '#F9FAFB';
 
 const STYLES = [
@@ -92,12 +91,12 @@ const STYLES = [
   style('textAlt', { wrap: true, border: true, bg: ALT }),
   style('center', { h: 'Center', wrap: true, border: true }),
   style('centerAlt', { h: 'Center', wrap: true, border: true, bg: ALT }),
-  style('int', { h: 'Center', border: true, fmt: '#,##0', bold: true }),
-  style('intAlt', { h: 'Center', border: true, fmt: '#,##0', bold: true, bg: ALT }),
-  style('money', { h: 'Right', border: true, fmt: MONEY_FMT, bold: true, color: '#047857' }),
-  style('moneyAlt', { h: 'Right', border: true, fmt: MONEY_FMT, bold: true, color: '#047857', bg: ALT }),
-  style('pct', { h: 'Center', border: true, fmt: '0.00&quot;%&quot;' }),
-  style('pctAlt', { h: 'Center', border: true, fmt: '0.00&quot;%&quot;', bg: ALT }),
+  style('int', { h: 'Center', border: true, bold: true }),
+  style('intAlt', { h: 'Center', border: true, bold: true, bg: ALT }),
+  style('money', { h: 'Right', border: true, bold: true, color: '#047857' }),
+  style('moneyAlt', { h: 'Right', border: true, bold: true, color: '#047857', bg: ALT }),
+  style('pct', { h: 'Center', border: true }),
+  style('pctAlt', { h: 'Center', border: true, bg: ALT }),
   style('note', { size: 10, italic: true, color: '#B45309' }),
   style('regNat', { bold: true, color: '#BE123C', bg: '#FFE4E6', h: 'Center', border: true }),
   style('regOoi', { bold: true, color: '#B45309', bg: '#FEF3C7', h: 'Center', border: true }),
@@ -202,7 +201,7 @@ export function exportBinCheckToExcel(opts: {
     });
     rows.push({
       cells: [
-        { v: `Договоры до ${maxContractPrice != null ? maxContractPrice.toLocaleString('ru-RU') : ''} ₸`, s: 'label' },
+        { v: `Договоры до ${maxContractPrice != null ? maxContractPrice : ''} ₸`, s: 'label' },
         { v: supplier.underCount, s: 'intAlt' },
         supplier.underSum != null ? { v: supplier.underSum, s: 'moneyAlt' } : { v: 'не считали', s: 'centerAlt' },
         { v: '', s: 'textAlt' },
@@ -252,7 +251,7 @@ export function exportBinCheckToExcel(opts: {
     rows.push(blank());
   }
 
-  const priceNote = maxContractPrice != null ? `, до ${maxContractPrice.toLocaleString('ru-RU')} ₸` : '';
+  const priceNote = maxContractPrice != null ? `, до ${maxContractPrice} ₸` : '';
   rows.push({
     cells: [{ v: `Коды ЕНС ТРУ (договоры по стране за ${y}${priceNote})`, s: 'section', span: COLS }],
     height: 24,
