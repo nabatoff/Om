@@ -47,7 +47,15 @@ export async function checkBinEnsTruContractsApi(bin: string): Promise<BinEnsTru
   );
   if (data?.error) throw new Error(data.error);
   if (error) {
-    const message = (data as { error?: string } | null)?.error || error.message;
+    let message = (data as { error?: string } | null)?.error;
+    if (!message) {
+      // supabase-js не кладёт тело non-2xx ответа в data — достаём его из error.context.
+      const ctx = (error as { context?: Response }).context;
+      if (ctx && typeof ctx.json === 'function') {
+        message = ((await ctx.json().catch(() => null)) as { error?: string } | null)?.error;
+      }
+    }
+    message = message || error.message;
     throw new Error(message || 'Не удалось выполнить проверку по БИН');
   }
   if (!data?.ok) throw new Error('Не удалось выполнить проверку по БИН');

@@ -30,7 +30,7 @@ const CODE_RE = /\d{6}\.\d{3}\.\d{6}/g;
 
 type CodeEntry = { code: string; names: Set<string> };
 
-async function fetchJson<T>(url: string): Promise<T> {
+async function fetchJsonOnce<T>(url: string): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
@@ -40,6 +40,20 @@ async function fetchJson<T>(url: string): Promise<T> {
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** Госсайты периодически отдают 503/таймауты — пробуем ещё раз, прежде чем сдаться. */
+async function fetchJson<T>(url: string): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return await fetchJsonOnce<T>(url);
+    } catch (e) {
+      lastError = e;
+      await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
+    }
+  }
+  throw lastError;
 }
 
 function extractCodes(raw: unknown): string[] {
@@ -284,7 +298,16 @@ Deno.serve(async (req: Request) => {
 
   try {
     const codeMap = new Map<string, CodeEntry>();
-    const yearId = await resolveYearId(TARGET_YEAR);
+    let yearId: number | null;
+    try {
+      yearId = await resolveYearId(TARGET_YEAR);
+    } catch (e) {
+      console.error("zakup.gov.kz years failed", e);
+      return new Response(
+        JSON.stringify({ error: "Сайт zakup.gov.kz сейчас недоступен (ошибка или таймаут). Попробуйте позже." }),
+        { status: 502, headers: { ...cors, "Content-Type": "application/json" } },
+      );
+    }
     if (yearId == null) {
       return new Response(JSON.stringify({ error: `Не удалось определить код года ${TARGET_YEAR} на zakup.gov.kz` }), {
         status: 502,
