@@ -1,13 +1,41 @@
 import { useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp, Download, Factory, Loader2, Search } from 'lucide-react';
 import { checkBinEnsTruContractsApi, type BinEnsTruCodeResult, type BinPurchaseMethodStat, type BinSupplierStats } from '../lib/binEnsTruCheckApi';
+import { checkEnsTruCodesApi, checkEnsTruNationalExemptionCodesApi } from '../lib/ensTruApi';
 import { exportBinCheckToExcel } from '../lib/binEnsTruExport';
+
+type CodeRegime = { nat: boolean; ooi: boolean };
+
+function regimeLabel(r: CodeRegime | undefined): string {
+  if (!r) return '—';
+  if (r.nat && r.ooi) return 'Нацизъятие + ООИ';
+  if (r.nat) return 'Нацизъятие';
+  if (r.ooi) return 'ООИ';
+  return 'Нет';
+}
 
 function formatMoney(n: number): string {
   return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(n);
 }
 
 type SortKey = 'contractCount' | 'contractSum';
+
+function RegimeBadge({ regime }: { regime: CodeRegime | undefined }) {
+  const label = regimeLabel(regime);
+  const tone =
+    regime?.nat && regime?.ooi
+      ? 'bg-purple-50 text-purple-700 border-purple-200'
+      : regime?.nat
+        ? 'bg-rose-50 text-rose-700 border-rose-200'
+        : regime?.ooi
+          ? 'bg-amber-50 text-amber-700 border-amber-200'
+          : 'bg-gray-50 text-gray-400 border-gray-200';
+  return (
+    <span className={`inline-block px-2.5 py-1 rounded-lg border text-[11px] font-bold whitespace-nowrap ${tone}`}>
+      {label}
+    </span>
+  );
+}
 
 export function BinEnsTruCheckPanel() {
   const [bin, setBin] = useState('');
@@ -18,6 +46,7 @@ export function BinEnsTruCheckPanel() {
   const [maxContractPrice, setMaxContractPrice] = useState<number | null>(null);
   const [supplier, setSupplier] = useState<BinSupplierStats | null>(null);
   const [methods, setMethods] = useState<BinPurchaseMethodStat[]>([]);
+  const [regimes, setRegimes] = useState<Record<string, CodeRegime>>({});
   const [checked, setChecked] = useState(false);
   const [checkedBin, setCheckedBin] = useState('');
   const [message, setMessage] = useState<string | null>(null);
@@ -31,6 +60,7 @@ export function BinEnsTruCheckPanel() {
       setCodes([]);
       setSupplier(null);
       setMethods([]);
+      setRegimes({});
       setChecked(false);
       setMessage(null);
       return;
@@ -47,6 +77,24 @@ export function BinEnsTruCheckPanel() {
       setMaxContractPrice(res.maxContractPrice ?? null);
       setSupplier(res.supplier ?? null);
       setMethods(res.methods ?? []);
+      setRegimes({});
+      const codeList = res.codes.filter((c) => c.contractCount > 0).map((c) => c.code);
+      if (codeList.length > 0) {
+        // Принадлежность кода к «Нацизъятию» / ООИ — из тех же справочников, что и соседние вкладки проверок.
+        void Promise.all([
+          checkEnsTruNationalExemptionCodesApi(codeList).catch(() => null),
+          checkEnsTruCodesApi(codeList).catch(() => null),
+        ]).then(([nat, ooi]) => {
+          const natSet = new Set((nat ?? []).filter((r) => r.found).map((r) => r.inputCode));
+          const ooiSet = new Set((ooi ?? []).filter((r) => r.found).map((r) => r.inputCode));
+          const next: Record<string, CodeRegime> = {};
+          for (const code of codeList) {
+            if (nat === null && ooi === null) continue;
+            next[code] = { nat: natSet.has(code), ooi: ooiSet.has(code) };
+          }
+          setRegimes(next);
+        });
+      }
       setChecked(true);
       setCheckedBin(trimmed);
       setMessage(res.message ?? null);
@@ -55,6 +103,7 @@ export function BinEnsTruCheckPanel() {
       setCodes([]);
       setSupplier(null);
       setMethods([]);
+      setRegimes({});
       setChecked(false);
     } finally {
       setChecking(false);
@@ -145,6 +194,7 @@ export function BinEnsTruCheckPanel() {
                 sumCap,
                 supplier,
                 methods,
+                regimes,
                 codes: sortedCodes,
               })
             }
@@ -294,12 +344,13 @@ export function BinEnsTruCheckPanel() {
             </p>
           ) : (
           <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[940px]">
+            <table className="w-full text-left border-collapse min-w-[1060px]">
               <thead>
                 <tr className="bg-gray-50/50 text-[10px] font-bold text-gray-400 border-b border-gray-100 uppercase tracking-wider">
                   <th className="py-4 px-6">Код ЕНС ТРУ</th>
                   <th className="py-4 px-4">Наименование (ЕНС ТРУ)</th>
                   <th className="py-4 px-4">Товар (по реестру)</th>
+                  <th className="py-4 px-4 text-center">Нацизъятие / ООИ</th>
                   <th
                     className="py-4 px-4 text-center cursor-pointer hover:bg-gray-100/80 select-none"
                     onClick={() => handleSort('contractCount')}
@@ -329,6 +380,9 @@ export function BinEnsTruCheckPanel() {
                     </td>
                     <td className="py-4 px-4 text-gray-600 text-xs max-w-sm">
                       {row.names.length > 0 ? row.names.join('; ') : '—'}
+                    </td>
+                    <td className="py-4 px-4 text-center">
+                      <RegimeBadge regime={regimes[row.code]} />
                     </td>
                     <td className="py-4 px-4 text-center font-bold text-gray-800">{row.contractCount}</td>
                     <td className="py-4 px-6 text-right font-bold">
