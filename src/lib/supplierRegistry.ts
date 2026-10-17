@@ -379,16 +379,16 @@ export function formatRegistryMoney(amount: number | null | undefined): string {
 
 /** «Новый поставщик»: пороги 1-го месяца — (≥2 заказа и ≥7 млн) или ≥10 млн. */
 export const NEW_SUPPLIER_MONTH1 = { minOrders: 2, minGmvWithOrders: 7_000_000, minGmvAlone: 10_000_000 } as const;
-/** Со 2-го месяца и дальше — (≥3 заказа и ≥12 млн) или ≥15 млн. */
+/** 2-й и 3-й месяц — (≥3 заказа и ≥12 млн) или ≥15 млн. */
 export const NEW_SUPPLIER_NEXT = { minOrders: 3, minGmvWithOrders: 12_000_000, minGmvAlone: 15_000_000 } as const;
 
 export type NewSupplierMilestone = {
   bin: string;
   name: string;
-  /** Месяц (YYYY-MM), в котором поставщик впервые достиг порога своего этапа. */
+  /** Календарный месяц (YYYY-MM), в котором поставщик выполнил порог своего этапа. */
   monthKey: string;
-  /** 1 — первый месяц с нами, 2 — второй и дальше. */
-  stage: 1 | 2;
+  /** Какой по счёту месяц поставщика: 1 — месяц первого достижения порога 1-го месяца, 2 и 3 — следующие. */
+  monthNo: 1 | 2 | 3;
   orders: number;
   gmv: number;
 };
@@ -404,23 +404,39 @@ export function monthOrdersAndGmv(lines: RegistryOrderLine[]): { orders: number;
   return { orders, gmv };
 }
 
+function reachesThreshold(
+  t: { minOrders: number; minGmvWithOrders: number; minGmvAlone: number },
+  orders: number,
+  gmv: number,
+): boolean {
+  return (orders >= t.minOrders && gmv >= t.minGmvWithOrders) || gmv >= t.minGmvAlone;
+}
+
 /**
- * По всей истории заказов находит месяц, в котором поставщик впервые достиг порога
- * (1-й месяц с нами — мягче, 2-й и дальше — строже). Поставщик считается один раз —
- * в первом месяце, где порог выполнен; если не достигал — в списке его нет.
+ * «1-й месяц» поставщика — первый календарный месяц, в котором он выполнил порог 1-го месяца
+ * (не обязательно месяц первого заказа). Следующие два календарных месяца — 2-й и 3-й;
+ * в них применяется более высокий порог. Поставщик попадает в «1-й месяц» один раз и в «2–3-й месяц»
+ * не более одного раза (в первом из двух месяцев, где порог выполнен).
  */
 export function findNewSupplierMilestones(rows: SupplierRegistryRow[]): NewSupplierMilestone[] {
   const out: NewSupplierMilestone[] = [];
   for (const row of rows) {
-    if (!row.firstOrderMonth) continue;
-    const months = Object.keys(row.ordersByMonth).filter((ym) => ym >= row.firstOrderMonth!).sort();
+    const months = Object.keys(row.ordersByMonth).sort();
+    let month1: string | null = null;
     for (const ym of months) {
-      const isFirst = ym === row.firstOrderMonth;
-      const t = isFirst ? NEW_SUPPLIER_MONTH1 : NEW_SUPPLIER_NEXT;
       const { orders, gmv } = monthOrdersAndGmv(row.ordersByMonth[ym] ?? []);
-      const ok = (orders >= t.minOrders && gmv >= t.minGmvWithOrders) || gmv >= t.minGmvAlone;
-      if (ok) {
-        out.push({ bin: row.bin, name: row.name, monthKey: ym, stage: isFirst ? 1 : 2, orders, gmv });
+      if (reachesThreshold(NEW_SUPPLIER_MONTH1, orders, gmv)) {
+        month1 = ym;
+        out.push({ bin: row.bin, name: row.name, monthKey: ym, monthNo: 1, orders, gmv });
+        break;
+      }
+    }
+    if (!month1) continue;
+    for (const offset of [1, 2] as const) {
+      const ym = addCalendarMonths(month1, offset);
+      const { orders, gmv } = monthOrdersAndGmv(row.ordersByMonth[ym] ?? []);
+      if (reachesThreshold(NEW_SUPPLIER_NEXT, orders, gmv)) {
+        out.push({ bin: row.bin, name: row.name, monthKey: ym, monthNo: (offset + 1) as 2 | 3, orders, gmv });
         break;
       }
     }

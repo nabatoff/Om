@@ -4187,8 +4187,9 @@ const OrdersHistoryDashboard = ({
   const [sortConfig, setSortConfig] = useState<{ key: OrdersSortKey; direction: 'asc' | 'desc' } | null>(null);
 
   const [milestonesOpen, setMilestonesOpen] = useState(false);
-  const milestoneStage1 = newSupplierMilestones.filter((m) => m.stage === 1).length;
+  const milestoneStage1 = newSupplierMilestones.filter((m) => m.monthNo === 1).length;
   const milestoneStage2 = newSupplierMilestones.length - milestoneStage1;
+  const milestoneUnique = new Set(newSupplierMilestones.map((m) => m.bin)).size;
 
   const isGroupedView = viewMode === 'byCounterparty';
   const displayRowCount = isGroupedView ? groupedOrders.length : orders.length;
@@ -4386,14 +4387,14 @@ const OrdersHistoryDashboard = ({
           <div className="flex flex-wrap items-center gap-6">
             <div>
               <p className="text-[10px] font-bold text-gray-400 uppercase">Новых поставщиков, достигших GMV</p>
-              <p className="text-lg font-black text-indigo-700">{newSupplierMilestones.length}</p>
+              <p className="text-lg font-black text-indigo-700">{milestoneUnique}</p>
             </div>
             <div>
               <p className="text-[10px] font-bold text-gray-400 uppercase">В 1-й месяц (от 7 млн при 2+ заказах / от 10 млн)</p>
               <p className="text-lg font-black text-gray-900">{milestoneStage1}</p>
             </div>
             <div>
-              <p className="text-[10px] font-bold text-gray-400 uppercase">Во 2-й месяц и позже (от 12 млн при 3+ заказах / от 15 млн)</p>
+              <p className="text-[10px] font-bold text-gray-400 uppercase">Во 2-й / 3-й месяц (от 12 млн при 3+ заказах / от 15 млн)</p>
               <p className="text-lg font-black text-gray-900">{milestoneStage2}</p>
             </div>
             {newSupplierMilestones.length > 0 ? (
@@ -4414,19 +4415,19 @@ const OrdersHistoryDashboard = ({
                     <th className="py-2 px-3">Поставщик</th>
                     <th className="py-2 px-3">БИН</th>
                     <th className="py-2 px-3">Месяц достижения</th>
-                    <th className="py-2 px-3 text-center">Этап</th>
+                    <th className="py-2 px-3 text-center">Месяц №</th>
                     <th className="py-2 px-3 text-center">Заказов</th>
                     <th className="py-2 px-3 text-right">GMV</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50 text-sm">
                   {newSupplierMilestones.map((m) => (
-                    <tr key={`${m.bin}-${m.monthKey}`}>
+                    <tr key={`${m.bin}-${m.monthKey}-${m.monthNo}`}>
                       <td className="py-2 px-3 font-bold text-gray-800">{m.name}</td>
                       <td className="py-2 px-3 font-mono text-xs text-gray-500">{m.bin}</td>
                       <td className="py-2 px-3 text-gray-700">{formatRegistryMonthLabel(m.monthKey)}</td>
                       <td className="py-2 px-3 text-center text-xs font-bold text-gray-600">
-                        {m.stage === 1 ? '1-й месяц' : '2-й и позже'}
+                        {m.monthNo}-й месяц
                       </td>
                       <td className="py-2 px-3 text-center font-bold">{m.orders}</td>
                       <td className="py-2 px-3 text-right font-bold text-emerald-700 whitespace-nowrap">
