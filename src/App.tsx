@@ -4188,7 +4188,8 @@ const OrdersHistoryDashboard = ({
 
   const [milestonesOpen, setMilestonesOpen] = useState(false);
   const milestoneStage1 = newSupplierMilestones.filter((m) => m.monthNo === 1).length;
-  const milestoneStage2 = newSupplierMilestones.length - milestoneStage1;
+  const milestoneStage2 = newSupplierMilestones.filter((m) => m.monthNo === 2).length;
+  const milestoneStage3 = newSupplierMilestones.filter((m) => m.monthNo === 3).length;
   const milestoneUnique = new Set(newSupplierMilestones.map((m) => m.bin)).size;
 
   const isGroupedView = viewMode === 'byCounterparty';
@@ -4394,8 +4395,12 @@ const OrdersHistoryDashboard = ({
               <p className="text-lg font-black text-gray-900">{milestoneStage1}</p>
             </div>
             <div>
-              <p className="text-[10px] font-bold text-gray-400 uppercase">Во 2-й / 3-й месяц (от 12 млн при 3+ заказах / от 15 млн)</p>
+              <p className="text-[10px] font-bold text-gray-400 uppercase">Во 2-й месяц (от 12 млн при 3+ заказах / от 15 млн)</p>
               <p className="text-lg font-black text-gray-900">{milestoneStage2}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-bold text-gray-400 uppercase">В 3-й месяц (те же пороги)</p>
+              <p className="text-lg font-black text-gray-900">{milestoneStage3}</p>
             </div>
             {newSupplierMilestones.length > 0 ? (
               <button

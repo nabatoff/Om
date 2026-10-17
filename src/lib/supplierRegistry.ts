@@ -379,7 +379,7 @@ export function formatRegistryMoney(amount: number | null | undefined): string {
 
 /** «Новый поставщик»: пороги 1-го месяца — (≥2 заказа и ≥7 млн) или ≥10 млн. */
 export const NEW_SUPPLIER_MONTH1 = { minOrders: 2, minGmvWithOrders: 7_000_000, minGmvAlone: 10_000_000 } as const;
-/** 2-й и 3-й месяц — (≥3 заказа и ≥12 млн) или ≥15 млн. */
+/** 2-й и 3-й (по счёту выполненных) месяц — (≥3 заказа и ≥12 млн) или ≥15 млн. */
 export const NEW_SUPPLIER_NEXT = { minOrders: 3, minGmvWithOrders: 12_000_000, minGmvAlone: 15_000_000 } as const;
 
 export type NewSupplierMilestone = {
@@ -387,7 +387,7 @@ export type NewSupplierMilestone = {
   name: string;
   /** Календарный месяц (YYYY-MM), в котором поставщик выполнил порог своего этапа. */
   monthKey: string;
-  /** Какой по счёту месяц поставщика: 1 — месяц первого достижения порога 1-го месяца, 2 и 3 — следующие. */
+  /** Какой по счёту месяц поставщика: 1 — месяц первого достижения порога 1-го месяца, 2 и 3 — следующие месяцы с выполненным порогом. */
   monthNo: 1 | 2 | 3;
   orders: number;
   gmv: number;
@@ -414,31 +414,22 @@ function reachesThreshold(
 
 /**
  * «1-й месяц» поставщика — первый календарный месяц, в котором он выполнил порог 1-го месяца
- * (не обязательно месяц первого заказа). Следующие два календарных месяца — 2-й и 3-й;
- * в них применяется более высокий порог. Поставщик попадает в «1-й месяц» один раз и в «2–3-й месяц»
- * не более одного раза (в первом из двух месяцев, где порог выполнен).
+ * (не обязательно месяц первого заказа). «2-м месяцем» считается следующий после него месяц,
+ * в котором выполнен более высокий порог, «3-м» — следующий такой же после «2-го». Месяцы с невыполненным
+ * порогом (в том числе без заказов) в нумерацию не входят. Каждый номер даётся один раз на поставщика.
  */
 export function findNewSupplierMilestones(rows: SupplierRegistryRow[]): NewSupplierMilestone[] {
   const out: NewSupplierMilestone[] = [];
   for (const row of rows) {
     const months = Object.keys(row.ordersByMonth).sort();
-    let month1: string | null = null;
+    let monthNo = 0;
     for (const ym of months) {
       const { orders, gmv } = monthOrdersAndGmv(row.ordersByMonth[ym] ?? []);
-      if (reachesThreshold(NEW_SUPPLIER_MONTH1, orders, gmv)) {
-        month1 = ym;
-        out.push({ bin: row.bin, name: row.name, monthKey: ym, monthNo: 1, orders, gmv });
-        break;
-      }
-    }
-    if (!month1) continue;
-    for (const offset of [1, 2] as const) {
-      const ym = addCalendarMonths(month1, offset);
-      const { orders, gmv } = monthOrdersAndGmv(row.ordersByMonth[ym] ?? []);
-      if (reachesThreshold(NEW_SUPPLIER_NEXT, orders, gmv)) {
-        out.push({ bin: row.bin, name: row.name, monthKey: ym, monthNo: (offset + 1) as 2 | 3, orders, gmv });
-        break;
-      }
+      const t = monthNo === 0 ? NEW_SUPPLIER_MONTH1 : NEW_SUPPLIER_NEXT;
+      if (!reachesThreshold(t, orders, gmv)) continue;
+      monthNo += 1;
+      out.push({ bin: row.bin, name: row.name, monthKey: ym, monthNo: monthNo as 1 | 2 | 3, orders, gmv });
+      if (monthNo === 3) break;
     }
   }
   return out;
