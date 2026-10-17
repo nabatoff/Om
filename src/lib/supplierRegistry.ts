@@ -376,3 +376,54 @@ export function formatRegistryMoney(amount: number | null | undefined): string {
   if (amount == null || !Number.isFinite(amount)) return '—';
   return `${formatMoneyKzt(amount)} ₸`;
 }
+
+/** «Новый поставщик»: пороги 1-го месяца — (≥2 заказа и ≥7 млн) или ≥10 млн. */
+export const NEW_SUPPLIER_MONTH1 = { minOrders: 2, minGmvWithOrders: 7_000_000, minGmvAlone: 10_000_000 } as const;
+/** Со 2-го месяца и дальше — (≥3 заказа и ≥12 млн) или ≥15 млн. */
+export const NEW_SUPPLIER_NEXT = { minOrders: 3, minGmvWithOrders: 12_000_000, minGmvAlone: 15_000_000 } as const;
+
+export type NewSupplierMilestone = {
+  bin: string;
+  name: string;
+  /** Месяц (YYYY-MM), в котором поставщик впервые достиг порога своего этапа. */
+  monthKey: string;
+  /** 1 — первый месяц с нами, 2 — второй и дальше. */
+  stage: 1 | 2;
+  orders: number;
+  gmv: number;
+};
+
+/** Заказ = каждая отдельная сумма в записи; GMV = сумма этих сумм за календарный месяц. */
+export function monthOrdersAndGmv(lines: RegistryOrderLine[]): { orders: number; gmv: number } {
+  let orders = 0;
+  let gmv = 0;
+  for (const l of lines) {
+    orders += l.amounts.length;
+    for (const a of l.amounts) gmv += Number(a) || 0;
+  }
+  return { orders, gmv };
+}
+
+/**
+ * По всей истории заказов находит месяц, в котором поставщик впервые достиг порога
+ * (1-й месяц с нами — мягче, 2-й и дальше — строже). Поставщик считается один раз —
+ * в первом месяце, где порог выполнен; если не достигал — в списке его нет.
+ */
+export function findNewSupplierMilestones(rows: SupplierRegistryRow[]): NewSupplierMilestone[] {
+  const out: NewSupplierMilestone[] = [];
+  for (const row of rows) {
+    if (!row.firstOrderMonth) continue;
+    const months = Object.keys(row.ordersByMonth).filter((ym) => ym >= row.firstOrderMonth!).sort();
+    for (const ym of months) {
+      const isFirst = ym === row.firstOrderMonth;
+      const t = isFirst ? NEW_SUPPLIER_MONTH1 : NEW_SUPPLIER_NEXT;
+      const { orders, gmv } = monthOrdersAndGmv(row.ordersByMonth[ym] ?? []);
+      const ok = (orders >= t.minOrders && gmv >= t.minGmvWithOrders) || gmv >= t.minGmvAlone;
+      if (ok) {
+        out.push({ bin: row.bin, name: row.name, monthKey: ym, stage: isFirst ? 1 : 2, orders, gmv });
+        break;
+      }
+    }
+  }
+  return out;
+}

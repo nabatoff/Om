@@ -32,6 +32,12 @@ import {
   ArrowRightCircle,
   Building2,
 } from 'lucide-react';
+import {
+  buildSupplierRegistryRows,
+  findNewSupplierMilestones,
+  formatRegistryMonthLabel,
+  type NewSupplierMilestone,
+} from './lib/supplierRegistry';
 import { adminDateFilterBounds, formatYmdLocal, reportDateMatchesAdminBounds } from './lib/periodBounds';
 import { PeriodFilterFields } from './components/PeriodFilterFields';
 import {
@@ -1253,6 +1259,17 @@ const App = () => {
 
   const hasManagedClientOrders = !isAdmin && managedClientOrders.length > 0;
 
+  // «Новые поставщики, достигшие GMV»: по всей истории заказов, затем фильтр по месяцу достижения в выбранном периоде.
+  const newSupplierMilestones = useMemo<NewSupplierMilestone[]>(() => {
+    if (!isAdmin) return [];
+    const rows = buildSupplierRegistryRows([], allReports, new Map());
+    const fromYm = ordersFilterDateFrom ? ordersFilterDateFrom.slice(0, 7) : '';
+    const toYm = ordersFilterDateTo ? ordersFilterDateTo.slice(0, 7) : '';
+    return findNewSupplierMilestones(rows)
+      .filter((m) => (!fromYm || m.monthKey >= fromYm) && (!toYm || m.monthKey <= toYm))
+      .sort((a, b) => a.monthKey.localeCompare(b.monthKey) || b.gmv - a.gmv);
+  }, [isAdmin, allReports, ordersFilterDateFrom, ordersFilterDateTo]);
+
   const ordersCounterpartyOptions = useMemo(() => {
     const seen = new Set<string>();
     const out: string[] = [];
@@ -1881,6 +1898,7 @@ const App = () => {
                 viewMode={ordersViewMode}
                 setViewMode={setOrdersViewMode}
                 clientKtpByBin={clientKtpByBin}
+                newSupplierMilestones={newSupplierMilestones}
                 totalOrdersCount={allFilteredOrders
                   .filter((order) => !order.isInherited)
                   .reduce((sum, order) => sum + order.orderCount, 0)}
@@ -4123,6 +4141,7 @@ const OrdersHistoryDashboard = ({
   viewMode,
   setViewMode,
   clientKtpByBin,
+  newSupplierMilestones,
   totalOrdersCount,
   filterManager,
   setFilterManager,
@@ -4146,6 +4165,7 @@ const OrdersHistoryDashboard = ({
   viewMode: 'records' | 'byCounterparty';
   setViewMode: SetState<'records' | 'byCounterparty'>;
   clientKtpByBin: Map<string, boolean>;
+  newSupplierMilestones: NewSupplierMilestone[];
   totalOrdersCount: number;
   filterManager: string;
   setFilterManager: SetState<string>;
@@ -4165,6 +4185,10 @@ const OrdersHistoryDashboard = ({
   type OrdersSortKey = 'orderCount' | 'totalAmount';
 
   const [sortConfig, setSortConfig] = useState<{ key: OrdersSortKey; direction: 'asc' | 'desc' } | null>(null);
+
+  const [milestonesOpen, setMilestonesOpen] = useState(false);
+  const milestoneStage1 = newSupplierMilestones.filter((m) => m.stage === 1).length;
+  const milestoneStage2 = newSupplierMilestones.length - milestoneStage1;
 
   const isGroupedView = viewMode === 'byCounterparty';
   const displayRowCount = isGroupedView ? groupedOrders.length : orders.length;
@@ -4357,6 +4381,65 @@ const OrdersHistoryDashboard = ({
           ) : null}
         </div>
       </div>
+      {isAdmin ? (
+        <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm space-y-3 text-left">
+          <div className="flex flex-wrap items-center gap-6">
+            <div>
+              <p className="text-[10px] font-bold text-gray-400 uppercase">Новых поставщиков, достигших GMV</p>
+              <p className="text-lg font-black text-indigo-700">{newSupplierMilestones.length}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-bold text-gray-400 uppercase">В 1-й месяц (от 7 млн при 2+ заказах / от 10 млн)</p>
+              <p className="text-lg font-black text-gray-900">{milestoneStage1}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-bold text-gray-400 uppercase">Во 2-й месяц и позже (от 12 млн при 3+ заказах / от 15 млн)</p>
+              <p className="text-lg font-black text-gray-900">{milestoneStage2}</p>
+            </div>
+            {newSupplierMilestones.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => setMilestonesOpen((v) => !v)}
+                className="ml-auto px-4 py-2 rounded-xl border border-gray-200 text-xs font-bold uppercase tracking-wider text-gray-600 hover:bg-gray-50"
+              >
+                {milestonesOpen ? 'Скрыть список' : 'Показать список'}
+              </button>
+            ) : null}
+          </div>
+          {milestonesOpen ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse min-w-[640px]">
+                <thead>
+                  <tr className="text-[10px] font-bold text-gray-400 uppercase border-b border-gray-100">
+                    <th className="py-2 px-3">Поставщик</th>
+                    <th className="py-2 px-3">БИН</th>
+                    <th className="py-2 px-3">Месяц достижения</th>
+                    <th className="py-2 px-3 text-center">Этап</th>
+                    <th className="py-2 px-3 text-center">Заказов</th>
+                    <th className="py-2 px-3 text-right">GMV</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50 text-sm">
+                  {newSupplierMilestones.map((m) => (
+                    <tr key={`${m.bin}-${m.monthKey}`}>
+                      <td className="py-2 px-3 font-bold text-gray-800">{m.name}</td>
+                      <td className="py-2 px-3 font-mono text-xs text-gray-500">{m.bin}</td>
+                      <td className="py-2 px-3 text-gray-700">{formatRegistryMonthLabel(m.monthKey)}</td>
+                      <td className="py-2 px-3 text-center text-xs font-bold text-gray-600">
+                        {m.stage === 1 ? '1-й месяц' : '2-й и позже'}
+                      </td>
+                      <td className="py-2 px-3 text-center font-bold">{m.orders}</td>
+                      <td className="py-2 px-3 text-right font-bold text-emerald-700 whitespace-nowrap">
+                        {new Intl.NumberFormat('ru-RU').format(m.gmv)} ₸
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h2 className="text-sm font-bold text-gray-400 uppercase tracking-widest">Подтверждённые заказы</h2>
         <div className="flex flex-wrap items-center gap-2">
