@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type Dispatch, SetStateAction } from 'react';
 import { Trash2 } from 'lucide-react';
-import type { FullReport } from '../lib/crmApi';
+import { fetchRnpStaffVisibilityApi, type FullReport } from '../lib/crmApi';
 import {
   leadTransferredDay,
   listEnterpriseLeadsApi,
@@ -225,6 +225,22 @@ export function KpiDashboard({
     };
   }, [kpiRows, allReports, filterDateFrom, filterDateTo]);
 
+  const [rnpHiddenNames, setRnpHiddenNames] = useState<Set<string>>(() => new Set());
+  useEffect(() => {
+    let cancelled = false;
+    fetchRnpStaffVisibilityApi()
+      .then((list) => {
+        if (cancelled) return;
+        setRnpHiddenNames(new Set(list.filter((r) => !r.showInRnp).map((r) => r.fullName.trim().toLowerCase())));
+      })
+      .catch(() => {
+        /* без списка скрытых показываем всех */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const rnpPace = useMemo(() => {
     if (isDiggerKpi) return { rows: [], days: [] as string[], meta: null as ReturnType<typeof buildRnpPaceRows>['meta'] | null };
     const bounds = adminDateFilterBounds(filterDateFrom, filterDateTo);
@@ -235,11 +251,11 @@ export function KpiDashboard({
             new Set(
               allReports
                 .map((r) => (r.manager || '').trim())
-                .filter((m) => m && m !== 'Все' && !isAdminStaffName(m)),
+                .filter((m) => m && m !== 'Все' && !isAdminStaffName(m) && !rnpHiddenNames.has(m.toLowerCase())),
             ),
           );
     return buildRnpPaceRows(allReports, names, bounds.from, bounds.to);
-  }, [allReports, isDiggerKpi, filterManager, filterDateFrom, filterDateTo]);
+  }, [allReports, isDiggerKpi, filterManager, filterDateFrom, filterDateTo, rnpHiddenNames]);
 
   const rowMetricsMap = useMemo(() => {
     const map = new Map<string, ManagerDayMetrics>();

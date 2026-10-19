@@ -919,3 +919,26 @@ export async function sendTelegramDailyReportNow(reportDate?: string): Promise<T
   if (!data?.ok) throw new Error('Не удалось отправить отчёт');
   return data;
 }
+
+export type RnpStaffVisibility = { id: string; fullName: string; showInRnp: boolean };
+
+/** Активные менеджеры и признак «показывать в РНП» (profiles.show_in_rnp). */
+export async function fetchRnpStaffVisibilityApi(): Promise<RnpStaffVisibility[]> {
+  const { data, error } = await getSupabase()
+    .from('profiles')
+    .select('id, full_name, show_in_rnp')
+    .eq('role', 'manager')
+    .neq('is_active', false)
+    .order('full_name', { ascending: true, nullsFirst: false });
+  if (error) throw error;
+  return (data || []).map((r) => ({
+    id: String(r.id),
+    fullName: String((r.full_name as string | null) || '').trim() || String(r.id).slice(0, 8),
+    showInRnp: r.show_in_rnp !== false,
+  }));
+}
+
+export async function setProfileShowInRnpApi(id: string, show: boolean): Promise<void> {
+  const { error } = await getSupabase().rpc('set_profile_show_in_rnp', { p_id: id, p_show: show });
+  if (error) throw error;
+}
