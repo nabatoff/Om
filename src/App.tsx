@@ -1262,13 +1262,22 @@ const App = () => {
   // «Новые поставщики, достигшие GMV»: по всей истории заказов, затем фильтр по месяцу достижения в выбранном периоде.
   const newSupplierMilestones = useMemo<NewSupplierMilestone[]>(() => {
     if (!isAdmin) return [];
-    // При выбранном сотруднике считаем по его заказам (история и пороги — только по его отчётам).
-    const scopedReports =
-      ordersFilterManager === 'Все' ? allReports : allReports.filter((r) => r.manager === ordersFilterManager);
-    const rows = buildSupplierRegistryRows([], scopedReports, new Map());
+    // Месяцы (1-й/2-й/3-й) считаются по полной истории поставщика у всех менеджеров;
+    // при выбранном сотруднике остаются только те, где в этом месяце у поставщика есть заказ этого сотрудника.
+    const rows = buildSupplierRegistryRows([], allReports, new Map());
+    let managerBinMonths: Set<string> | null = null;
+    if (ordersFilterManager !== 'Все') {
+      managerBinMonths = new Set();
+      for (const r of allReports) {
+        if (r.manager !== ordersFilterManager) continue;
+        const ym = String(r.date).slice(0, 7);
+        for (const o of r.confirmedOrders) managerBinMonths.add(`${String(o.bin).trim()}|${ym}`);
+      }
+    }
     const fromYm = ordersFilterDateFrom ? ordersFilterDateFrom.slice(0, 7) : '';
     const toYm = ordersFilterDateTo ? ordersFilterDateTo.slice(0, 7) : '';
     return findNewSupplierMilestones(rows)
+      .filter((m) => !managerBinMonths || managerBinMonths.has(`${m.bin}|${m.monthKey}`))
       .filter((m) => (!fromYm || m.monthKey >= fromYm) && (!toYm || m.monthKey <= toYm))
       .sort((a, b) => a.monthKey.localeCompare(b.monthKey) || b.gmv - a.gmv);
   }, [isAdmin, allReports, ordersFilterManager, ordersFilterDateFrom, ordersFilterDateTo]);
