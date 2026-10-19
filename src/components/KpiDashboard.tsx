@@ -225,16 +225,17 @@ export function KpiDashboard({
     };
   }, [kpiRows, allReports, filterDateFrom, filterDateTo]);
 
-  const [rnpHiddenNames, setRnpHiddenNames] = useState<Set<string>>(() => new Set());
+  /** Кого показывать в РНП: активные менеджеры с включённой галочкой (null — список ещё не загружен). */
+  const [rnpAllowed, setRnpAllowed] = useState<Array<{ id: string; fullName: string }> | null>(null);
   useEffect(() => {
     let cancelled = false;
     fetchRnpStaffVisibilityApi()
       .then((list) => {
         if (cancelled) return;
-        setRnpHiddenNames(new Set(list.filter((r) => !r.showInRnp).map((r) => r.fullName.trim().toLowerCase())));
+        setRnpAllowed(list.filter((r) => r.showInRnp).map((r) => ({ id: r.id, fullName: r.fullName })));
       })
       .catch(() => {
-        /* без списка скрытых показываем всех */
+        /* без списка работаем по именам из отчётов, как раньше */
       });
     return () => {
       cancelled = true;
@@ -244,6 +245,18 @@ export function KpiDashboard({
   const rnpPace = useMemo(() => {
     if (isDiggerKpi) return { rows: [], days: [] as string[], meta: null as ReturnType<typeof buildRnpPaceRows>['meta'] | null };
     const bounds = adminDateFilterBounds(filterDateFrom, filterDateTo);
+
+    if (filterManager === 'Все' && rnpAllowed) {
+      // Берём профили активных менеджеров: уволенные и лидорубы не попадают, даже если у них есть отчёты.
+      const ids = new Set(rnpAllowed.map((m) => m.id));
+      const names = rnpAllowed.map((m) => m.fullName);
+      const lowerNames = new Set(names.map((n) => n.toLowerCase()));
+      const reports = allReports.filter((r) =>
+        r.managerId ? ids.has(r.managerId) : lowerNames.has((r.manager || '').trim().toLowerCase()),
+      );
+      return buildRnpPaceRows(reports, names, bounds.from, bounds.to);
+    }
+
     const names =
       filterManager !== 'Все'
         ? [filterManager]
@@ -251,11 +264,11 @@ export function KpiDashboard({
             new Set(
               allReports
                 .map((r) => (r.manager || '').trim())
-                .filter((m) => m && m !== 'Все' && !isAdminStaffName(m) && !rnpHiddenNames.has(m.toLowerCase())),
+                .filter((m) => m && m !== 'Все' && !isAdminStaffName(m)),
             ),
           );
     return buildRnpPaceRows(allReports, names, bounds.from, bounds.to);
-  }, [allReports, isDiggerKpi, filterManager, filterDateFrom, filterDateTo, rnpHiddenNames]);
+  }, [allReports, isDiggerKpi, filterManager, filterDateFrom, filterDateTo, rnpAllowed]);
 
   const rowMetricsMap = useMemo(() => {
     const map = new Map<string, ManagerDayMetrics>();
