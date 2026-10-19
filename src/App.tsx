@@ -1262,13 +1262,16 @@ const App = () => {
   // «Новые поставщики, достигшие GMV»: по всей истории заказов, затем фильтр по месяцу достижения в выбранном периоде.
   const newSupplierMilestones = useMemo<NewSupplierMilestone[]>(() => {
     if (!isAdmin) return [];
-    const rows = buildSupplierRegistryRows([], allReports, new Map());
+    // При выбранном сотруднике считаем по его заказам (история и пороги — только по его отчётам).
+    const scopedReports =
+      ordersFilterManager === 'Все' ? allReports : allReports.filter((r) => r.manager === ordersFilterManager);
+    const rows = buildSupplierRegistryRows([], scopedReports, new Map());
     const fromYm = ordersFilterDateFrom ? ordersFilterDateFrom.slice(0, 7) : '';
     const toYm = ordersFilterDateTo ? ordersFilterDateTo.slice(0, 7) : '';
     return findNewSupplierMilestones(rows)
       .filter((m) => (!fromYm || m.monthKey >= fromYm) && (!toYm || m.monthKey <= toYm))
       .sort((a, b) => a.monthKey.localeCompare(b.monthKey) || b.gmv - a.gmv);
-  }, [isAdmin, allReports, ordersFilterDateFrom, ordersFilterDateTo]);
+  }, [isAdmin, allReports, ordersFilterManager, ordersFilterDateFrom, ordersFilterDateTo]);
 
   const ordersCounterpartyOptions = useMemo(() => {
     const seen = new Set<string>();
