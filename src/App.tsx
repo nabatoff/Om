@@ -4382,37 +4382,39 @@ const OrdersHistoryDashboard = ({
             </p>
           ) : null}
         </div>
-      </div>
-      {isAdmin ? (
-        <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm space-y-3 text-left">
-          <div className="flex flex-wrap items-center gap-6">
+        {isAdmin ? (
+          <>
+            <div className="hidden md:block w-px self-stretch bg-gray-200" />
             <div>
-              <p className="text-[10px] font-bold text-gray-400 uppercase">Новых поставщиков, достигших GMV</p>
+              <p className="text-[10px] font-bold text-gray-400 uppercase">Поставщиков, достигших GMV</p>
               <p className="text-lg font-black text-indigo-700">{milestoneUnique}</p>
             </div>
-            <div>
-              <p className="text-[10px] font-bold text-gray-400 uppercase">В 1-й месяц (от 7 млн при 2+ заказах / от 10 млн)</p>
+            <div title="От 7 млн при 2+ заказах / от 10 млн">
+              <p className="text-[10px] font-bold text-gray-400 uppercase">1-й месяц</p>
               <p className="text-lg font-black text-gray-900">{milestoneStage1}</p>
             </div>
-            <div>
-              <p className="text-[10px] font-bold text-gray-400 uppercase">Во 2-й месяц (от 12 млн при 3+ заказах / от 15 млн)</p>
+            <div title="От 12 млн при 3+ заказах / от 15 млн">
+              <p className="text-[10px] font-bold text-gray-400 uppercase">2-й месяц</p>
               <p className="text-lg font-black text-gray-900">{milestoneStage2}</p>
             </div>
-            <div>
-              <p className="text-[10px] font-bold text-gray-400 uppercase">В 3-й месяц (те же пороги)</p>
+            <div title="Те же пороги, что и во 2-м месяце">
+              <p className="text-[10px] font-bold text-gray-400 uppercase">3-й месяц</p>
               <p className="text-lg font-black text-gray-900">{milestoneStage3}</p>
             </div>
             {newSupplierMilestones.length > 0 ? (
               <button
                 type="button"
                 onClick={() => setMilestonesOpen((v) => !v)}
-                className="ml-auto px-4 py-2 rounded-xl border border-gray-200 text-xs font-bold uppercase tracking-wider text-gray-600 hover:bg-gray-50"
+                className="px-3 py-1.5 rounded-xl border border-gray-200 text-[10px] font-bold uppercase tracking-wider text-gray-600 hover:bg-gray-50"
               >
-                {milestonesOpen ? 'Скрыть список' : 'Показать список'}
+                {milestonesOpen ? 'Скрыть список' : 'Список'}
               </button>
             ) : null}
-          </div>
-          {milestonesOpen ? (
+          </>
+        ) : null}
+      </div>
+      {isAdmin && milestonesOpen ? (
+        <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm text-left">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse min-w-[640px]">
                 <thead>
@@ -4443,7 +4445,6 @@ const OrdersHistoryDashboard = ({
                 </tbody>
               </table>
             </div>
-          ) : null}
         </div>
       ) : null}
       <div className="flex flex-wrap items-center justify-between gap-4">

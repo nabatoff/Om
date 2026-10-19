@@ -399,8 +399,8 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
 
   const cohortMilestones = useMemo(() => {
     if (viewMode !== 'cohort') return null;
-    return buildCohortMilestoneCounts(cohortStatsRows, effectiveCohortMonth);
-  }, [viewMode, cohortStatsRows, effectiveCohortMonth]);
+    return buildCohortMilestoneCounts(cohortStatsRows);
+  }, [viewMode, cohortStatsRows]);
 
   const displayedMonths = useMemo(() => {
     if (viewMode === 'cohort') {
@@ -633,19 +633,19 @@ export function SupplierRegistryPanel({ clients, reports, clientKtpByBin, onOpen
             </p>
             <div className="flex items-stretch gap-2 justify-end xl:justify-start">
               <CohortMilestoneCard
-                monthLabel={formatRegistryMonthLabel(cohortMilestones.month1.monthKey)}
-                minLabel="от 10 млн ₸"
-                count={cohortMilestones.month1.count}
+                monthLabel="1-й месяц"
+                minLabel="от 7 / 10 млн ₸"
+                count={cohortMilestones.month1}
               />
               <CohortMilestoneCard
-                monthLabel={formatRegistryMonthLabel(cohortMilestones.month2.monthKey)}
-                minLabel="от 15 млн ₸"
-                count={cohortMilestones.month2.count}
+                monthLabel="2-й месяц"
+                minLabel="от 12 / 15 млн ₸"
+                count={cohortMilestones.month2}
               />
               <CohortMilestoneCard
-                monthLabel={formatRegistryMonthLabel(cohortMilestones.month3.monthKey)}
-                minLabel="от 15 млн ₸"
-                count={cohortMilestones.month3.count}
+                monthLabel="3-й месяц"
+                minLabel="от 12 / 15 млн ₸"
+                count={cohortMilestones.month3}
               />
             </div>
           </div>
