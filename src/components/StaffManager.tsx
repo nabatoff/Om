@@ -1,9 +1,14 @@
 import { useState, useCallback, useEffect } from 'react';
 import { UserPlus, RefreshCw, Shield, Briefcase, AlertCircle, KeyRound, X, UserX } from 'lucide-react';
 import { getSupabase } from '../lib/supabase';
+import { setProfileShowInRnpApi } from '../lib/crmApi';
 import { useAuth, type Profile } from '../context/AuthContext';
 
-type Row = Pick<Profile, 'id' | 'full_name' | 'role' | 'is_active'> & { login_code: string | null; created_at?: string | null };
+type Row = Pick<Profile, 'id' | 'full_name' | 'role' | 'is_active'> & {
+  login_code: string | null;
+  created_at?: string | null;
+  show_in_rnp?: boolean | null;
+};
 
 export function StaffManager() {
   const { user: authUser } = useAuth();
@@ -28,7 +33,7 @@ export function StaffManager() {
     try {
       const { data, error } = await getSupabase()
         .from('profiles')
-        .select('id, full_name, role, is_active, login_code, created_at')
+        .select('id, full_name, role, is_active, login_code, created_at, show_in_rnp')
         .order('login_code', { ascending: true, nullsFirst: false })
         .order('id', { ascending: true });
       if (error) throw error;
@@ -43,6 +48,17 @@ export function StaffManager() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const toggleRnp = async (row: Row) => {
+    const next = row.show_in_rnp === false;
+    setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, show_in_rnp: next } : r)));
+    try {
+      await setProfileShowInRnpApi(row.id, next);
+    } catch (e) {
+      setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, show_in_rnp: row.show_in_rnp } : r)));
+      alert(e instanceof Error ? e.message : 'Не удалось сохранить');
+    }
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -259,6 +275,7 @@ export function StaffManager() {
                 <th className="text-left py-2">ФИО</th>
                 <th className="text-left py-2">Роль</th>
                 <th className="text-left py-2">Активен</th>
+                <th className="text-left py-2" title="Показывать в таблице РНП на KPI-дашборде">РНП</th>
                 <th className="text-left py-2 min-w-[200px]">Действия</th>
               </tr>
             </thead>
@@ -289,6 +306,19 @@ export function StaffManager() {
                       )}
                     </td>
                     <td className="py-2 text-xs">{isActive ? 'да' : 'нет'}</td>
+                    <td className="py-2">
+                      {r.role === 'manager' ? (
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4 accent-blue-600 cursor-pointer"
+                          checked={r.show_in_rnp !== false}
+                          onChange={() => void toggleRnp(r)}
+                          title="Показывать в РНП"
+                        />
+                      ) : (
+                        <span className="text-gray-300">—</span>
+                      )}
+                    </td>
                     <td className="py-2">
                       <div className="flex flex-wrap items-center gap-3">
                         {isActive ? (

@@ -7,9 +7,6 @@ import {
   fetchAdminAnalyticsTabEnabledApi,
   fetchClientCategoriesApi,
   fetchMrpApi,
-  fetchRnpStaffVisibilityApi,
-  setProfileShowInRnpApi,
-  type RnpStaffVisibility,
   setAdminAnalyticsTabEnabledApi,
   setMrpApi,
   upsertClientCategoryApi,
@@ -31,25 +28,9 @@ export function AdminSettingsPanel({ onRefreshReports, onMrpUpdated, onAnalytics
   const [backfilling, setBackfilling] = useState(false);
   const [analyticsTabEnabled, setAnalyticsTabEnabled] = useState(true);
   const [analyticsTabSaving, setAnalyticsTabSaving] = useState(false);
-  const [rnpStaff, setRnpStaff] = useState<RnpStaffVisibility[]>([]);
-  const [rnpSavingId, setRnpSavingId] = useState<string | null>(null);
   const [categories, setCategories] = useState<ClientCategory[]>([]);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [categorySaving, setCategorySaving] = useState(false);
-
-  const toggleRnpStaff = async (row: RnpStaffVisibility) => {
-    const next = !row.showInRnp;
-    setRnpSavingId(row.id);
-    setRnpStaff((prev) => prev.map((r) => (r.id === row.id ? { ...r, showInRnp: next } : r)));
-    try {
-      await setProfileShowInRnpApi(row.id, next);
-    } catch (e) {
-      setRnpStaff((prev) => prev.map((r) => (r.id === row.id ? { ...r, showInRnp: row.showInRnp } : r)));
-      alert(e instanceof Error ? e.message : 'Не удалось сохранить');
-    } finally {
-      setRnpSavingId(null);
-    }
-  };
 
   const thresholds = useMemo(() => {
     const n = Math.max(1, Math.floor(Number(mrp.replace(/\s/g, '')) || 0));
@@ -59,18 +40,16 @@ export function AdminSettingsPanel({ onRefreshReports, onMrpUpdated, onAnalytics
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [m, pending, analyticsEnabled, cats, rnp] = await Promise.all([
+      const [m, pending, analyticsEnabled, cats] = await Promise.all([
         fetchMrpApi(),
         countOrdersWithoutCommissionApi(),
         fetchAdminAnalyticsTabEnabledApi(),
         fetchClientCategoriesApi(),
-        fetchRnpStaffVisibilityApi(),
       ]);
       setMrp(String(m));
       setPendingWithout(pending);
       setAnalyticsTabEnabled(analyticsEnabled);
       setCategories(cats);
-      setRnpStaff(rnp);
       onAnalyticsTabEnabledChange?.(analyticsEnabled);
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Не удалось загрузить настройки');
@@ -274,33 +253,6 @@ export function AdminSettingsPanel({ onRefreshReports, onMrpUpdated, onAnalytics
         </div>
         <p className="text-[10px] text-gray-400">
           Категории также можно создать при заведении нового контрагента.
-        </p>
-      </section>
-
-      <section className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm space-y-4 max-w-xl">
-        <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest">РНП: кого показывать</h3>
-        {rnpStaff.length === 0 ? (
-          <p className="text-sm text-gray-400">Активных менеджеров нет.</p>
-        ) : (
-          <ul className="divide-y divide-gray-100">
-            {rnpStaff.map((row) => (
-              <li key={row.id}>
-                <label className="flex items-center gap-3 py-2.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    className="w-4 h-4 accent-blue-600"
-                    checked={row.showInRnp}
-                    disabled={rnpSavingId === row.id}
-                    onChange={() => void toggleRnpStaff(row)}
-                  />
-                  <span className="text-sm font-bold text-gray-800">{row.fullName}</span>
-                </label>
-              </li>
-            ))}
-          </ul>
-        )}
-        <p className="text-[10px] text-gray-400">
-          Снятая галочка скрывает сотрудника из таблицы РНП на KPI-дашборде (когда выбран «Все»). Данные и остальные экраны не затрагиваются.
         </p>
       </section>
 
