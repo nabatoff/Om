@@ -657,7 +657,11 @@ export function buildRnpPaceRows(
     MONTHLY_NEW_MEETINGS_GOAL * (meta.workingDaysElapsed / workingDaysInRefMonth),
   );
 
-  const days = enumerateYmdRange(meta.from, meta.asOf);
+  // Колонки только по будням: в выходные отчётов нет (суббота/воскресенье не показываем).
+  const days = enumerateYmdRange(meta.from, meta.asOf).filter((ymd) => {
+    const d = parseYmdLocal(ymd);
+    return d ? isWorkingDay(d) : true;
+  });
   const source = allReports.filter((r) => r.date >= meta.from && r.date <= meta.asOf);
   const summaryReports = dedupeReportsByDayManager(source);
 
