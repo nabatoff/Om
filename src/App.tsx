@@ -1261,12 +1261,32 @@ const App = () => {
 
   // «Новые поставщики, достигшие GMV»: по всей истории заказов, затем фильтр по месяцу достижения в выбранном периоде.
   const newSupplierMilestones = useMemo<NewSupplierMilestone[]>(() => {
-    if (!isAdmin) return [];
-    // Месяцы (1-й/2-й/3-й) считаются по полной истории поставщика у всех менеджеров;
-    // при выбранном сотруднике остаются только те, где в этом месяце у поставщика есть заказ этого сотрудника.
-    const rows = buildSupplierRegistryRows([], allReports, new Map());
+    // Месяцы (1-й/2-й/3-й) считаются по полной истории поставщика. Админ видит все отчёты; менеджеру RLS отдаёт
+    // только его отчёты, поэтому к ним добавляются «унаследованные» заказы по его клиентам (managedClientOrders).
+    // При выбранном сотруднике (админ) остаются только месяцы, где у поставщика есть заказ этого сотрудника.
+    let historyReports: FullReport[] = allReports;
+    if (!isAdmin && managedClientOrders.length > 0) {
+      const byReport = new Map<string, FullReport>();
+      for (const o of managedClientOrders) {
+        let rep = byReport.get(o.reportId);
+        if (!rep) {
+          rep = {
+            id: o.reportId,
+            date: o.reportDate,
+            manager: o.manager,
+            managerId: null,
+            staffDept: null,
+            confirmedOrders: [],
+          } as unknown as FullReport;
+          byReport.set(o.reportId, rep);
+        }
+        rep.confirmedOrders.push(o);
+      }
+      historyReports = [...allReports, ...byReport.values()];
+    }
+    const rows = buildSupplierRegistryRows([], historyReports, new Map());
     let managerBinMonths: Set<string> | null = null;
-    if (ordersFilterManager !== 'Все') {
+    if (isAdmin && ordersFilterManager !== 'Все') {
       managerBinMonths = new Set();
       for (const r of allReports) {
         if (r.manager !== ordersFilterManager) continue;
@@ -1280,7 +1300,7 @@ const App = () => {
       .filter((m) => !managerBinMonths || managerBinMonths.has(`${m.bin}|${m.monthKey}`))
       .filter((m) => (!fromYm || m.monthKey >= fromYm) && (!toYm || m.monthKey <= toYm))
       .sort((a, b) => a.monthKey.localeCompare(b.monthKey) || b.gmv - a.gmv);
-  }, [isAdmin, allReports, ordersFilterManager, ordersFilterDateFrom, ordersFilterDateTo]);
+  }, [isAdmin, allReports, managedClientOrders, ordersFilterManager, ordersFilterDateFrom, ordersFilterDateTo]);
 
   const ordersCounterpartyOptions = useMemo(() => {
     const seen = new Set<string>();
@@ -4394,38 +4414,36 @@ const OrdersHistoryDashboard = ({
             </p>
           ) : null}
         </div>
-        {isAdmin ? (
-          <>
-            <div className="hidden md:block w-px self-stretch bg-gray-200" />
-            <div>
-              <p className="text-[10px] font-bold text-gray-400 uppercase">Поставщиков, достигших GMV</p>
-              <p className="text-lg font-black text-indigo-700">{milestoneUnique}</p>
-            </div>
-            <div title="От 7 млн при 2+ заказах / от 10 млн">
-              <p className="text-[10px] font-bold text-gray-400 uppercase">1-й месяц</p>
-              <p className="text-lg font-black text-gray-900">{milestoneStage1}</p>
-            </div>
-            <div title="От 12 млн при 3+ заказах / от 15 млн">
-              <p className="text-[10px] font-bold text-gray-400 uppercase">2-й месяц</p>
-              <p className="text-lg font-black text-gray-900">{milestoneStage2}</p>
-            </div>
-            <div title="Те же пороги, что и во 2-м месяце">
-              <p className="text-[10px] font-bold text-gray-400 uppercase">3-й месяц</p>
-              <p className="text-lg font-black text-gray-900">{milestoneStage3}</p>
-            </div>
-            {newSupplierMilestones.length > 0 ? (
-              <button
-                type="button"
-                onClick={() => setMilestonesOpen((v) => !v)}
-                className="px-3 py-1.5 rounded-xl border border-gray-200 text-[10px] font-bold uppercase tracking-wider text-gray-600 hover:bg-gray-50"
-              >
-                {milestonesOpen ? 'Скрыть список' : 'Список'}
-              </button>
-            ) : null}
-          </>
+        <>
+        <div className="hidden md:block w-px self-stretch bg-gray-200" />
+        <div>
+          <p className="text-[10px] font-bold text-gray-400 uppercase">Поставщиков, достигших GMV</p>
+          <p className="text-lg font-black text-indigo-700">{milestoneUnique}</p>
+        </div>
+        <div title="От 7 млн при 2+ заказах / от 10 млн">
+          <p className="text-[10px] font-bold text-gray-400 uppercase">1-й месяц</p>
+          <p className="text-lg font-black text-gray-900">{milestoneStage1}</p>
+        </div>
+        <div title="От 12 млн при 3+ заказах / от 15 млн">
+          <p className="text-[10px] font-bold text-gray-400 uppercase">2-й месяц</p>
+          <p className="text-lg font-black text-gray-900">{milestoneStage2}</p>
+        </div>
+        <div title="Те же пороги, что и во 2-м месяце">
+          <p className="text-[10px] font-bold text-gray-400 uppercase">3-й месяц</p>
+          <p className="text-lg font-black text-gray-900">{milestoneStage3}</p>
+        </div>
+        {newSupplierMilestones.length > 0 ? (
+          <button
+            type="button"
+            onClick={() => setMilestonesOpen((v) => !v)}
+            className="px-3 py-1.5 rounded-xl border border-gray-200 text-[10px] font-bold uppercase tracking-wider text-gray-600 hover:bg-gray-50"
+          >
+            {milestonesOpen ? 'Скрыть список' : 'Список'}
+          </button>
         ) : null}
+        </>
       </div>
-      {isAdmin && milestonesOpen ? (
+      {milestonesOpen ? (
         <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm text-left">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse min-w-[640px]">
