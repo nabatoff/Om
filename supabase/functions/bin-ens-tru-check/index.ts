@@ -26,7 +26,24 @@ const SUM_CAP = 500;
 /** Для собственных договоров поставщика — до скольких договоров за год считаем суммы (по 100 на запрос). */
 const SUPPLIER_SUM_CAP = 3000;
 const FETCH_TIMEOUT_MS = 12000;
+/** Сколько кодов ЕНС ТРУ обрабатываем одновременно. */
+const CODE_CONCURRENCY = 4;
 const CODE_RE = /\d{6}\.\d{3}\.\d{6}/g;
+
+/** Параллельно, но не больше `limit` запросов одновременно — быстро, и без перегруза чужого сайта. */
+async function mapPool<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (true) {
+      const i = next++;
+      if (i >= items.length) return;
+      out[i] = await fn(items[i]);
+    }
+  });
+  await Promise.all(workers);
+  return out;
+}
 
 type CodeEntry = { code: string; names: Set<string> };
 
@@ -45,7 +62,7 @@ async function fetchJsonOnce<T>(url: string): Promise<T> {
 /** Госсайты периодически отдают 503/таймауты — пробуем ещё раз, прежде чем сдаться. */
 async function fetchJson<T>(url: string): Promise<T> {
   let lastError: unknown;
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 2; attempt++) {
     try {
       return await fetchJsonOnce<T>(url);
     } catch (e) {
@@ -157,8 +174,10 @@ async function fetchSupplierStats(bin: string, yearId: number): Promise<Supplier
   let sum = 0;
   let underCount = 0;
   let underSum = 0;
-  for (let offset = 0; offset < count; offset += 100) {
-    const page = await fetchJson<Page>(`${base}&limit=100&offset=${offset}`);
+  const offsets: number[] = [];
+  for (let offset = 0; offset < count; offset += 100) offsets.push(offset);
+  const pages = await mapPool(offsets, 5, (offset) => fetchJson<Page>(`${base}&limit=100&offset=${offset}`));
+  for (const page of pages) {
     for (const row of page.results ?? []) {
       const v = Number(row.contract_price_with_vat) || 0;
       sum += v;
@@ -202,10 +221,14 @@ async function countAndSumContracts(
 
   const pageSize = 100;
   let sum = 0;
-  let offset = 0;
-  while (offset < count) {
-    const url = `${ZAKUP_BASE}/api/core/api/public/contracts/?limit=${pageSize}&offset=${offset}&enstru_code=${encodeURIComponent(code)}&year_id=${yearId}${priceFilter}`;
-    const page = await fetchJson<ContractsPage>(url);
+  const offsets: number[] = [];
+  for (let offset = 0; offset < count; offset += pageSize) offsets.push(offset);
+  const pages = await mapPool(offsets, 5, (offset) =>
+    fetchJson<ContractsPage>(
+      `${ZAKUP_BASE}/api/core/api/public/contracts/?limit=${pageSize}&offset=${offset}&enstru_code=${encodeURIComponent(code)}&year_id=${yearId}${priceFilter}`,
+    ),
+  );
+  for (const page of pages) {
     for (const row of page.results ?? []) {
       const v = row.contract_price_with_vat;
       const value = v != null ? Number(v) || 0 : 0;
@@ -216,7 +239,6 @@ async function countAndSumContracts(
       m.sum += value;
       methods.set(method, m);
     }
-    offset += pageSize;
   }
   return { count, sum, capped: false, sampleContractId };
 }
@@ -355,24 +377,24 @@ Deno.serve(async (req: Request) => {
     }> = [];
 
     const methodTotals: MethodTotals = new Map();
-    // Последовательно, по одному коду — не перегружаем внешний сайт параллельными запросами.
-    for (const entry of codes) {
+    // По нескольку кодов одновременно (не больше CODE_CONCURRENCY) — иначе десятки кодов × страниц идут цепочкой.
+    const processed = await mapPool(codes, CODE_CONCURRENCY, async (entry) => {
       try {
         const { count, sum, capped, sampleContractId } = await countAndSumContracts(entry.code, yearId, methodTotals);
         let canonicalName: string | null = null;
         if (sampleContractId != null) {
           canonicalName = await fetchCanonicalCodeName(entry.code, sampleContractId).catch(() => null);
         }
-        results.push({
+        return {
           code: entry.code,
           names: Array.from(entry.names),
           canonicalName,
           contractCount: count,
           contractSum: sum,
           sumCapped: capped,
-        });
+        };
       } catch (e) {
-        results.push({
+        return {
           code: entry.code,
           names: Array.from(entry.names),
           canonicalName: null,
@@ -380,9 +402,10 @@ Deno.serve(async (req: Request) => {
           contractSum: null,
           sumCapped: false,
           error: e instanceof Error ? e.message : "Ошибка запроса к zakup.gov.kz",
-        });
+        };
       }
-    }
+    });
+    results.push(...processed);
 
     results.sort((a, b) => (b.contractCount || 0) - (a.contractCount || 0));
 
