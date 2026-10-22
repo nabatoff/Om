@@ -27,7 +27,7 @@ const SUM_CAP = 500;
 const SUPPLIER_SUM_CAP = 3000;
 const FETCH_TIMEOUT_MS = 12000;
 /** Сколько кодов ЕНС ТРУ обрабатываем одновременно. */
-const CODE_CONCURRENCY = 4;
+const CODE_CONCURRENCY = 10;
 const CODE_RE = /\d{6}\.\d{3}\.\d{6}/g;
 
 /** Параллельно, но не больше `limit` запросов одновременно — быстро, и без перегруза чужого сайта. */
