@@ -391,6 +391,8 @@ export type NewSupplierMilestone = {
   monthNo: 1 | 2 | 3;
   orders: number;
   gmv: number;
+  /** Месяц засчитан админом вручную (по цифрам порог не набран). */
+  manual?: boolean;
 };
 
 /** Заказ = каждая отдельная сумма в записи; GMV = сумма этих сумм за календарный месяц. */
@@ -418,7 +420,11 @@ function reachesThreshold(
  * в котором выполнен более высокий порог, «3-м» — следующий такой же после «2-го». Месяцы с невыполненным
  * порогом (в том числе без заказов) в нумерацию не входят. Каждый номер даётся один раз на поставщика.
  */
-export function findNewSupplierMilestones(rows: SupplierRegistryRow[]): NewSupplierMilestone[] {
+export function findNewSupplierMilestones(
+  rows: SupplierRegistryRow[],
+  /** Ручные отметки админа: ключи `${bin}|${YYYY-MM}` — месяц считается выполнившим порог. */
+  credits: ReadonlySet<string> = new Set(),
+): NewSupplierMilestone[] {
   const out: NewSupplierMilestone[] = [];
   for (const row of rows) {
     const months = Object.keys(row.ordersByMonth).sort();
@@ -426,9 +432,19 @@ export function findNewSupplierMilestones(rows: SupplierRegistryRow[]): NewSuppl
     for (const ym of months) {
       const { orders, gmv } = monthOrdersAndGmv(row.ordersByMonth[ym] ?? []);
       const t = monthNo === 0 ? NEW_SUPPLIER_MONTH1 : NEW_SUPPLIER_NEXT;
-      if (!reachesThreshold(t, orders, gmv)) continue;
+      const natural = reachesThreshold(t, orders, gmv);
+      const manual = !natural && credits.has(`${row.bin}|${ym}`);
+      if (!natural && !manual) continue;
       monthNo += 1;
-      out.push({ bin: row.bin, name: row.name, monthKey: ym, monthNo: monthNo as 1 | 2 | 3, orders, gmv });
+      out.push({
+        bin: row.bin,
+        name: row.name,
+        monthKey: ym,
+        monthNo: monthNo as 1 | 2 | 3,
+        orders,
+        gmv,
+        ...(manual ? { manual: true } : {}),
+      });
       if (monthNo === 3) break;
     }
   }

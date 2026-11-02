@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle, Save, Trash2, UserPlus, X } from 'lucide-react';
 import type { UiClient, UiOrder } from '../lib/crmApi';
-import { adminDeleteConfirmedOrder, adminUpdateConfirmedOrder } from '../lib/crmApi';
+import { adminDeleteConfirmedOrder, adminSetSupplierGmvCreditApi, adminUpdateConfirmedOrder } from '../lib/crmApi';
 import { formatMoneyKzt, validateOrderLinesAmount, validateOrderViaLegalEntity } from '../lib/commission';
 import type { OrderRow } from '../lib/ordersGrouping';
 
@@ -93,6 +93,8 @@ function ContractorField({
 
 type Props = {
   order: OrderRow;
+  /** Ручные отметки порога GMV: `${bin}|${YYYY-MM}`. */
+  gmvCredits: string[];
   clients: UiClient[];
   mrpKzt: number;
   onOpenAddClient: (input: string, cb: (c: UiClient) => void) => void;
@@ -100,11 +102,15 @@ type Props = {
   onClose: () => void;
 };
 
-export function AdminOrderEditModal({ order, clients, mrpKzt, onOpenAddClient, onSaved, onClose }: Props) {
+export function AdminOrderEditModal({ order, gmvCredits, clients, mrpKzt, onOpenAddClient, onSaved, onClose }: Props) {
   const [draft, setDraft] = useState<UiOrder>(() => ({
     ...order,
     amounts: [...order.amounts],
   }));
+  const creditBin = order.bin.trim();
+  const creditMonth = String(order.date).slice(0, 7);
+  const initialCredit = gmvCredits.includes(`${creditBin}|${creditMonth}`);
+  const [credit, setCredit] = useState(initialCredit);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -166,6 +172,9 @@ export function AdminOrderEditModal({ order, clients, mrpKzt, onOpenAddClient, o
         amounts: draft.amounts,
         totalAmount: draft.totalAmount,
       });
+      if (credit !== initialCredit && creditBin) {
+        await adminSetSupplierGmvCreditApi(creditBin, creditMonth, credit);
+      }
       await onSaved();
       onClose();
     } catch (e) {
@@ -264,6 +273,22 @@ export function AdminOrderEditModal({ order, clients, mrpKzt, onOpenAddClient, o
             <p className="text-[10px] font-bold text-emerald-700 uppercase">Итого сумма</p>
             <p className="text-xl font-black text-emerald-700">{formatMoneyKzt(draft.totalAmount)} ₸</p>
           </div>
+
+          <label className="flex items-start gap-3 bg-amber-50/60 border border-amber-100 rounded-2xl p-4 cursor-pointer">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 accent-amber-600"
+              checked={credit}
+              onChange={(e) => setCredit(e.target.checked)}
+            />
+            <span className="text-left">
+              <span className="block text-[11px] font-bold text-gray-800 uppercase">Засчитать поставщику порог GMV</span>
+              <span className="block text-[10px] text-gray-500 leading-snug mt-0.5">
+                Месяц {creditMonth} будет считаться выполненным для поставщика {creditBin || '—'}, даже если сумма ниже
+                порога. Поставщик попадёт в «Поставщиков, достигших GMV» с пометкой «засчитано вручную».
+              </span>
+            </span>
+          </label>
 
           {amountErr ? (
             <p className="text-[11px] font-bold text-red-600 flex items-center gap-1">

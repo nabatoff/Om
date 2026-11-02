@@ -942,3 +942,20 @@ export async function setProfileShowInRnpApi(id: string, show: boolean): Promise
   const { error } = await getSupabase().rpc('set_profile_show_in_rnp', { p_id: id, p_show: show });
   if (error) throw error;
 }
+
+/** Ручные отметки «засчитать порог GMV»: ключи `${bin}|${YYYY-MM}`. */
+export async function fetchSupplierGmvCreditsApi(): Promise<string[]> {
+  const { data, error } = await getSupabase().from('supplier_gmv_credits').select('bin, month');
+  if (error) throw error;
+  return ((data || []) as { bin: string; month: string }[]).map((r) => `${r.bin.trim()}|${r.month}`);
+}
+
+/** Админ: поставить/снять отметку «засчитать порог GMV» поставщику за месяц. */
+export async function adminSetSupplierGmvCreditApi(bin: string, month: string, on: boolean): Promise<void> {
+  const { error } = await getSupabase().rpc('admin_set_supplier_gmv_credit', {
+    p_bin: bin.trim(),
+    p_month: month,
+    p_on: on,
+  });
+  if (error) throw error;
+}

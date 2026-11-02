@@ -50,6 +50,7 @@ import {
   type DeletedMeeting,
   type ManagedClientOrder,
   fetchManagedClientOrdersApi,
+  fetchSupplierGmvCreditsApi,
   fetchClientsApi,
   fetchClientsAdminApi,
   fetchClientCategoriesApi,
@@ -283,6 +284,7 @@ const App = () => {
   const [confirmedOrders, setConfirmedOrders] = useState<UiOrder[]>([]);
   /** Заказы по клиентам, которые сейчас закреплены за мной, но сделаны другим (в т.ч. уволенным) менеджером — история видна, в КПИ не входит. */
   const [managedClientOrders, setManagedClientOrders] = useState<ManagedClientOrder[]>([]);
+  const [gmvCredits, setGmvCredits] = useState<string[]>([]);
   const [managerReportDate, setManagerReportDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [isMeetingModalOpen, setIsMeetingModalOpen] = useState(false);
   const [activeMeetingIndex, setActiveMeetingIndex] = useState<number | null>(null);
@@ -426,7 +428,7 @@ const App = () => {
     }
     setLoadError(null);
     try {
-      const [c, r, basket, standalone, mrp, analyticsTabEnabled, cats, weeklyForecast, managedOrders] = await Promise.all([
+      const [c, r, basket, standalone, mrp, analyticsTabEnabled, cats, weeklyForecast, managedOrders, credits] = await Promise.all([
         isAdmin ? fetchClientsAdminApi() : fetchClientsApi(),
         fetchReportsApi(),
         isAdmin ? fetchDeletedMeetingsApi() : Promise.resolve([]),
@@ -436,6 +438,7 @@ const App = () => {
         isAdmin ? fetchClientCategoriesApi().catch(() => [] as ClientCategory[]) : Promise.resolve([]),
         isAdmin ? fetchTelegramWeeklyForecastApi().catch(() => 0) : Promise.resolve(0),
         !isAdmin ? fetchManagedClientOrdersApi().catch(() => [] as ManagedClientOrder[]) : Promise.resolve([] as ManagedClientOrder[]),
+        fetchSupplierGmvCreditsApi().catch(() => [] as string[]),
       ]);
       setMrpKzt(mrp);
       if (isAdmin) {
@@ -461,6 +464,7 @@ const App = () => {
       setDeletedMeetings(basket);
       setStandaloneCp(standalone);
       setManagedClientOrders(managedOrders);
+      setGmvCredits(credits);
       return r;
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Ошибка загрузки');
@@ -1296,11 +1300,11 @@ const App = () => {
     }
     const fromYm = ordersFilterDateFrom ? ordersFilterDateFrom.slice(0, 7) : '';
     const toYm = ordersFilterDateTo ? ordersFilterDateTo.slice(0, 7) : '';
-    return findNewSupplierMilestones(rows)
+    return findNewSupplierMilestones(rows, new Set(gmvCredits))
       .filter((m) => !managerBinMonths || managerBinMonths.has(`${m.bin}|${m.monthKey}`))
       .filter((m) => (!fromYm || m.monthKey >= fromYm) && (!toYm || m.monthKey <= toYm))
       .sort((a, b) => a.monthKey.localeCompare(b.monthKey) || b.gmv - a.gmv);
-  }, [isAdmin, allReports, managedClientOrders, ordersFilterManager, ordersFilterDateFrom, ordersFilterDateTo]);
+  }, [isAdmin, allReports, managedClientOrders, gmvCredits, ordersFilterManager, ordersFilterDateFrom, ordersFilterDateTo]);
 
   const ordersCounterpartyOptions = useMemo(() => {
     const seen = new Set<string>();
@@ -2291,6 +2295,7 @@ const App = () => {
       {editingOrder && canAdminWrite ? (
         <AdminOrderEditModal
           order={editingOrder}
+          gmvCredits={gmvCredits}
           clients={clients}
           mrpKzt={mrpKzt}
           onOpenAddClient={(inputValue, callback) => {
@@ -4460,7 +4465,14 @@ const OrdersHistoryDashboard = ({
                 <tbody className="divide-y divide-gray-50 text-sm">
                   {newSupplierMilestones.map((m) => (
                     <tr key={`${m.bin}-${m.monthKey}-${m.monthNo}`}>
-                      <td className="py-2 px-3 font-bold text-gray-800">{m.name}</td>
+                      <td className="py-2 px-3 font-bold text-gray-800">
+                        {m.name}
+                        {m.manual ? (
+                          <span className="ml-2 px-1.5 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-[9px] font-black uppercase text-amber-700">
+                            засчитано вручную
+                          </span>
+                        ) : null}
+                      </td>
                       <td className="py-2 px-3 font-mono text-xs text-gray-500">{m.bin}</td>
                       <td className="py-2 px-3 text-gray-700">{formatRegistryMonthLabel(m.monthKey)}</td>
                       <td className="py-2 px-3 text-center text-xs font-bold text-gray-600">
