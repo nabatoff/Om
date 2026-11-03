@@ -7,6 +7,12 @@ export type BinEnsTruCodeResult = {
   contractCount: number;
   contractSum: number | null;
   sumCapped: boolean;
+  /** Договоры самого поставщика по коду (за год, в рамках лимита суммы). */
+  supplierCount?: number;
+  supplierSum?: number;
+  /** Место поставщика среди поставщиков кода по сумме (1 — первый) и число поставщиков кода. */
+  supplierRank?: number | null;
+  suppliersTotal?: number;
   error?: string;
 };
 
@@ -24,6 +30,23 @@ export type BinSupplierStats = {
 /** Разбивка договоров по способу закупки (по кодам, у которых суммы считались). */
 export type BinPurchaseMethodStat = { name: string; count: number; sum: number };
 
+/** Откуда взяты коды: реестры товаропроизводителей (КТП), договоры поставщика или ничего не нашлось. */
+export type BinCodesSource = 'ktp' | 'contracts' | 'none';
+
+/** Суммы для долей поставщика на рынке (только коды, где суммы посчитаны). */
+export type BinShareTotals = {
+  /** Рынок по всем кодам поставщика. */
+  marketSum: number;
+  /** Сумма самого поставщика по этим кодам. */
+  supplierSum: number;
+  /** Рынок только по кодам, где у поставщика есть договоры. */
+  nicheMarketSum: number;
+  nicheCodes: number;
+};
+
+/** Рынок по месяцам года (индекс 0..11) без договоров самого поставщика. */
+export type BinSeasonality = { months: Array<{ count: number; sum: number }>; count: number; sum: number };
+
 export type BinEnsTruCheckResponse = {
   ok: true;
   bin: string;
@@ -32,6 +55,9 @@ export type BinEnsTruCheckResponse = {
   maxContractPrice: number;
   supplier: BinSupplierStats | null;
   methods?: BinPurchaseMethodStat[];
+  codesSource?: BinCodesSource;
+  share?: BinShareTotals;
+  seasonality?: BinSeasonality;
   codes: BinEnsTruCodeResult[];
   message?: string;
 };

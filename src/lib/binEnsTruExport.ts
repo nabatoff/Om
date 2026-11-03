@@ -1,4 +1,11 @@
-import type { BinEnsTruCodeResult, BinPurchaseMethodStat, BinSupplierStats } from './binEnsTruCheckApi';
+import type {
+  BinCodesSource,
+  BinEnsTruCodeResult,
+  BinPurchaseMethodStat,
+  BinSeasonality,
+  BinShareTotals,
+  BinSupplierStats,
+} from './binEnsTruCheckApi';
 
 /** Принадлежность кода к справочникам «Нацизъятие» и ООИ (вкладка «Проверка ЕНС ТРУ»). */
 export type CodeRegime = { nat: boolean; ooi: boolean };
@@ -159,10 +166,14 @@ export function exportBinCheckToExcel(opts: {
   methods: BinPurchaseMethodStat[];
   regimes: Record<string, CodeRegime>;
   codes: BinEnsTruCodeResult[];
+  codesSource?: BinCodesSource;
+  share?: BinShareTotals | null;
+  seasonality?: BinSeasonality | null;
+  cappedCount?: number;
 }): void {
-  const { bin, year, maxContractPrice, sumCap, supplier, methods, regimes, codes } = opts;
+  const { bin, year, maxContractPrice, sumCap, supplier, methods, regimes, codes, codesSource, share, seasonality, cappedCount } = opts;
   const y = year ?? '';
-  const COLS = 6;
+  const COLS = 8;
   const rows: Row[] = [];
   const blank = (): Row => ({ cells: [{}], height: 10 });
 
@@ -170,7 +181,9 @@ export function exportBinCheckToExcel(opts: {
   rows.push({
     cells: [
       {
-        v: `${supplier?.name ? `${supplier.name} · ` : ''}БИН/ИИН ${bin} · ${y} год`,
+        v: `${supplier?.name ? `${supplier.name} · ` : ''}БИН/ИИН ${bin} · ${y} год${
+          codesSource === 'ktp' ? ' · Коды из КТП' : codesSource === 'contracts' ? ' · Коды из договоров (нет в КТП)' : ''
+        }`,
         s: 'subtitle',
         span: COLS,
       },
@@ -205,6 +218,38 @@ export function exportBinCheckToExcel(opts: {
         { v: supplier.underCount, s: 'intAlt' },
         supplier.underSum != null ? { v: supplier.underSum, s: 'moneyAlt' } : { v: 'не считали', s: 'centerAlt' },
         { v: '', s: 'textAlt' },
+      ],
+      height: 20,
+    });
+    rows.push(blank());
+  }
+
+  if (share) {
+    rows.push({ cells: [{ v: 'Доля поставщика на рынке', s: 'section', span: COLS }], height: 24 });
+    rows.push({
+      cells: [
+        { v: '', s: 'head' },
+        { v: 'Сумма поставщика', s: 'head' },
+        { v: 'Сумма рынка', s: 'head' },
+        { v: 'Доля, %', s: 'head' },
+      ],
+      height: 22,
+    });
+    rows.push({
+      cells: [
+        { v: 'По всем кодам', s: 'label' },
+        { v: Math.round(share.supplierSum), s: 'money' },
+        { v: Math.round(share.marketSum), s: 'money' },
+        { v: pct(share.supplierSum, share.marketSum), s: 'pct' },
+      ],
+      height: 20,
+    });
+    rows.push({
+      cells: [
+        { v: `В своей нише (кодов: ${share.nicheCodes})`, s: 'label' },
+        { v: Math.round(share.supplierSum), s: 'moneyAlt' },
+        { v: Math.round(share.nicheMarketSum), s: 'moneyAlt' },
+        { v: pct(share.supplierSum, share.nicheMarketSum), s: 'pctAlt' },
       ],
       height: 20,
     });
@@ -263,12 +308,15 @@ export function exportBinCheckToExcel(opts: {
       { v: 'Товар (по реестру)', s: 'head' },
       { v: 'Нацизъятие / ООИ', s: 'head' },
       { v: `Договоров за ${y}`, s: 'head' },
-      { v: 'Сумма', s: 'head' },
+      { v: 'Сумма рынка', s: 'head' },
+      { v: 'Доля, %', s: 'head' },
+      { v: 'Место', s: 'head' },
     ],
     height: 30,
   });
   codes.forEach((c, i) => {
     const alt = i % 2 === 1;
+    const mine = (c.supplierCount ?? 0) > 0;
     const sumCell: Cell = c.error
       ? { v: c.error, s: alt ? 'textAlt' : 'text' }
       : c.sumCapped
@@ -282,9 +330,59 @@ export function exportBinCheckToExcel(opts: {
         regimeCell(regimes[c.code]),
         { v: c.contractCount, s: alt ? 'intAlt' : 'int' },
         sumCell,
+        mine && c.contractSum
+          ? { v: pct(c.supplierSum ?? 0, c.contractSum), s: alt ? 'pctAlt' : 'pct' }
+          : { v: '—', s: alt ? 'centerAlt' : 'center' },
+        mine && c.supplierRank != null
+          ? { v: `${c.supplierRank}-й из ${c.suppliersTotal}`, s: alt ? 'centerAlt' : 'center' }
+          : { v: '—', s: alt ? 'centerAlt' : 'center' },
       ],
     });
   });
+
+  if (cappedCount) {
+    rows.push({
+      cells: [
+        {
+          v: `Не показано кодов с превышением лимита (договоров больше ${sumCap ?? ''}): ${cappedCount}. Исключены из расчёта рынка и долей.`,
+          s: 'note',
+          span: COLS,
+        },
+      ],
+    });
+  }
+
+  if (seasonality && seasonality.count > 0) {
+    rows.push(blank());
+    rows.push({
+      cells: [{ v: `Сезонность рынка ${y} (без договоров поставщика, по дате заключения)`, s: 'section', span: COLS }],
+      height: 24,
+    });
+    rows.push({
+      cells: [
+        { v: 'Месяц', s: 'head' },
+        { v: 'Договоров', s: 'head' },
+        { v: 'Сумма', s: 'head' },
+        { v: 'Доля, %', s: 'head' },
+        { v: 'Средний чек', s: 'head' },
+      ],
+      height: 22,
+    });
+    const names = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+    seasonality.months.forEach((m, i) => {
+      const alt = i % 2 === 1;
+      rows.push({
+        cells: [
+          { v: names[i], s: alt ? 'textAlt' : 'text' },
+          { v: m.count, s: alt ? 'intAlt' : 'int' },
+          { v: Math.round(m.sum), s: alt ? 'moneyAlt' : 'money' },
+          { v: pct(m.sum, seasonality.sum), s: alt ? 'pctAlt' : 'pct' },
+          m.count > 0 ? { v: Math.round(m.sum / m.count), s: alt ? 'moneyAlt' : 'money' } : { v: '—', s: alt ? 'centerAlt' : 'center' },
+        ],
+        height: 20,
+      });
+    });
+  }
 
   rows.push(blank());
   rows.push({
@@ -297,6 +395,6 @@ export function exportBinCheckToExcel(opts: {
     ],
   });
 
-  const widths = [170, 260, 300, 130, 100, 150];
+  const widths = [170, 260, 300, 130, 100, 150, 90, 110];
   downloadExcelXml(buildExcelXml(rows, widths), `proverka-po-bin-${bin}-${new Date().toISOString().slice(0, 10)}.xls`);
 }

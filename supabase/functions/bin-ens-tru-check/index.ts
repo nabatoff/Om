@@ -7,6 +7,10 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
  * API zakup.gov.kz количество и сумму договоров за 2025 год по всей стране
  * (не только договоров этого поставщика — рыночный срез по товарной группе).
  *
+ * Если в реестрах товаропроизводителей (КТП) кодов нет, коды берутся из договоров самого поставщика за год.
+ * Помимо суммы рынка считаются доля поставщика по каждому коду, его место среди поставщиков кода и
+ * помесячная сезонность рынка (без договоров самого поставщика).
+ *
  * Оба внешних сайта не отдают Access-Control-Allow-Origin, поэтому вызываются
  * только отсюда (сервер), а не напрямую из браузера.
  */
@@ -138,6 +142,13 @@ async function collectFromFullKzRegistry(bin: string, codes: Map<string, CodeEnt
   }
 }
 
+type SupplierInfo = {
+  stats: SupplierStats;
+  orgId: number;
+  /** Уникальные коды ЕНС ТРУ из договоров поставщика за год (пусто, если договоров слишком много). */
+  contractCodes: string[];
+};
+
 type SupplierStats = {
   name: string;
   count: number;
@@ -151,34 +162,49 @@ type SupplierStats = {
 };
 
 /** Собственные договоры поставщика (он — сторона-поставщик) за год: количество, сумма, средний чек. */
-async function fetchSupplierStats(bin: string, yearId: number): Promise<SupplierStats | null> {
+async function fetchSupplierStats(bin: string, yearId: number): Promise<SupplierInfo | null> {
   const orgs = await fetchJson<Array<{ id: number; iin_bin?: string; name?: string }>>(
     `${ZAKUP_BASE}/api/core/api/public/organizations/?q=${encodeURIComponent(bin)}`,
   );
   const org = (Array.isArray(orgs) ? orgs : []).find((o) => o.iin_bin === bin);
   if (!org) return null;
 
-  type Page = { count: number; results: Array<{ contract_price_with_vat?: number | string | null }> };
+  type Page = {
+    count: number;
+    results: Array<{ contract_price_with_vat?: number | string | null; enstru_code?: string[] | null }>;
+  };
   const base = `${ZAKUP_BASE}/api/core/api/public/contracts/?supplier_organization_id=${org.id}&year_id=${yearId}`;
   const first = await fetchJson<Page>(`${base}&limit=1&offset=0`);
   const count = first.count ?? 0;
   const name = org.name ?? "";
   if (count === 0) {
-    return { name, count: 0, sum: 0, avgCheck: null, underCount: 0, underSum: 0, capped: false };
+    return {
+      stats: { name, count: 0, sum: 0, avgCheck: null, underCount: 0, underSum: 0, capped: false },
+      orgId: org.id,
+      contractCodes: [],
+    };
   }
   if (count > SUPPLIER_SUM_CAP) {
     const under = await fetchJson<Page>(`${base}&limit=1&offset=0&contract_price_with_vat__lte=${MAX_CONTRACT_PRICE}`);
-    return { name, count, sum: null, avgCheck: null, underCount: under.count ?? 0, underSum: null, capped: true };
+    return {
+      stats: { name, count, sum: null, avgCheck: null, underCount: under.count ?? 0, underSum: null, capped: true },
+      orgId: org.id,
+      contractCodes: [],
+    };
   }
 
   let sum = 0;
   let underCount = 0;
   let underSum = 0;
+  const contractCodes = new Set<string>();
   const offsets: number[] = [];
   for (let offset = 0; offset < count; offset += 100) offsets.push(offset);
   const pages = await mapPool(offsets, 5, (offset) => fetchJson<Page>(`${base}&limit=100&offset=${offset}`));
   for (const page of pages) {
     for (const row of page.results ?? []) {
+      for (const c of row.enstru_code ?? []) {
+        if (typeof c === "string" && /^\d{6}\.\d{3}\.\d{6}$/.test(c)) contractCodes.add(c);
+      }
       const v = Number(row.contract_price_with_vat) || 0;
       sum += v;
       if (v <= MAX_CONTRACT_PRICE) {
@@ -187,7 +213,29 @@ async function fetchSupplierStats(bin: string, yearId: number): Promise<Supplier
       }
     }
   }
-  return { name, count, sum, avgCheck: count > 0 ? sum / count : null, underCount, underSum, capped: false };
+  return {
+    stats: { name, count, sum, avgCheck: count > 0 ? sum / count : null, underCount, underSum, capped: false },
+    orgId: org.id,
+    contractCodes: Array.from(contractCodes),
+  };
+}
+
+/** Договоров слишком много для полной выгрузки — для запасного источника кодов берём первые SUPPLIER_SUM_CAP. */
+async function fetchSupplierContractCodes(orgId: number, yearId: number): Promise<string[]> {
+  type Page = { results: Array<{ enstru_code?: string[] | null }> };
+  const base = `${ZAKUP_BASE}/api/core/api/public/contracts/?supplier_organization_id=${orgId}&year_id=${yearId}`;
+  const offsets: number[] = [];
+  for (let offset = 0; offset < SUPPLIER_SUM_CAP; offset += 100) offsets.push(offset);
+  const pages = await mapPool(offsets, 5, (offset) => fetchJson<Page>(`${base}&limit=100&offset=${offset}`));
+  const out = new Set<string>();
+  for (const page of pages) {
+    for (const row of page.results ?? []) {
+      for (const c of row.enstru_code ?? []) {
+        if (typeof c === "string" && /^\d{6}\.\d{3}\.\d{6}$/.test(c)) out.add(c);
+      }
+    }
+  }
+  return Array.from(out);
 }
 
 async function resolveYearId(year: number): Promise<number | null> {
@@ -196,31 +244,54 @@ async function resolveYearId(year: number): Promise<number | null> {
 }
 
 type MethodTotals = Map<string, { count: number; sum: number }>;
+/** Сезонность рынка: помесячно (индекс 0..11) договоры целевого года без договоров самого поставщика. */
+type MonthTotals = Array<{ count: number; sum: number }>;
+
+type CodeMarket = {
+  count: number;
+  sum: number | null;
+  capped: boolean;
+  sampleContractId: number | null;
+  /** Договоры самого поставщика по этому коду (в рамках того же года и лимита суммы). */
+  supplierCount: number;
+  supplierSum: number;
+  /** Место поставщика по сумме среди поставщиков кода (1 — первый) и сколько всего поставщиков у кода. */
+  supplierRank: number | null;
+  suppliersTotal: number;
+};
 
 async function countAndSumContracts(
   code: string,
   yearId: number,
   methods: MethodTotals,
-): Promise<{ count: number; sum: number | null; capped: boolean; sampleContractId: number | null }> {
+  months: MonthTotals,
+  supplierOrgId: number | null,
+): Promise<CodeMarket> {
   type ContractsPage = {
     count: number;
     results: Array<{
       id: number;
       contract_price_with_vat?: number | string | null;
       purchase_method_name?: string | null;
+      sign_date?: string | null;
+      supplier_organization_id?: number | null;
     }>;
   };
+  const empty = { supplierCount: 0, supplierSum: 0, supplierRank: null, suppliersTotal: 0 };
 
   const priceFilter = `&contract_price_with_vat__lte=${MAX_CONTRACT_PRICE}`;
   const firstUrl = `${ZAKUP_BASE}/api/core/api/public/contracts/?limit=1&offset=0&enstru_code=${encodeURIComponent(code)}&year_id=${yearId}${priceFilter}`;
   const first = await fetchJson<ContractsPage>(firstUrl);
   const count = first.count ?? 0;
   const sampleContractId = first.results?.[0]?.id ?? null;
-  if (count === 0) return { count: 0, sum: 0, capped: false, sampleContractId: null };
-  if (count > SUM_CAP) return { count, sum: null, capped: true, sampleContractId };
+  if (count === 0) return { count: 0, sum: 0, capped: false, sampleContractId: null, ...empty };
+  if (count > SUM_CAP) return { count, sum: null, capped: true, sampleContractId, ...empty };
 
   const pageSize = 100;
   let sum = 0;
+  let supplierCount = 0;
+  let supplierSum = 0;
+  const bySupplier = new Map<number, number>();
   const offsets: number[] = [];
   for (let offset = 0; offset < count; offset += pageSize) offsets.push(offset);
   const pages = await mapPool(offsets, 5, (offset) =>
@@ -238,9 +309,40 @@ async function countAndSumContracts(
       m.count += 1;
       m.sum += value;
       methods.set(method, m);
+
+      const sid = row.supplier_organization_id ?? null;
+      if (sid != null) bySupplier.set(sid, (bySupplier.get(sid) ?? 0) + value);
+      if (supplierOrgId != null && sid === supplierOrgId) {
+        supplierCount += 1;
+        supplierSum += value;
+      } else {
+        // Сезонность — рынок без договоров самого поставщика, по дате заключения в целевом году.
+        const d = row.sign_date ?? "";
+        if (d.startsWith(`${TARGET_YEAR}-`)) {
+          const mi = Number(d.slice(5, 7)) - 1;
+          if (mi >= 0 && mi < 12) {
+            months[mi].count += 1;
+            months[mi].sum += value;
+          }
+        }
+      }
     }
   }
-  return { count, sum, capped: false, sampleContractId };
+  let supplierRank: number | null = null;
+  if (supplierCount > 0) {
+    supplierRank = 1;
+    for (const [sid, v] of bySupplier) if (sid !== supplierOrgId && v > supplierSum) supplierRank += 1;
+  }
+  return {
+    count,
+    sum,
+    capped: false,
+    sampleContractId,
+    supplierCount,
+    supplierSum,
+    supplierRank,
+    suppliersTotal: bySupplier.size,
+  };
 }
 
 /**
@@ -337,11 +439,14 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const [, , supplier] = await Promise.all([
+    let ktpFailures = 0;
+    const [, , supplierInfo] = await Promise.all([
       collectFromRegistryFront(bin, codeMap).catch((e) => {
+        ktpFailures += 1;
         console.error("registry-front failed", e);
       }),
       collectFromFullKzRegistry(bin, codeMap).catch((e) => {
+        ktpFailures += 1;
         console.error("full_kz registry failed", e);
       }),
       fetchSupplierStats(bin, yearId).catch((e) => {
@@ -349,6 +454,25 @@ Deno.serve(async (req: Request) => {
         return null;
       }),
     ]);
+    const supplier = supplierInfo?.stats ?? null;
+    const supplierOrgId = supplierInfo?.orgId ?? null;
+
+    // Основной источник — КТП (реестры e-ondiris). Если там пусто — уникальные коды из договоров поставщика за год.
+    let codesSource: "ktp" | "contracts" | "none" = "ktp";
+    if (codeMap.size === 0) {
+      if (ktpFailures > 0) {
+        return new Response(
+          JSON.stringify({ error: "Реестр e-ondiris.gov.kz сейчас недоступен (ошибка или таймаут). Попробуйте позже." }),
+          { status: 502, headers: { ...cors, "Content-Type": "application/json" } },
+        );
+      }
+      let fallback = supplierInfo?.contractCodes ?? [];
+      if (fallback.length === 0 && supplierInfo?.stats.capped) {
+        fallback = await fetchSupplierContractCodes(supplierInfo.orgId, yearId).catch(() => []);
+      }
+      for (const code of fallback) addCode(codeMap, code, "");
+      codesSource = codeMap.size > 0 ? "contracts" : "none";
+    }
 
     if (codeMap.size === 0) {
       return new Response(
@@ -358,40 +482,36 @@ Deno.serve(async (req: Request) => {
           year: TARGET_YEAR,
           maxContractPrice: MAX_CONTRACT_PRICE,
           supplier,
+          codesSource,
           codes: [],
-          message: "В реестрах товаропроизводителей по этому БИН ничего не найдено",
+          message: "Нет данных для анализа рынка",
         }),
         { headers: { ...cors, "Content-Type": "application/json" } },
       );
     }
 
     const codes = Array.from(codeMap.values());
-    const results: Array<{
-      code: string;
-      names: string[];
-      canonicalName: string | null;
-      contractCount: number;
-      contractSum: number | null;
-      sumCapped: boolean;
-      error?: string;
-    }> = [];
-
     const methodTotals: MethodTotals = new Map();
+    const monthTotals: MonthTotals = Array.from({ length: 12 }, () => ({ count: 0, sum: 0 }));
     // По нескольку кодов одновременно (не больше CODE_CONCURRENCY) — иначе десятки кодов × страниц идут цепочкой.
-    const processed = await mapPool(codes, CODE_CONCURRENCY, async (entry) => {
+    const results = await mapPool(codes, CODE_CONCURRENCY, async (entry) => {
       try {
-        const { count, sum, capped, sampleContractId } = await countAndSumContracts(entry.code, yearId, methodTotals);
+        const r = await countAndSumContracts(entry.code, yearId, methodTotals, monthTotals, supplierOrgId);
         let canonicalName: string | null = null;
-        if (sampleContractId != null) {
-          canonicalName = await fetchCanonicalCodeName(entry.code, sampleContractId).catch(() => null);
+        if (r.sampleContractId != null) {
+          canonicalName = await fetchCanonicalCodeName(entry.code, r.sampleContractId).catch(() => null);
         }
         return {
           code: entry.code,
           names: Array.from(entry.names),
           canonicalName,
-          contractCount: count,
-          contractSum: sum,
-          sumCapped: capped,
+          contractCount: r.count,
+          contractSum: r.sum,
+          sumCapped: r.capped,
+          supplierCount: r.supplierCount,
+          supplierSum: r.supplierSum,
+          supplierRank: r.supplierRank,
+          suppliersTotal: r.suppliersTotal,
         };
       } catch (e) {
         return {
@@ -401,11 +521,14 @@ Deno.serve(async (req: Request) => {
           contractCount: 0,
           contractSum: null,
           sumCapped: false,
+          supplierCount: 0,
+          supplierSum: 0,
+          supplierRank: null,
+          suppliersTotal: 0,
           error: e instanceof Error ? e.message : "Ошибка запроса к zakup.gov.kz",
         };
       }
     });
-    results.push(...processed);
 
     results.sort((a, b) => (b.contractCount || 0) - (a.contractCount || 0));
 
@@ -413,6 +536,26 @@ Deno.serve(async (req: Request) => {
     const methods = Array.from(methodTotals, ([name, v]) => ({ name, count: v.count, sum: v.sum })).sort(
       (a, b) => b.sum - a.sum,
     );
+
+    // Доли считаем только по кодам, где суммы посчитаны (коды с превышением лимита исключены с обеих сторон).
+    let marketSum = 0;
+    let supplierSum = 0;
+    let nicheMarketSum = 0;
+    let nicheCodes = 0;
+    for (const r of results) {
+      if (r.error || r.sumCapped || r.contractSum == null) continue;
+      marketSum += r.contractSum;
+      if (r.supplierCount > 0) {
+        supplierSum += r.supplierSum;
+        nicheMarketSum += r.contractSum;
+        nicheCodes += 1;
+      }
+    }
+    const seasonality = {
+      months: monthTotals,
+      count: monthTotals.reduce((a, m) => a + m.count, 0),
+      sum: monthTotals.reduce((a, m) => a + m.sum, 0),
+    };
 
     return new Response(
       JSON.stringify({
@@ -422,7 +565,10 @@ Deno.serve(async (req: Request) => {
         sumCap: SUM_CAP,
         maxContractPrice: MAX_CONTRACT_PRICE,
         supplier,
+        codesSource,
         methods,
+        share: { marketSum, supplierSum, nicheMarketSum, nicheCodes },
+        seasonality,
         codes: results,
       }),
       { headers: { ...cors, "Content-Type": "application/json" } },
