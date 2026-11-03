@@ -238,9 +238,24 @@ async function fetchSupplierContractCodes(orgId: number, yearId: number): Promis
   return Array.from(out);
 }
 
+/** Известный id целевого года на zakup.gov.kz — запасной вариант, если справочник годов временно не отвечает. */
+const FALLBACK_YEAR_ID = 10;
+let yearIdCache: number | null = null;
+
 async function resolveYearId(year: number): Promise<number | null> {
-  const years = await fetchJson<Array<{ id: number; year: number }>>(`${ZAKUP_BASE}/api/core/api/dicts/years/`);
-  return years.find((y) => y.year === year)?.id ?? null;
+  if (yearIdCache != null) return yearIdCache;
+  try {
+    const years = await fetchJson<Array<{ id: number; year: number }>>(`${ZAKUP_BASE}/api/core/api/dicts/years/`);
+    const id = years.find((y) => y.year === year)?.id ?? null;
+    if (id != null) yearIdCache = id;
+    return id;
+  } catch (e) {
+    if (year === TARGET_YEAR) {
+      console.warn("zakup.gov.kz years failed, using fallback year id", e);
+      return FALLBACK_YEAR_ID;
+    }
+    throw e;
+  }
 }
 
 type MethodTotals = Map<string, { count: number; sum: number }>;
@@ -529,6 +544,14 @@ Deno.serve(async (req: Request) => {
         };
       }
     });
+
+    if (results.length > 0 && results.every((r) => r.error)) {
+      const reason = (results[0].error ?? "").replace(/ at https?:\/\/\S+/, "");
+      return new Response(
+        JSON.stringify({ error: `Сайт zakup.gov.kz сейчас недоступен (${reason || "ошибка или таймаут"}). Попробуйте позже.` }),
+        { status: 502, headers: { ...cors, "Content-Type": "application/json" } },
+      );
+    }
 
     results.sort((a, b) => (b.contractCount || 0) - (a.contractCount || 0));
 
