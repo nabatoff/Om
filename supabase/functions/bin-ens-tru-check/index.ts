@@ -26,7 +26,9 @@ const TARGET_YEAR = 2025;
 /** Учитываем только договоры дешевле этого порога (₸) — верхняя граница суммы договора. */
 const MAX_CONTRACT_PRICE = 17_300_000;
 /** Если за код в целевом году больше стольких договоров (после фильтра по сумме) — не считаем сумму, только количество. */
-const SUM_CAP = 500;
+const SUM_CAP = 30000;
+/** zakup.gov.kz не отдаёт записи глубже offset+limit > 10000 — большие коды режем по месяцам даты заключения. */
+const API_DEPTH_LIMIT = 10000;
 /** Для собственных договоров поставщика — до скольких договоров за год считаем суммы (по 100 на запрос). */
 const SUPPLIER_SUM_CAP = 3000;
 const FETCH_TIMEOUT_MS = 12000;
@@ -295,8 +297,8 @@ async function countAndSumContracts(
   const empty = { supplierCount: 0, supplierSum: 0, supplierRank: null, suppliersTotal: 0 };
 
   const priceFilter = `&contract_price_with_vat__lte=${MAX_CONTRACT_PRICE}`;
-  const firstUrl = `${ZAKUP_BASE}/api/core/api/public/contracts/?limit=1&offset=0&enstru_code=${encodeURIComponent(code)}&year_id=${yearId}${priceFilter}`;
-  const first = await fetchJson<ContractsPage>(firstUrl);
+  const baseUrl = `${ZAKUP_BASE}/api/core/api/public/contracts/?enstru_code=${encodeURIComponent(code)}&year_id=${yearId}${priceFilter}`;
+  const first = await fetchJson<ContractsPage>(`${baseUrl}&limit=1&offset=0`);
   const count = first.count ?? 0;
   const sampleContractId = first.results?.[0]?.id ?? null;
   if (count === 0) return { count: 0, sum: 0, capped: false, sampleContractId: null, ...empty };
@@ -307,13 +309,28 @@ async function countAndSumContracts(
   let supplierCount = 0;
   let supplierSum = 0;
   const bySupplier = new Map<number, number>();
-  const offsets: number[] = [];
-  for (let offset = 0; offset < count; offset += pageSize) offsets.push(offset);
-  const pages = await mapPool(offsets, 5, (offset) =>
-    fetchJson<ContractsPage>(
-      `${ZAKUP_BASE}/api/core/api/public/contracts/?limit=${pageSize}&offset=${offset}&enstru_code=${encodeURIComponent(code)}&year_id=${yearId}${priceFilter}`,
-    ),
-  );
+
+  // Окна выборки: весь год одним куском, а если договоров больше глубины API — по месяцам даты заключения.
+  let windows = [baseUrl];
+  const windowCounts: number[] = [count];
+  if (count > API_DEPTH_LIMIT) {
+    windows = [];
+    windowCounts.length = 0;
+    for (let m = 1; m <= 12; m++) {
+      const from = `${TARGET_YEAR}-${String(m).padStart(2, "0")}-01`;
+      const to = m === 12 ? `${TARGET_YEAR + 1}-01-01` : `${TARGET_YEAR}-${String(m + 1).padStart(2, "0")}-01`;
+      windows.push(`${baseUrl}&sign_date__gte=${from}T00:00:00&sign_date__lt=${to}T00:00:00`);
+    }
+    const counts = await mapPool(windows, 4, (w) => fetchJson<ContractsPage>(`${w}&limit=1&offset=0`));
+    for (const c of counts) windowCounts.push(c.count ?? 0);
+    // Даже один месяц глубже лимита API — выгрузить честно нельзя.
+    if (windowCounts.some((c) => c > API_DEPTH_LIMIT)) return { count, sum: null, capped: true, sampleContractId, ...empty };
+  }
+  const jobs: string[] = [];
+  windows.forEach((w, i) => {
+    for (let offset = 0; offset < windowCounts[i]; offset += pageSize) jobs.push(`${w}&limit=${pageSize}&offset=${offset}`);
+  });
+  const pages = await mapPool(jobs, 5, (url) => fetchJson<ContractsPage>(url));
   for (const page of pages) {
     for (const row of page.results ?? []) {
       const v = row.contract_price_with_vat;
