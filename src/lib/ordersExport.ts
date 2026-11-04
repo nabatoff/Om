@@ -62,6 +62,7 @@ export function exportOrdersToExcel(
   orders: OrderRow[],
   options: {
     clientKtpByBin: Map<string, boolean>;
+    clientCategoryByBin: Map<string, string>;
     includeCommission: boolean;
   },
 ): void {
@@ -70,6 +71,7 @@ export function exportOrdersToExcel(
     'Менеджер',
     'БИН/ИИН',
     'Контрагент',
+    'Категория контрагента',
     'Заказ через (ЮЛ)',
     'БИН юр. лица',
     'Сумма',
@@ -98,6 +100,7 @@ export function exportOrdersToExcel(
         o.manager,
         normalizeBin(o.bin),
         o.entityName,
+        options.clientCategoryByBin.get(normalizeBin(o.bin)) ?? '',
         o.viaEntityName,
         normalizeBin(o.viaBin),
         formatMoneyCell(lineAmounts[i]),
@@ -117,6 +120,7 @@ export function exportGroupedOrdersToExcel(
   groups: GroupedCounterpartyOrder[],
   options: {
     clientKtpByBin: Map<string, boolean>;
+    clientCategoryByBin: Map<string, string>;
     includeCommission: boolean;
   },
 ): void {
@@ -125,6 +129,7 @@ export function exportGroupedOrdersToExcel(
     '\u041C\u0435\u043D\u0435\u0434\u0436\u0435\u0440',
     '\u0411\u0418\u041D/\u0418\u0418\u041D',
     '\u041A\u043E\u043D\u0442\u0440\u0430\u0433\u0435\u043D\u0442',
+    'Категория контрагента',
     '\u041A\u043E\u043B-\u0432\u043E',
     '\u0421\u0443\u043C\u043C\u0430',
     ...(options.includeCommission ? ['\u041A\u043E\u043C\u0438\u0441\u0441\u0438\u044F'] : []),
@@ -158,6 +163,7 @@ export function exportGroupedOrdersToExcel(
       g.manager,
       normalizeBin(g.bin),
       g.entityName,
+      options.clientCategoryByBin.get(normalizeBin(g.bin)) ?? '',
       String(g.orderCount),
       formatMoneyCellPlain(g.totalAmount),
     ];

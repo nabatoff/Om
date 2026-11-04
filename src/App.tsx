@@ -1336,6 +1336,14 @@ const App = () => {
   );
 
   const clientKtpByBin = useMemo(() => buildClientKtpMap(clients), [clients]);
+  const clientCategoryByBin = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const c of clients) {
+      const bin = c.bin?.trim();
+      if (bin && c.categoryName) map.set(bin, c.categoryName);
+    }
+    return map;
+  }, [clients]);
 
   const reportsForClientScope = useMemo(() => {
     if (isAdmin) return allReports;
@@ -1934,6 +1942,7 @@ const App = () => {
                 viewMode={ordersViewMode}
                 setViewMode={setOrdersViewMode}
                 clientKtpByBin={clientKtpByBin}
+                clientCategoryByBin={clientCategoryByBin}
                 newSupplierMilestones={newSupplierMilestones}
                 totalOrdersCount={allFilteredOrders
                   .filter((order) => !order.isInherited)
@@ -4178,6 +4187,7 @@ const OrdersHistoryDashboard = ({
   viewMode,
   setViewMode,
   clientKtpByBin,
+  clientCategoryByBin,
   newSupplierMilestones,
   totalOrdersCount,
   filterManager,
@@ -4202,6 +4212,7 @@ const OrdersHistoryDashboard = ({
   viewMode: 'records' | 'byCounterparty';
   setViewMode: SetState<'records' | 'byCounterparty'>;
   clientKtpByBin: Map<string, boolean>;
+  clientCategoryByBin: Map<string, string>;
   newSupplierMilestones: NewSupplierMilestone[];
   totalOrdersCount: number;
   filterManager: string;
@@ -4509,10 +4520,12 @@ const OrdersHistoryDashboard = ({
                 isGroupedView
                   ? exportGroupedOrdersToExcel(sortedGroupedOrders, {
                       clientKtpByBin,
+                      clientCategoryByBin,
                       includeCommission: true,
                     })
                   : exportOrdersToExcel(orders, {
                       clientKtpByBin,
+                      clientCategoryByBin,
                       includeCommission: true,
                     })
               }
