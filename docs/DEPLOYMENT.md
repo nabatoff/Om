@@ -33,7 +33,7 @@ npx supabase db push --project-ref <ваш-project-ref>
 npx supabase functions deploy <имя-функции> --project-ref <ваш-project-ref>
 ```
 
-Список функций: `create-staff`, `set-staff-password`, `revoke-staff-access`, `telegram-daily-report`, `telegram-enterprise-lead`, `bin-ens-tru-check`. **Каждый раз после правки кода в `supabase/functions/<name>/` нужно вручную передеплоить именно эту функцию** — иначе прод продолжит работать на старой версии, а git будет "врать", что всё обновлено.
+Список функций: `create-staff`, `set-staff-password`, `revoke-staff-access`, `telegram-daily-report`, `telegram-enterprise-lead`, `bin-ens-tru-check`, `sync-national-exemption`. **Каждый раз после правки кода в `supabase/functions/<name>/` нужно вручную передеплоить именно эту функцию** — иначе прод продолжит работать на старой версии, а git будет "врать", что всё обновлено.
 
 ### Секреты Edge Functions (Dashboard → Edge Functions → Secrets, или `supabase secrets set`)
 
@@ -42,6 +42,7 @@ npx supabase functions deploy <имя-функции> --project-ref <ваш-proj
 | `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` | все функции, работающие с Auth/БД от имени service role |
 | `STAFF_EMAIL_DOMAIN` | `create-staff` (должен совпадать с фронтендовым `VITE_STAFF_AUTH_DOMAIN`) |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | `telegram-daily-report`, `telegram-enterprise-lead` |
+| `NR_SYNC_CRON_SECRET` | `sync-national-exemption` — сверяется с `x-cron-key` из cron-задачи `nr-exemption-sync` |
 | `TELEGRAM_CRON_SECRET` | `telegram-daily-report` — сверяется с заголовком `x-cron-key`, который шлёт `pg_cron` |
 | `REPORT_TIMEZONE` | `telegram-daily-report` (по умолчанию `Asia/Almaty`, если не задан) |
 
