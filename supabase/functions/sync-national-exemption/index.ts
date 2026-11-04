@@ -194,7 +194,10 @@ Deno.serve(async (req: Request) => {
       const isRegistry = rows.some((r) => r.some((c) => /наименование цифрового объекта/i.test(c)));
       const parsed = codesFromRows(rows, isRegistry ? REGISTRY_FALLBACK_NAME : link.label);
       // В реестрах цифровых продуктов в строке лежит название продукта, а не товара — берём общее название.
-      const codes = isRegistry ? parsed.map((p) => ({ ...p, name: REGISTRY_FALLBACK_NAME })) : parsed;
+      const codes = (isRegistry ? parsed.map((p) => ({ ...p, name: REGISTRY_FALLBACK_NAME })) : parsed).map((p) => ({
+        ...p,
+        industry: p.industry || (isRegistry ? "Программное обеспечение и электроника" : DEFAULT_INDUSTRY),
+      }));
 
       if (codes.length === 0) {
         if (!dry) await saveSource(db, { url: link.url, label: link.label, content_hash: hash, status: "empty", codes_found: 0, codes_added: 0, processed_at: new Date().toISOString() });
@@ -209,7 +212,7 @@ Deno.serve(async (req: Request) => {
           code: c.code,
           name: c.name,
           characteristic: "",
-          industry: DEFAULT_INDUSTRY,
+          industry: c.industry,
           basis,
           valid_until: validUntil,
         }));

@@ -7,7 +7,7 @@ export const CODE_RE = /\d{6}\.\d{3}\.\d{6}/g;
 
 export type DocKind = "xlsx" | "docx" | "html" | "ole" | "pdf" | "unknown";
 
-export type ParsedCode = { code: string; name: string };
+export type ParsedCode = { code: string; name: string; industry: string };
 
 const dec = new TextDecoder("utf-8");
 
@@ -90,12 +90,16 @@ function rowsFromDocx(xml: string): string[][] {
   }
   // Коды вне таблиц (в обычных абзацах) — отдельными «строками».
   const outside = xml.replace(/<w:tbl>[\s\S]*?<\/w:tbl>/g, " ");
+  const head: string[][] = [];
   for (const p of outside.match(/<w:p[ >][\s\S]*?<\/w:p>/g) ?? []) {
     const text = cleanCell(p);
-    if (CODE_RE.test(text)) rows.push([text]);
+    const hasCode = CODE_RE.test(text);
     CODE_RE.lastIndex = 0;
+    if (hasCode) rows.push([text]);
+    // Название документа («Перечень товаров легкой промышленности…») — отрасль по умолчанию, пока нет заголовков разделов.
+    else if (text.length < 150 && industryFromText(text)) head.push([text]);
   }
-  return rows;
+  return [...head, ...rows];
 }
 
 function rowsFromXlsx(sharedXml: string, sheets: string[]): string[][] {
@@ -163,22 +167,45 @@ function looksLikeName(c: string): boolean {
   return true;
 }
 
+/** Название отрасли по тексту (заголовок раздела таблицы или название документа); null — не распознано. */
+export function industryFromText(text: string): string | null {
+  const t = text.toLowerCase();
+  if (/электронн|программн|доверенн/.test(t)) return "Программное обеспечение и электроника";
+  if (/легк\S* промышленн|текстильн|швейн|кожевен|обув/.test(t)) return "Лёгкая промышленность";
+  if (/машиностро/.test(t)) return "Машиностроение";
+  if (/хими/.test(t)) return "Химическая промышленность";
+  if (/металлург/.test(t)) return "Металлургия";
+  if (/строительн/.test(t)) return "Строительная промышленность";
+  if (/мебел/.test(t)) return "Мебельная промышленность";
+  if (/бумаж|^бумаг/.test(t)) return "Бумажная отрасль";
+  return null;
+}
+
 /**
- * Строки с кодами → коды с названиями. Название — первая подходящая ячейка той же строки;
+ * Строки с кодами → коды с названиями и отраслью. Название — первая подходящая ячейка той же строки;
  * если в строке нет «короткого» названия (реестры цифровых продуктов, где в строке длинные описания),
  * подставляется `fallbackName`.
  */
-export function codesFromRows(rows: string[][], fallbackName: string): ParsedCode[] {
-  const out = new Map<string, string>();
+export function codesFromRows(rows: string[][], fallbackName: string, docIndustry: string | null = null): ParsedCode[] {
+  const out = new Map<string, { name: string; industry: string | null }>();
+  let section: string | null = null;
   for (const cells of rows) {
     const codes = new Set<string>();
     for (const c of cells) for (const m of c.match(CODE_RE) ?? []) codes.add(m);
-    if (codes.size === 0) continue;
+    if (codes.size === 0) {
+      // Строка-заголовок раздела («Товары машиностроительной отрасли»): одна непустая ячейка с названием отрасли.
+      const filled = cells.filter(Boolean);
+      if (filled.length === 1 && filled[0].length < 150) {
+        const ind = industryFromText(filled[0]);
+        if (ind) section = ind;
+      }
+      continue;
+    }
     const name = cells.find(looksLikeName);
     const label = name ? fixName(name) : fallbackName;
-    for (const code of codes) if (!out.has(code)) out.set(code, label);
+    for (const code of codes) if (!out.has(code)) out.set(code, { name: label, industry: section ?? docIndustry ?? industryFromText(label) });
   }
-  return Array.from(out, ([code, name]) => ({ code, name }));
+  return Array.from(out, ([code, v]) => ({ code, name: v.name, industry: v.industry ?? "" }));
 }
 
 export type NrDecree = { id: string; date: string; number: string };
