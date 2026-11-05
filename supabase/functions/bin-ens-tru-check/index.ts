@@ -260,6 +260,9 @@ async function resolveYearId(year: number): Promise<number | null> {
   }
 }
 
+/** Способы закупки, которые не учитываем в рынке (другой бюджет, к нашим закупкам не относятся). */
+const EXCLUDED_METHOD_RE = /^конкурс по приобретению/i;
+
 type MethodTotals = Map<string, { count: number; sum: number }>;
 /** Сезонность рынка: помесячно (индекс 0..11) договоры целевого года без договоров самого поставщика. */
 type MonthTotals = Array<{ count: number; sum: number }>;
@@ -306,6 +309,7 @@ async function countAndSumContracts(
 
   const pageSize = 100;
   let sum = 0;
+  let excludedCount = 0;
   let supplierCount = 0;
   let supplierSum = 0;
   const bySupplier = new Map<number, number>();
@@ -333,10 +337,14 @@ async function countAndSumContracts(
   const pages = await mapPool(jobs, 5, (url) => fetchJson<ContractsPage>(url));
   for (const page of pages) {
     for (const row of page.results ?? []) {
+      const method = row.purchase_method_name?.trim() || "Не указан";
+      if (EXCLUDED_METHOD_RE.test(method)) {
+        excludedCount += 1;
+        continue;
+      }
       const v = row.contract_price_with_vat;
       const value = v != null ? Number(v) || 0 : 0;
       sum += value;
-      const method = row.purchase_method_name?.trim() || "Не указан";
       const m = methods.get(method) ?? { count: 0, sum: 0 };
       m.count += 1;
       m.sum += value;
@@ -366,7 +374,7 @@ async function countAndSumContracts(
     for (const [sid, v] of bySupplier) if (sid !== supplierOrgId && v > supplierSum) supplierRank += 1;
   }
   return {
-    count,
+    count: count - excludedCount,
     sum,
     capped: false,
     sampleContractId,
