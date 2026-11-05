@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, ChevronUp, Download, Factory, Loader2, Search } from 'lucide-react';
+import { ChevronDown, ChevronRight, ChevronUp, Download, Factory, Loader2, Presentation, Search } from 'lucide-react';
 import {
   checkBinEnsTruContractsApi,
   type BinCodesSource,
@@ -11,6 +11,7 @@ import {
 } from '../lib/binEnsTruCheckApi';
 import { checkEnsTruCodesApi, checkEnsTruNationalExemptionCodesApi } from '../lib/ensTruApi';
 import { exportBinCheckToExcel } from '../lib/binEnsTruExport';
+import { openBinPresentation } from '../lib/binPresentation';
 import { CODES_TOP_LIMIT, SEASONALITY_MIN_CONTRACTS, SEASONALITY_PEAK_FACTOR } from '../lib/binCheckConfig';
 
 type CodeRegime = { nat: boolean; ooi: boolean };
@@ -322,6 +323,29 @@ export function BinEnsTruCheckPanel() {
           >
             <Download size={14} />
             Выгрузить в Excel
+          </button>
+        ) : null}
+        {hasResult ? (
+          <button
+            type="button"
+            onClick={() => {
+              const ok = openBinPresentation({
+                bin: checkedBin,
+                year,
+                maxContractPrice,
+                supplier,
+                methods,
+                codesSource,
+                share,
+                seasonality,
+                codes: tableCodes,
+              });
+              if (!ok) setError('Браузер заблокировал новую вкладку — разрешите всплывающие окна для сайта.');
+            }}
+            className="ml-2 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-bold uppercase tracking-wider hover:bg-indigo-100"
+          >
+            <Presentation size={14} />
+            Презентация (PDF)
           </button>
         ) : null}
       </section>
