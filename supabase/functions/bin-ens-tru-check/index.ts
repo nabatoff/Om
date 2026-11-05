@@ -261,7 +261,7 @@ async function resolveYearId(year: number): Promise<number | null> {
 }
 
 /** Способы закупки, которые не учитываем в рынке (другой бюджет, к нашим закупкам не относятся). */
-const EXCLUDED_METHOD_RE = /^конкурс по приобретению/i;
+const EXCLUDED_METHOD_RE = /^конкурс по приобретению|по питанию обучающихся/i;
 
 type MethodTotals = Map<string, { count: number; sum: number }>;
 /** Сезонность рынка: помесячно (индекс 0..11) договоры целевого года без договоров самого поставщика. */
