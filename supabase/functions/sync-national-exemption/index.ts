@@ -261,17 +261,11 @@ Deno.serve(async (req: Request) => {
   const newErrors = errors.filter((r) => knownByUrl.get(r.url)?.status !== "error");
 
   if (!dry) {
-    // Сколько кодов сейчас действует: все минус те, у кого срок (dd.mm.yyyy) уже вышел.
+    // Сколько кодов сейчас действует (функция в БД считает с учётом сроков).
     let actual: number | null = null;
     try {
-      const { count: total } = await db.from("crm_ens_tru_national_exemption_codes").select("code", { count: "exact", head: true });
-      const { data: dated } = await db.from("crm_ens_tru_national_exemption_codes").select("valid_until").neq("valid_until", "").limit(20000);
-      const today = new Date().toISOString().slice(0, 10);
-      const expired = (dated ?? []).filter((r: { valid_until: string }) => {
-        const m = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(r.valid_until ?? "");
-        return m ? `${m[3]}-${m[2]}-${m[1]}` < today : false;
-      }).length;
-      if (total != null) actual = total - expired;
+      const { data } = await db.rpc("count_active_national_exemption_codes");
+      if (typeof data === "number") actual = data;
     } catch (_e) { /* счётчик необязателен */ }
 
     const lines: string[] = ["<b>Нацизъятие: проверка справочника</b>"];

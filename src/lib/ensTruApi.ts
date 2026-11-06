@@ -56,6 +56,13 @@ export type NationalExemptionCheckResult = {
   entries: Array<{ name: string; characteristic: string; industry: string }>;
 };
 
+/** Сколько кодов «Нацизъятия» действует сейчас (без истёкших по сроку). */
+export async function countActiveNationalExemptionCodesApi(): Promise<number> {
+  const { data, error } = await getSupabase().rpc('count_active_national_exemption_codes');
+  if (error) throw error;
+  return Number(data ?? 0);
+}
+
 /** Проверка по справочнику "Нацизъятие" (отдельная база, см. docs/BUSINESS_LOGIC.md). */
 export async function checkEnsTruNationalExemptionCodesApi(
   codes: string[],

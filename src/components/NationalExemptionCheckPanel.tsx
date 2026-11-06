@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ShieldAlert, Loader2, Search } from 'lucide-react';
-import { checkEnsTruNationalExemptionCodesApi, parseEnsTruInput } from '../lib/ensTruApi';
+import { checkEnsTruNationalExemptionCodesApi, countActiveNationalExemptionCodesApi, parseEnsTruInput } from '../lib/ensTruApi';
 
 type FoundRow = { code: string; entries: Array<{ name: string; characteristic: string; industry: string }> };
 
@@ -10,6 +10,19 @@ export function NationalExemptionCheckPanel() {
   const [found, setFound] = useState<FoundRow[]>([]);
   const [notFound, setNotFound] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [activeCount, setActiveCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    countActiveNationalExemptionCodesApi()
+      .then((n) => {
+        if (!cancelled) setActiveCount(n);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleCheck = async () => {
     const { codes, invalid } = parseEnsTruInput(input);
@@ -53,7 +66,17 @@ export function NationalExemptionCheckPanel() {
           <ShieldAlert size={22} />
         </div>
         <div>
-          <h2 className="text-lg font-black text-gray-900">Нацизъятие</h2>
+          <h2 className="flex flex-wrap items-center gap-2 text-lg font-black text-gray-900">
+            Нацизъятие
+            {activeCount != null ? (
+              <span
+                title="Сколько кодов действует сейчас (без истёкших по сроку)"
+                className="rounded-full border border-amber-200 bg-amber-50 px-3 py-0.5 text-[11px] font-bold text-amber-700"
+              >
+                актуальных кодов: {new Intl.NumberFormat('ru-RU').format(activeCount)}
+              </span>
+            ) : null}
+          </h2>
           <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">
             Изъятие из национального режима — закупка только у отечественных производителей
           </p>
