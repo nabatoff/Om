@@ -102,6 +102,8 @@ type DocResult = {
   url: string;
   label: string;
   status: "ok" | "empty" | "skipped" | "expired" | "error" | "unchanged";
+  /** PDF, которого раньше не видели: автомат его не читает, коды надо проверить вручную. */
+  newPdf?: boolean;
   found: number;
   added: number;
   error?: string;
@@ -161,7 +163,16 @@ Deno.serve(async (req: Request) => {
   const results = await mapPool(links, DOC_CONCURRENCY, async (link): Promise<DocResult> => {
     const base = { url: link.url, label: link.label, found: 0, added: 0 };
     try {
-      if (/\.pdf(\?|$)/i.test(link.url)) return { ...base, status: "skipped" };
+      if (/\.pdf(\?|$)/i.test(link.url)) {
+        const live = link.decrees.length === 0 || link.decrees.some((d) => decreeExpiry(d.date) >= todayYmd);
+        if (!live) {
+          if (!dry) await saveSource(db, { url: link.url, label: link.label, status: "expired", processed_at: new Date().toISOString() });
+          return { ...base, status: "expired" };
+        }
+        const isNew = !knownByUrl.has(link.url);
+        if (isNew && !dry) await saveSource(db, { url: link.url, label: link.label, status: "skipped", processed_at: new Date().toISOString() });
+        return { ...base, status: "skipped", newPdf: isNew };
+      }
       // Документы постановлений, срок которых (дата + 2 года) уже истёк, не загружаем.
       const active = link.decrees.filter((d) => decreeExpiry(d.date) >= todayYmd);
       if (link.decrees.length > 0 && active.length === 0) {
@@ -275,6 +286,13 @@ Deno.serve(async (req: Request) => {
     if (newErrors.length > 0) {
       lines.push(`Не удалось разобрать документов: ${newErrors.length} (нужна ручная загрузка)`);
       for (const r of newErrors.slice(0, 5)) lines.push(`• ${escHtml(r.label)} — ${escHtml((r.error ?? "").slice(0, 120))}`);
+    }
+    const newPdfs = results.filter((r) => r.newPdf);
+    if (newPdfs.length > 0) {
+      lines.push("");
+      lines.push(`📄 <b>Новые PDF на zakup.gov.kz/nr: ${newPdfs.length}</b> (автоматически PDF не читаются)`);
+      for (const r of newPdfs.slice(0, 8)) lines.push(`• ${escHtml(r.label)} — ${escHtml(r.url)}`);
+      lines.push("Что делать: открыть PDF. Если в нём таблица кодов ЕНС ТРУ (обычно «дополнение к приказу»), пришлите ссылку в чат с Claude — он добавит коды миграцией. Если там только текст постановления или приказа без кодов, ничего делать не нужно.");
     }
     await sendTelegram(lines.join("\n"));
   }
