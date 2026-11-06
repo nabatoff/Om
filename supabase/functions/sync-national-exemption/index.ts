@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-import { codesFromRows, decreeExpiry, detectKind, extractLinks, extractRows, listZip, sha256Hex, type NrLink } from "./parse.ts";
+import { CODE_RE, codesFromRows, decreeExpiry, detectKind, extractLinks, extractRows, listZip, parsePdfOrderText, sha256Hex, type NrLink, type ParsedCode } from "./parse.ts";
 
 /**
  * Автоподтягивание кодов «Нацизъятия» со страницы zakup.gov.kz/nr.
@@ -102,8 +102,9 @@ type DocResult = {
   url: string;
   label: string;
   status: "ok" | "empty" | "skipped" | "expired" | "error" | "unchanged";
-  /** PDF, которого раньше не видели: автомат его не читает, коды надо проверить вручную. */
+  /** PDF, который автомат не смог разобрать, а в нём могут быть коды: нужна ручная проверка (причина — в pdfNote). */
   newPdf?: boolean;
+  pdfNote?: string;
   found: number;
   added: number;
   error?: string;
@@ -163,16 +164,6 @@ Deno.serve(async (req: Request) => {
   const results = await mapPool(links, DOC_CONCURRENCY, async (link): Promise<DocResult> => {
     const base = { url: link.url, label: link.label, found: 0, added: 0 };
     try {
-      if (/\.pdf(\?|$)/i.test(link.url)) {
-        const live = link.decrees.length === 0 || link.decrees.some((d) => decreeExpiry(d.date) >= todayYmd);
-        if (!live) {
-          if (!dry) await saveSource(db, { url: link.url, label: link.label, status: "expired", processed_at: new Date().toISOString() });
-          return { ...base, status: "expired" };
-        }
-        const isNew = !knownByUrl.has(link.url);
-        if (isNew && !dry) await saveSource(db, { url: link.url, label: link.label, status: "skipped", processed_at: new Date().toISOString() });
-        return { ...base, status: "skipped", newPdf: isNew };
-      }
       // Документы постановлений, срок которых (дата + 2 года) уже истёк, не загружаем.
       const active = link.decrees.filter((d) => decreeExpiry(d.date) >= todayYmd);
       if (link.decrees.length > 0 && active.length === 0) {
@@ -195,20 +186,39 @@ Deno.serve(async (req: Request) => {
 
       const zipNames = buf[0] === 0x50 && buf[1] === 0x4b ? Array.from(listZip(buf).keys()) : undefined;
       const kind = detectKind(buf, zipNames);
-      if (kind === "pdf") {
-        if (!dry) await saveSource(db, { url: link.url, label: link.label, content_hash: hash, status: "skipped", processed_at: new Date().toISOString() });
-        return { ...base, status: "skipped" };
-      }
       if (kind === "ole" || kind === "unknown") throw new Error(`неподдерживаемый формат (${kind})`);
 
-      const rows = await extractRows(buf, kind);
-      const isRegistry = rows.some((r) => r.some((c) => /наименование цифрового объекта/i.test(c)));
-      const parsed = codesFromRows(rows, isRegistry ? REGISTRY_FALLBACK_NAME : link.label);
-      // В реестрах цифровых продуктов в строке лежит название продукта, а не товара — берём общее название.
-      const codes = (isRegistry ? parsed.map((p) => ({ ...p, name: REGISTRY_FALLBACK_NAME })) : parsed).map((p) => ({
-        ...p,
-        industry: p.industry || (isRegistry ? "Программное обеспечение и электроника" : DEFAULT_INDUSTRY),
-      }));
+      let codes: ParsedCode[];
+      if (kind === "pdf") {
+        // Приказ-дополнение в PDF: достаём текстовый слой и разбираем таблицу «Код ЕНС ТРУ». Скан без текста прочитать нельзя.
+        let text = "";
+        try {
+          // Библиотека подключается лениво: если она не загрузится в рантайме, остальные документы это не ломает.
+          const { extractText, getDocumentProxy } = await import("npm:unpdf@0.12.1");
+          const pdf = await getDocumentProxy(new Uint8Array(buf));
+          text = (await extractText(pdf, { mergePages: true })).text ?? "";
+        } catch (_e) { /* битый PDF — ниже уйдёт в ручную проверку */ }
+        const codeCount = (text.match(new RegExp(CODE_RE.source, "g")) ?? []).length;
+        const pdfParsed = text.trim().length > 200 ? parsePdfOrderText(text, DEFAULT_INDUSTRY) : null;
+        let manual: string | null = null;
+        if (!pdfParsed) manual = "скан или PDF без текстового слоя — прочитать автоматически нельзя";
+        else if (pdfParsed.codes.length > 0 && pdfParsed.risky) manual = "приказ не только дополняет перечень (есть «исключить»/«в редакции») — нужна проверка";
+        else if (pdfParsed.codes.length === 0 && codeCount > 0) manual = "в тексте есть коды, но таблицу разобрать не удалось";
+        if (manual) {
+          if (!dry) await saveSource(db, { url: link.url, label: link.label, content_hash: hash, status: "skipped", error: manual.slice(0, 300), codes_found: 0, codes_added: 0, processed_at: new Date().toISOString() });
+          return { ...base, status: "skipped", newPdf: true, pdfNote: manual };
+        }
+        codes = (pdfParsed?.codes ?? []).map((p) => ({ ...p, industry: p.industry || DEFAULT_INDUSTRY }));
+      } else {
+        const rows = await extractRows(buf, kind);
+        const isRegistry = rows.some((r) => r.some((c) => /наименование цифрового объекта/i.test(c)));
+        const parsed = codesFromRows(rows, isRegistry ? REGISTRY_FALLBACK_NAME : link.label);
+        // В реестрах цифровых продуктов в строке лежит название продукта, а не товара — берём общее название.
+        codes = (isRegistry ? parsed.map((p) => ({ ...p, name: REGISTRY_FALLBACK_NAME })) : parsed).map((p) => ({
+          ...p,
+          industry: p.industry || (isRegistry ? "Программное обеспечение и электроника" : DEFAULT_INDUSTRY),
+        }));
+      }
 
       if (codes.length === 0) {
         if (!dry) await saveSource(db, { url: link.url, label: link.label, content_hash: hash, status: "empty", codes_found: 0, codes_added: 0, processed_at: new Date().toISOString() });
@@ -288,11 +298,13 @@ Deno.serve(async (req: Request) => {
       for (const r of newErrors.slice(0, 5)) lines.push(`• ${escHtml(r.label)} — ${escHtml((r.error ?? "").slice(0, 120))}`);
     }
     const newPdfs = results.filter((r) => r.newPdf);
+    const pdfAdded = results.filter((r) => r.added > 0 && /\.pdf(\?|$)/i.test(r.url));
+    if (pdfAdded.length > 0) lines.push(`📄 Коды из PDF разобраны автоматически: ${pdfAdded.map((r) => `${escHtml(r.label)} (+${r.added})`).join(", ")}. Стоит глазами сверить с документом.`);
     if (newPdfs.length > 0) {
       lines.push("");
-      lines.push(`📄 <b>Новые PDF на zakup.gov.kz/nr: ${newPdfs.length}</b> (автоматически PDF не читаются)`);
-      for (const r of newPdfs.slice(0, 8)) lines.push(`• ${escHtml(r.label)} — ${escHtml(r.url)}`);
-      lines.push("Что делать: открыть PDF. Если в нём таблица кодов ЕНС ТРУ (обычно «дополнение к приказу»), пришлите ссылку в чат с Claude — он добавит коды миграцией. Если там только текст постановления или приказа без кодов, ничего делать не нужно.");
+      lines.push(`📄 <b>PDF, которые не удалось разобрать автоматически: ${newPdfs.length}</b>`);
+      for (const r of newPdfs.slice(0, 8)) lines.push(`• ${escHtml(r.label)} — ${escHtml(r.url)}\n  причина: ${escHtml(r.pdfNote ?? "")}`);
+      lines.push("Что делать: открыть PDF. Если в нём таблица кодов ЕНС ТРУ, которых нет в справочнике (обычно «дополнение к приказу»), пришлите ссылку в чат с Claude — он добавит коды миграцией. Если там только текст постановления или приказа без кодов, ничего делать не нужно.");
     }
     await sendTelegram(lines.join("\n"));
   }

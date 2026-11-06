@@ -261,3 +261,55 @@ export async function sha256Hex(bytes: Uint8Array): Promise<string> {
   const d = await crypto.subtle.digest("SHA-256", bytes);
   return Array.from(new Uint8Array(d), (b) => b.toString(16).padStart(2, "0")).join("");
 }
+
+export type PdfOrderParse = {
+  codes: ParsedCode[];
+  /** Приказ не только дополняет перечень (есть «исключить», «изложить в редакции» и т. п.) — автоматически не применяем. */
+  risky: boolean;
+  /** В тексте нашлась таблица «Код ЕНС ТРУ». */
+  hasTable: boolean;
+};
+
+/**
+ * Разбор текста приказа-дополнения (PDF уже превращён в текст): таблица «№ п/п | Наименование | Код ЕНС ТРУ».
+ * Отрасль берём из фразы «часть «Товары … отрасли» дополнить …», перед каждой такой частью — своя отрасль.
+ * Скан без текстового слоя сюда не попадает (текста нет) — это отдельный случай для ручной проверки.
+ */
+export function parsePdfOrderText(raw: string, fallbackIndustry: string): PdfOrderParse {
+  let t = raw.replace(/Дата:\s*[\d.]+\s*[\d:]+\.\s*Копия электронного документа.*?проверки ЭЦП/gs, " ");
+  t = t.replace(/\s+/g, " ").trim();
+  const risky = /исключить|исключен|утратив|в следующей редакции|заменить/i.test(t);
+  const head = t.search(/Наименование\s+Код\s+ЕНС\s*ТРУ/i);
+  if (head < 0) return { codes: [], risky, hasTable: false };
+
+  const sections: Array<{ at: number; industry: string }> = [];
+  for (const m of t.matchAll(/часть\s+[«"]([^»"]{3,160})[»"]\s+дополнить/gi)) {
+    sections.push({ at: m.index ?? 0, industry: industryFromText(m[1]) ?? fallbackIndustry });
+  }
+  const industryAt = (pos: number): string => {
+    let cur = industryFromText(t.slice(0, head)) ?? fallbackIndustry;
+    for (const s of sections) if (s.at <= pos) cur = s.industry;
+    return cur;
+  };
+
+  // Конец таблицы — закрывающая кавычка «» перед следующим пунктом приказа; если нет — до конца текста.
+  const tail = t.slice(head);
+  const endRel = tail.search(/»\s*\.?\s*2\.\s/);
+  const body = tail.slice(0, endRel > 0 ? endRel : tail.length);
+  const out: ParsedCode[] = [];
+  const seen = new Set<string>();
+  let prev = body.search(/Код\s+ЕНС\s*ТРУ/i) + "Код ЕНС ТРУ".length;
+  for (const m of body.matchAll(new RegExp(CODE_RE.source, "g"))) {
+    const idx = m.index ?? 0;
+    const name = body
+      .slice(prev, idx)
+      .replace(/^(?:\s*\d{1,4}\b)+/, "")
+      .replace(/(?<=-)\s+(?=[а-яё])/g, "")
+      .trim();
+    prev = idx + m[0].length;
+    if (seen.has(m[0])) continue;
+    seen.add(m[0]);
+    out.push({ code: m[0], name, industry: industryAt(head + idx) });
+  }
+  return { codes: out, risky, hasTable: true };
+}
