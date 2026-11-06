@@ -9,7 +9,7 @@ import { codesFromRows, decreeExpiry, detectKind, extractLinks, extractRows, lis
  * goszakup.gov.kz/pv2/… (списки КТРУ по каждому постановлению). Функция раз в сутки (pg_cron) скачивает
  * эти файлы, сравнивает хэш с `crm_ens_tru_nr_sources`, из новых/изменённых вытаскивает коды ЕНС ТРУ и
  * добавляет в `crm_ens_tru_national_exemption_codes` те, которых там ещё нет (существующие не трогает).
- * Если что-то добавилось или документ не разобрался — шлёт сообщение в Telegram.
+ * После каждого запуска шлёт в Telegram: сколько добавлено и сколько сейчас актуальных кодов (плюс ошибки разбора).
  *
  * Вызов: cron (`x-cron-key` = NR_SYNC_CRON_SECRET) или JWT администратора. `?dry=1` — ничего не пишет.
  */
@@ -260,12 +260,24 @@ Deno.serve(async (req: Request) => {
   // Ошибки, о которых уже сообщали раньше (документ и в прошлый раз был в статусе error), повторно не шлём.
   const newErrors = errors.filter((r) => knownByUrl.get(r.url)?.status !== "error");
 
-  if (!dry && (totalAdded > 0 || newErrors.length > 0)) {
-    const lines: string[] = ["<b>Нацизъятие: обновление справочника</b>"];
-    if (totalAdded > 0) {
-      lines.push(`Добавлено новых кодов: <b>${totalAdded}</b>`);
-      for (const r of results.filter((x) => x.added > 0)) lines.push(`• ${escHtml(r.label)}: +${r.added}`);
-    }
+  if (!dry) {
+    // Сколько кодов сейчас действует: все минус те, у кого срок (dd.mm.yyyy) уже вышел.
+    let actual: number | null = null;
+    try {
+      const { count: total } = await db.from("crm_ens_tru_national_exemption_codes").select("code", { count: "exact", head: true });
+      const { data: dated } = await db.from("crm_ens_tru_national_exemption_codes").select("valid_until").neq("valid_until", "").limit(20000);
+      const today = new Date().toISOString().slice(0, 10);
+      const expired = (dated ?? []).filter((r: { valid_until: string }) => {
+        const m = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(r.valid_until ?? "");
+        return m ? `${m[3]}-${m[2]}-${m[1]}` < today : false;
+      }).length;
+      if (total != null) actual = total - expired;
+    } catch (_e) { /* счётчик необязателен */ }
+
+    const lines: string[] = ["<b>Нацизъятие: проверка справочника</b>"];
+    lines.push(totalAdded > 0 ? `Добавлено новых кодов: <b>${totalAdded}</b>` : "Новых кодов нет");
+    for (const r of results.filter((x) => x.added > 0)) lines.push(`• ${escHtml(r.label)}: +${r.added}`);
+    if (actual != null) lines.push(`Сейчас актуальных кодов: <b>${actual}</b>`);
     if (newErrors.length > 0) {
       lines.push(`Не удалось разобрать документов: ${newErrors.length} (нужна ручная загрузка)`);
       for (const r of newErrors.slice(0, 5)) lines.push(`• ${escHtml(r.label)} — ${escHtml((r.error ?? "").slice(0, 120))}`);
