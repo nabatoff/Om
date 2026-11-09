@@ -1,8 +1,9 @@
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, ChevronUp, Download, Factory, Loader2, Presentation, Search } from 'lucide-react';
 import {
   checkBinEnsTruContractsApi,
   type BinCodesSource,
+  type BinEnsTruCheckResponse,
   type BinEnsTruCodeResult,
   type BinPurchaseMethodStat,
   type BinSeasonality,
@@ -11,7 +12,7 @@ import {
 } from '../lib/binEnsTruCheckApi';
 import { checkEnsTruCodesApi, checkEnsTruNationalExemptionCodesApi } from '../lib/ensTruApi';
 import { exportBinCheckToExcel } from '../lib/binEnsTruExport';
-import { openBinPresentation } from '../lib/binPresentation';
+import { openPresentationWindow, renderBinPresentation } from '../lib/binPresentation';
 import { CODES_TOP_LIMIT, SEASONALITY_MIN_CONTRACTS, SEASONALITY_PEAK_FACTOR } from '../lib/binCheckConfig';
 
 type CodeRegime = { nat: boolean; ooi: boolean };
@@ -87,6 +88,10 @@ function Tile({ label, value, sub, tone }: { label: string; value: string; sub?:
 
 export function BinEnsTruCheckPanel() {
   const [bin, setBin] = useState('');
+  const [yearSel, setYearSel] = useState(2025);
+  const [presBusy, setPresBusy] = useState(false);
+  /** Ответы проверки по годам для текущего БИН — презентации нужны оба года (2025 — основа, 2026 — текущие закупки). */
+  const resByYear = useRef<{ bin: string; byYear: Record<number, BinEnsTruCheckResponse> }>({ bin: '', byYear: {} });
   const [checking, setChecking] = useState(false);
   const [codes, setCodes] = useState<BinEnsTruCodeResult[]>([]);
   const [year, setYear] = useState<number | null>(null);
@@ -135,7 +140,9 @@ export function BinEnsTruCheckPanel() {
     setError(null);
     setMessage(null);
     try {
-      const res = await checkBinEnsTruContractsApi(trimmed);
+      const res = await checkBinEnsTruContractsApi(trimmed, yearSel);
+      if (resByYear.current.bin !== trimmed) resByYear.current = { bin: trimmed, byYear: {} };
+      resByYear.current.byYear[res.year ?? yearSel] = res;
       setCodes(res.codes);
       setYear(res.year ?? null);
       setSumCap(res.sumCap ?? null);
@@ -176,6 +183,47 @@ export function BinEnsTruCheckPanel() {
       resetResult();
     } finally {
       setChecking(false);
+    }
+  };
+
+  const handlePresentation = async () => {
+    const w = openPresentationWindow();
+    if (!w) {
+      setError('Браузер заблокировал новую вкладку — разрешите всплывающие окна для сайта.');
+      return;
+    }
+    setPresBusy(true);
+    setError(null);
+    try {
+      if (resByYear.current.bin !== checkedBin) resByYear.current = { bin: checkedBin, byYear: {} };
+      const store = resByYear.current;
+      const load = async (y: number) => {
+        const cached = store.byYear[y];
+        if (cached) return cached;
+        const r = await checkBinEnsTruContractsApi(checkedBin, y);
+        store.byYear[y] = r;
+        return r;
+      };
+      // 2025 — основа презентации, 2026 — слайд текущих закупок (если не загрузился — слайд просто не показываем).
+      const [baseRes, curRes] = await Promise.all([load(2025), load(2026).catch(() => null)]);
+      renderBinPresentation(w, {
+        bin: checkedBin,
+        year: baseRes.year ?? 2025,
+        maxContractPrice: baseRes.maxContractPrice ?? null,
+        supplier: baseRes.supplier ?? null,
+        companyName: baseRes.companyName ?? companyName,
+        codesSource: baseRes.codesSource ?? 'ktp',
+        share: baseRes.share ?? null,
+        seasonality: baseRes.seasonality ?? null,
+        codes: baseRes.codes.filter((c) => c.contractCount > 0 && !c.sumCapped && !c.error),
+        purchase: baseRes.purchaseStats ?? null,
+        current: curRes?.purchaseStats ?? null,
+      });
+    } catch (e) {
+      w.close();
+      setError(e instanceof Error ? e.message : 'Не удалось собрать презентацию');
+    } finally {
+      setPresBusy(false);
     }
   };
 
@@ -292,6 +340,18 @@ export function BinEnsTruCheckPanel() {
             className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-mono"
           />
         </label>
+        <label className="block space-y-1.5">
+          <span className="text-[10px] font-bold text-gray-400 uppercase">Год договоров</span>
+          <select
+            value={yearSel}
+            onChange={(e) => setYearSel(Number(e.target.value))}
+            disabled={checking}
+            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold"
+          >
+            <option value={2025}>2025</option>
+            <option value={2026}>2026 (год неполный)</option>
+          </select>
+        </label>
         {error ? <p className="text-xs font-bold text-rose-600">{error}</p> : null}
         <button
           type="button"
@@ -331,25 +391,13 @@ export function BinEnsTruCheckPanel() {
         {hasResult ? (
           <button
             type="button"
-            onClick={() => {
-              const ok = openBinPresentation({
-                bin: checkedBin,
-                year,
-                maxContractPrice,
-                supplier,
-                companyName,
-                methods,
-                codesSource,
-                share,
-                seasonality,
-                codes: tableCodes,
-              });
-              if (!ok) setError('Браузер заблокировал новую вкладку — разрешите всплывающие окна для сайта.');
-            }}
-            className="ml-2 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-bold uppercase tracking-wider hover:bg-indigo-100"
+            disabled={presBusy}
+            onClick={() => void handlePresentation()}
+            className="ml-2 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-bold uppercase tracking-wider hover:bg-indigo-100 disabled:opacity-60"
           >
-            <Presentation size={14} />
-            Презентация (PDF)
+            {presBusy ? <Loader2 size={14} className="animate-spin" /> : null}
+            {presBusy ? null : <Presentation size={14} />}
+            {presBusy ? 'Собираем данные…' : 'Презентация (PDF)'}
           </button>
         ) : null}
       </section>

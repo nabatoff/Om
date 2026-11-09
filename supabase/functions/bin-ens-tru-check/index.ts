@@ -22,7 +22,9 @@ const cors: Record<string, string> = {
 
 const ONDIRIS_BASE = "https://e-ondiris.gov.kz";
 const ZAKUP_BASE = "https://zakup.gov.kz";
-const TARGET_YEAR = 2025;
+/** Годы, за которые можно запускать проверку. */
+const ALLOWED_YEARS = [2025, 2026];
+const DEFAULT_YEAR = 2025;
 /** Учитываем только договоры дешевле этого порога (₸) — верхняя граница суммы договора. */
 const MAX_CONTRACT_PRICE = 17_300_000;
 /** Если за код в целевом году больше стольких договоров (после фильтра по сумме) — не считаем сумму, только количество. */
@@ -244,20 +246,22 @@ async function fetchSupplierContractCodes(orgId: number, yearId: number): Promis
 }
 
 /** Известный id целевого года на zakup.gov.kz — запасной вариант, если справочник годов временно не отвечает. */
-const FALLBACK_YEAR_ID = 10;
-let yearIdCache: number | null = null;
+const FALLBACK_YEAR_IDS: Record<number, number> = { 2025: 10, 2026: 12 };
+const yearIdCache = new Map<number, number>();
 
 async function resolveYearId(year: number): Promise<number | null> {
-  if (yearIdCache != null) return yearIdCache;
+  const cached = yearIdCache.get(year);
+  if (cached != null) return cached;
   try {
     const years = await fetchJson<Array<{ id: number; year: number }>>(`${ZAKUP_BASE}/api/core/api/dicts/years/`);
     const id = years.find((y) => y.year === year)?.id ?? null;
-    if (id != null) yearIdCache = id;
+    if (id != null) yearIdCache.set(year, id);
     return id;
   } catch (e) {
-    if (year === TARGET_YEAR) {
+    const fallback = FALLBACK_YEAR_IDS[year];
+    if (fallback != null) {
       console.warn("zakup.gov.kz years failed, using fallback year id", e);
-      return FALLBACK_YEAR_ID;
+      return fallback;
     }
     throw e;
   }
@@ -267,6 +271,12 @@ async function resolveYearId(year: number): Promise<number | null> {
 const EXCLUDED_METHOD_RE = /^конкурс по приобретению|по питанию обучающихся/i;
 
 type MethodTotals = Map<string, { count: number; sum: number }>;
+/**
+ * Статистика для презентации: только основные договоры (без допсоглашений) с датой заключения в целевом году,
+ * каждый договор один раз (даже если у него несколько кодов поставщика).
+ */
+type PurchaseAcc = { seen: Set<number>; methods: MethodTotals; em: Map<string, { count: number; sum: number }> };
+const EM_RE = /электронный магазин/i;
 /** Сезонность рынка: помесячно (индекс 0..11) договоры целевого года без договоров самого поставщика. */
 type MonthTotals = Array<{ count: number; sum: number }>;
 
@@ -289,6 +299,8 @@ async function countAndSumContracts(
   methods: MethodTotals,
   months: MonthTotals,
   supplierOrgId: number | null,
+  year: number,
+  acc: PurchaseAcc,
 ): Promise<CodeMarket> {
   type ContractsPage = {
     count: number;
@@ -298,6 +310,9 @@ async function countAndSumContracts(
       purchase_method_name?: string | null;
       sign_date?: string | null;
       supplier_organization_id?: number | null;
+      contract_type_id?: number | null;
+      customer_organization_id?: number | null;
+      customer_organization_name?: string | null;
     }>;
   };
   const empty = { supplierCount: 0, supplierSum: 0, supplierRank: null, suppliersTotal: 0 };
@@ -324,8 +339,8 @@ async function countAndSumContracts(
     windows = [];
     windowCounts.length = 0;
     for (let m = 1; m <= 12; m++) {
-      const from = `${TARGET_YEAR}-${String(m).padStart(2, "0")}-01`;
-      const to = m === 12 ? `${TARGET_YEAR + 1}-01-01` : `${TARGET_YEAR}-${String(m + 1).padStart(2, "0")}-01`;
+      const from = `${year}-${String(m).padStart(2, "0")}-01`;
+      const to = m === 12 ? `${year + 1}-01-01` : `${year}-${String(m + 1).padStart(2, "0")}-01`;
       windows.push(`${baseUrl}&sign_date__gte=${from}T00:00:00&sign_date__lt=${to}T00:00:00`);
     }
     const counts = await mapPool(windows, 4, (w) => fetchJson<ContractsPage>(`${w}&limit=1&offset=0`));
@@ -353,6 +368,21 @@ async function countAndSumContracts(
       m.sum += value;
       methods.set(method, m);
 
+      if (row.contract_type_id === 1 && (row.sign_date ?? "").startsWith(`${year}-`) && !acc.seen.has(row.id)) {
+        acc.seen.add(row.id);
+        const pm = acc.methods.get(method) ?? { count: 0, sum: 0 };
+        pm.count += 1;
+        pm.sum += value;
+        acc.methods.set(method, pm);
+        if (EM_RE.test(method)) {
+          const cname = row.customer_organization_name?.trim() || `Заказчик ${row.customer_organization_id ?? ""}`.trim();
+          const cm = acc.em.get(cname) ?? { count: 0, sum: 0 };
+          cm.count += 1;
+          cm.sum += value;
+          acc.em.set(cname, cm);
+        }
+      }
+
       const sid = row.supplier_organization_id ?? null;
       if (sid != null) bySupplier.set(sid, (bySupplier.get(sid) ?? 0) + value);
       if (supplierOrgId != null && sid === supplierOrgId) {
@@ -361,7 +391,7 @@ async function countAndSumContracts(
       } else {
         // Сезонность — рынок без договоров самого поставщика, по дате заключения в целевом году.
         const d = row.sign_date ?? "";
-        if (d.startsWith(`${TARGET_YEAR}-`)) {
+        if (d.startsWith(`${year}-`)) {
           const mi = Number(d.slice(5, 7)) - 1;
           if (mi >= 0 && mi < 12) {
             months[mi].count += 1;
@@ -445,7 +475,7 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  let body: { bin?: string };
+  let body: { bin?: string; year?: number };
   try {
     body = await req.json();
   } catch {
@@ -463,11 +493,19 @@ Deno.serve(async (req: Request) => {
     });
   }
 
+  const year = body.year == null ? DEFAULT_YEAR : Number(body.year);
+  if (!ALLOWED_YEARS.includes(year)) {
+    return new Response(JSON.stringify({ error: `Год должен быть одним из: ${ALLOWED_YEARS.join(", ")}` }), {
+      status: 400,
+      headers: { ...cors, "Content-Type": "application/json" },
+    });
+  }
+
   try {
     const codeMap = new Map<string, CodeEntry>();
     let yearId: number | null;
     try {
-      yearId = await resolveYearId(TARGET_YEAR);
+      yearId = await resolveYearId(year);
     } catch (e) {
       console.error("zakup.gov.kz years failed", e);
       return new Response(
@@ -476,7 +514,7 @@ Deno.serve(async (req: Request) => {
       );
     }
     if (yearId == null) {
-      return new Response(JSON.stringify({ error: `Не удалось определить код года ${TARGET_YEAR} на zakup.gov.kz` }), {
+      return new Response(JSON.stringify({ error: `Не удалось определить код года ${year} на zakup.gov.kz` }), {
         status: 502,
         headers: { ...cors, "Content-Type": "application/json" },
       });
@@ -526,7 +564,7 @@ Deno.serve(async (req: Request) => {
         JSON.stringify({
           ok: true,
           bin,
-          year: TARGET_YEAR,
+          year,
           maxContractPrice: MAX_CONTRACT_PRICE,
           supplier,
           companyName,
@@ -541,10 +579,11 @@ Deno.serve(async (req: Request) => {
     const codes = Array.from(codeMap.values());
     const methodTotals: MethodTotals = new Map();
     const monthTotals: MonthTotals = Array.from({ length: 12 }, () => ({ count: 0, sum: 0 }));
+    const purchaseAcc: PurchaseAcc = { seen: new Set(), methods: new Map(), em: new Map() };
     // По нескольку кодов одновременно (не больше CODE_CONCURRENCY) — иначе десятки кодов × страниц идут цепочкой.
     const results = await mapPool(codes, CODE_CONCURRENCY, async (entry) => {
       try {
-        const r = await countAndSumContracts(entry.code, yearId, methodTotals, monthTotals, supplierOrgId);
+        const r = await countAndSumContracts(entry.code, yearId, methodTotals, monthTotals, supplierOrgId, year, purchaseAcc);
         let canonicalName: string | null = null;
         if (r.sampleContractId != null) {
           canonicalName = await fetchCanonicalCodeName(entry.code, r.sampleContractId).catch(() => null);
@@ -613,17 +652,31 @@ Deno.serve(async (req: Request) => {
       sum: monthTotals.reduce((a, m) => a + m.sum, 0),
     };
 
+    const purchaseStats = {
+      year,
+      // Дата выгрузки по Астане/Алматы (UTC+5).
+      asOf: new Date(Date.now() + 5 * 3600_000).toISOString().slice(0, 10),
+      methods: Array.from(purchaseAcc.methods, ([name, v]) => ({ name, count: v.count, sum: v.sum })).sort(
+        (a, b) => b.sum - a.sum,
+      ),
+      emCustomers: Array.from(purchaseAcc.em, ([name, v]) => ({ name, count: v.count, sum: v.sum }))
+        .sort((a, b) => b.sum - a.sum)
+        .slice(0, 5),
+      emCustomersTotal: purchaseAcc.em.size,
+    };
+
     return new Response(
       JSON.stringify({
         ok: true,
         bin,
-        year: TARGET_YEAR,
+        year,
         sumCap: SUM_CAP,
         maxContractPrice: MAX_CONTRACT_PRICE,
         supplier,
         companyName,
         codesSource,
         methods,
+        purchaseStats,
         share: { marketSum, supplierSum, nicheMarketSum, nicheCodes },
         seasonality,
         codes: results,

@@ -47,6 +47,17 @@ export type BinShareTotals = {
 /** Рынок по месяцам года (индекс 0..11) без договоров самого поставщика. */
 export type BinSeasonality = { months: Array<{ count: number; sum: number }>; count: number; sum: number };
 
+/** Статистика закупок для презентации: основные договоры (без допсоглашений) с датой заключения в году. */
+export type BinPurchaseStats = {
+  year: number;
+  /** Дата выгрузки, YYYY-MM-DD. */
+  asOf: string;
+  methods: BinPurchaseMethodStat[];
+  /** Топ-5 заказчиков Электронного магазина по сумме (только по кодам поставщика). */
+  emCustomers: BinPurchaseMethodStat[];
+  emCustomersTotal: number;
+};
+
 export type BinEnsTruCheckResponse = {
   ok: true;
   bin: string;
@@ -57,6 +68,7 @@ export type BinEnsTruCheckResponse = {
   /** Название компании: zakup.gov.kz, иначе реестры e-ondiris. */
   companyName?: string;
   methods?: BinPurchaseMethodStat[];
+  purchaseStats?: BinPurchaseStats;
   codesSource?: BinCodesSource;
   share?: BinShareTotals;
   seasonality?: BinSeasonality;
@@ -68,10 +80,10 @@ export type BinEnsTruCheckResponse = {
  * «Проверка по БИН»: коды ЕНС ТРУ поставщика (из реестров e-ondiris.gov.kz) +
  * количество/сумма договоров по каждому коду за год на zakup.gov.kz (см. docs/BUSINESS_LOGIC.md).
  */
-export async function checkBinEnsTruContractsApi(bin: string): Promise<BinEnsTruCheckResponse> {
+export async function checkBinEnsTruContractsApi(bin: string, year?: number): Promise<BinEnsTruCheckResponse> {
   const { data, error } = await getSupabase().functions.invoke<BinEnsTruCheckResponse & { error?: string }>(
     'bin-ens-tru-check',
-    { body: { bin: bin.trim() } },
+    { body: { bin: bin.trim(), ...(year ? { year } : {}) } },
   );
   if (data?.error) throw new Error(data.error);
   if (error) {
