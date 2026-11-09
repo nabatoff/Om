@@ -61,11 +61,6 @@ function codesNom(n: number): string {
   return `${n}${NB}кодов`;
 }
 
-/** Родительный падеж для «начните с …»: «1 кода», «3 кодов». */
-function codesGen(n: number): string {
-  return n % 10 === 1 && n % 100 !== 11 ? `${n}${NB}кода` : `${n}${NB}кодов`;
-}
-
 function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
@@ -134,40 +129,49 @@ export function buildBinPresentationHtml(d: BinPresentationInput): string {
   const fmtP = (v: number) => `${(v >= 1 ? v.toFixed(1) : v.toFixed(2)).replace('.', ',')}%`;
   const slides: Slide[] = [];
 
+  const hasBase = !!base && base.total > 0;
+  const curYear = d.current?.year ?? year + 1;
+  const fmt2 = (part: number, total: number) => (total > 0 ? `${((part / total) * 100).toFixed(2).replace('.', ',')}%` : '0%');
+  const dog = (n: number) => {
+    const a = n % 10;
+    const b = n % 100;
+    return a === 1 && b !== 11 ? 'договор' : a >= 2 && a <= 4 && (b < 12 || b > 14) ? 'договора' : 'договоров';
+  };
+
   // 1. Титул
   slides.push(
     slide(
       `<div class="center">
         <p class="eyebrow">Предложение о сотрудничестве</p>
         <h1 class="huge${company.length > 60 ? ' long' : ''}">${esc(company)}</h1>
-        <p class="lead">${millions(marketSum)} госзакупок по вашим кодам.<br>Пора занять в них своё место</p>
+        <p class="lead">Анализ рынка государственных закупок<br>по кодам ЕНС${NB}ТРУ</p>
         <p class="muted">Рост продаж на ГЗ через Omarket.kz</p>
-        <p class="muted small">Данные за ${year} год${limitTxt}</p>
+        <p class="muted small">Данные за ${hasCur ? `${year} и ${curYear} годы` : `${year} год`}${limitTxt}</p>
       </div>`,
     ),
   );
 
   // 2. Рынок
-  const scen = (p: number, strong: boolean) =>
-    `<div class="card${strong ? ' blue' : ''}"><p class="cl">${p}% рынка</p><p class="big">≈${NB}${millions((marketSum * p) / 100)}</p><p class="sm">в год</p></div>`;
+  const scen = (p: number) =>
+    `<div class="card"><p class="cl">${p}% рынка</p><p class="big2">≈${NB}${millions((marketSum * p) / 100)}</p></div>`;
   slides.push(
     slide(
-      `<h2>Рынок на ${millions(marketSum)} уже есть. Ваша доля в нём ${sharePct}</h2>
+      `<h2>Рынок ваших кодов: ${millions(marketSum)}. Какая часть может быть вашей?</h2>
       <div class="row">
-        <div class="card"><p class="cl">Сумма договоров ${year} года</p><p class="big">${millions(marketSum)}</p><p class="sm">${tg(marketSum)}</p></div>
-        <div class="card"><p class="cl">Число договоров</p><p class="big">${int(marketCount)}</p><p class="sm">по ${codesNom(codesAll.length)} ЕНС${NB}ТРУ</p></div>
-        <div class="card blue"><p class="cl">Ваша доля</p><p class="big">${sharePct}</p><p class="sm">${tg(supplierSum)} из рынка</p></div>
+        <div class="card"><p class="big">${tg(marketSum)}</p><p class="sm">договоры ${year} года по ${codesNom(codesAll.length)} ЕНС${NB}ТРУ</p></div>
+        <div class="card"><p class="big">${int(marketCount)}</p><p class="sm">${dog(marketCount)} заключено в ${year} году</p></div>
+        <div class="card blue"><p class="big">${sharePct}</p><p class="sm">доля ${esc(company)} на рынке этих кодов</p></div>
       </div>
-      <h3>Что даст даже небольшая доля</h3>
-      <div class="row">${scen(1, false)}${scen(3, false)}${scen(5, true)}</div>
-      <p class="note">Расчёт: доля × рынок ${year} года (${tg(marketSum)}). Это иллюстрация, а не прогноз.</p>`,
+      <p class="h3">Что принесла бы доля рынка:</p>
+      <div class="row">${scen(1)}${scen(3)}${scen(5)}</div>
+      <p class="note">Расчёт: доля × рынок ${year} года. ${d.maxContractPrice != null ? `Договоры до ${tg(d.maxContractPrice)}. ` : ''}Это иллюстрация, а не прогноз.</p>`,
     ),
   );
 
   // 3. Способы закупки
-  if (base && base.total > 0 && d.purchase) {
+  if (hasBase && base) {
     const rowsDef: Array<{ key: 'zcp' | 'em' | 'other'; label: string }> = [
-      { key: 'zcp', label: 'Запрос ценовых предложений (ЗЦП)' },
+      { key: 'zcp', label: 'Запрос ценовых предложений' },
       { key: 'em', label: 'Электронный магазин' },
       { key: 'other', label: 'Остальные способы' },
     ];
@@ -175,41 +179,28 @@ export function buildBinPresentationHtml(d: BinPresentationInput): string {
       .map(({ key, label }, i) => {
         const b = base[key];
         const c = hasCur && cur ? cur[key] : null;
-        const cells = `<td>${int(b.count)}</td><td>${pctNum(b.sum, base.total)}</td>${
-          c && cur ? `<td>${int(c.count)}</td><td>${pctNum(c.sum, cur.total)}</td>` : ''
+        const cells = `<td>${int(b.count)}</td><td>${fmt2(b.sum, base.total)}</td>${
+          c && cur ? `<td>${int(c.count)}</td><td${key === 'em' ? ' class="em"' : ''}>${fmt2(c.sum, cur.total)}</td>` : ''
         }`;
-        return `<tr class="${i % 2 ? 'odd' : 'even'}${key === 'em' ? ' em' : ''}"><td class="l">${label}</td>${cells}</tr>`;
+        return `<tr class="${i % 2 ? 'odd' : 'even'}"><td class="l">${label}</td>${cells}</tr>`;
       })
       .join('');
-    const grew = baseEmShare != null && curEmShare != null && curEmShare > baseEmShare;
-    const title = grew
-      ? 'Рынок переходит в Электронный магазин, и быстро'
-      : baseEmShare != null
-        ? `Электронный магазин: ${fmtP(baseEmShare)} суммы рынка в ${year} году`
-        : 'Способы закупки по вашим кодам';
-    const curYear = d.current?.year ?? year + 1;
     const concl =
-      baseEmShare != null && curEmShare != null
-        ? grew
-          ? `Доля Электронного магазина в сумме выросла с ${fmtP(baseEmShare)} в ${year} до ${fmtP(curEmShare)} в ${curYear} году.`
-          : `Доля Электронного магазина в сумме: ${fmtP(baseEmShare)} в ${year} и ${fmtP(curEmShare)} в ${curYear} году.`
+      baseEmShare != null && curEmShare != null && cur
+        ? `Электронный магазин: ${fmt2(base.em.sum, base.total)} суммы в ${year} году и ${fmtP(curEmShare)} в ${curYear} году. Запрос ценовых предложений: ${fmt2(base.zcp.sum, base.total)} и ${fmtP((cur.zcp.sum / cur.total) * 100)}. Сегмент Электронного магазина вам открывает Omarket.`
         : baseEmShare != null
-          ? `Электронный магазин: ${fmtP(baseEmShare)} суммы закупок по вашим кодам в ${year} году.`
+          ? `Электронный магазин: ${fmt2(base.em.sum, base.total)} суммы в ${year} году. Сегмент Электронного магазина вам открывает Omarket.`
           : '';
-    const w = hasCur ? '16%' : '24%';
     slides.push(
       slide(
-        `<h2>${esc(title)}</h2>
+        `<h2>Где проходят закупки по вашим кодам</h2>
         <table>
-          <tr class="th"><th class="l" style="width:${hasCur ? '36%' : '52%'}">Способ закупки</th><th style="width:${w}">${year}: договоров</th><th style="width:${w}">${year}: доля суммы</th>${
-            hasCur ? `<th style="width:16%">${curYear}: договоров</th><th style="width:16%">${curYear}: доля суммы</th>` : ''
+          <tr class="th"><th class="l" style="width:${hasCur ? '36%' : '52%'}">Способ закупки</th><th>Договоров ${year}</th><th>Доля суммы ${year}</th>${
+            hasCur ? `<th>Договоров ${curYear}</th><th>Доля суммы ${curYear}</th>` : ''
           }</tr>
           ${body}
         </table>
-        <p class="hl">${esc(concl)}</p>
-        <p class="note">Основные договоры${d.maxContractPrice != null ? ` до ${tg(d.maxContractPrice)}` : ''}, дата заключения в году. Доли не дают ровно 100%: часть способов закупки в таблице не показана.${
-          hasCur && d.current ? ` Данные ${curYear} года неполные, на ${ruDate(d.current.asOf)}.` : ''
-        }</p>`,
+        <p class="hl">${esc(concl)}</p>`,
       ),
     );
   }
@@ -218,12 +209,10 @@ export function buildBinPresentationHtml(d: BinPresentationInput): string {
   if (hasCur && d.current && cur) {
     const c = d.current;
     const customers = c.emCustomers.slice(0, 5);
-    const title = cur.em.sum > 0 ? `${c.year} год: через ЭМ уже прошло ${millions(cur.em.sum)}` : `${c.year} год: закупки по вашим кодам`;
     const tbl =
       customers.length > 0
-        ? `<h3>Заказчики, которые уже покупают через ЭМ</h3>
-        <table>
-          <tr class="th"><th class="l" style="width:62%">Заказчик</th><th style="width:14%">Договоров</th><th style="width:24%">Сумма, ₸</th></tr>
+        ? `<table>
+          <tr class="th"><th class="l" style="width:68%">Кто покупает через Электронный магазин: топ-5</th><th style="width:12%">Договоров</th><th style="width:20%">Сумма, ₸</th></tr>
           ${customers
             .map(
               (m, i) =>
@@ -234,14 +223,14 @@ export function buildBinPresentationHtml(d: BinPresentationInput): string {
         : '';
     slides.push(
       slide(
-        `<h2>${esc(title)}</h2>
+        `<h2>Что уже закупили в ${c.year} году по вашим кодам</h2>
         <div class="row">
-          <div class="card"><p class="cl">Все договоры ${c.year}</p><p class="big">${millions(cur.total)}</p><p class="sm">${int(cur.totalCount)} договоров</p></div>
-          <div class="card"><p class="cl">Через Электронный магазин</p><p class="big">${millions(cur.em.sum)}</p><p class="sm">${int(cur.em.count)} договоров</p></div>
-          <div class="card blue"><p class="cl">Доля ЭМ в сумме</p><p class="big">${curEmShare != null ? fmtP(curEmShare) : '—'}</p><p class="sm">${baseEmShare != null ? `в ${year} году: ${fmtP(baseEmShare)}` : ''}</p></div>
+          <div class="card"><p class="big">${tg(cur.total)}</p><p class="sm">${int(cur.totalCount)} ${dog(cur.totalCount)} по вашим кодам</p></div>
+          <div class="card"><p class="big">${tg(cur.em.sum)}</p><p class="sm">${int(cur.em.count)} ${dog(cur.em.count)} через Электронный магазин</p></div>
+          <div class="card blue"><p class="big">${curEmShare != null ? fmtP(curEmShare) : '—'}</p><p class="sm">доля ЭМ в сумме рынка${baseEmShare != null ? ` (в ${year} году: ${fmt2(base?.em.sum ?? 0, base?.total ?? 0)})` : ''}</p></div>
         </div>
         ${tbl}
-        <p class="note">Год неполный, данные на ${ruDate(c.asOf)}. Основные договоры${d.maxContractPrice != null ? ` до ${tg(d.maxContractPrice)}` : ''} по вашим кодам. Запрос ценовых предложений: ${int(cur.zcp.count)} договоров, ${tg(cur.zcp.sum)}, ${pctNum(cur.zcp.sum, cur.total)} суммы. Заказчиков ЭМ: ${int(c.emCustomersTotal)}.</p>`,
+        <p class="note">Год неполный, данные на ${ruDate(c.asOf)}. Основные договоры${d.maxContractPrice != null ? ` до ${tg(d.maxContractPrice)}` : ''}. Заказчиков ЭМ: ${int(c.emCustomersTotal)}.</p>`,
       ),
     );
   }
@@ -257,27 +246,26 @@ export function buildBinPresentationHtml(d: BinPresentationInput): string {
     const rows = top
       .map((c, i) => {
         const name = c.canonicalName || c.names[0] || '';
-        return `<tr class="${i % 2 ? 'odd' : 'even'}"><td class="l">${esc(c.code)}</td><td class="l">${esc(cut(name, 64))}</td><td>${int(c.contractCount)}</td><td>${money(c.contractSum ?? 0)}</td><td>${pctNum(c.contractSum ?? 0, marketSum)}</td></tr>`;
+        return `<tr class="${i % 2 ? 'odd' : 'even'}"><td class="l">${esc(c.code)}</td><td class="l">${esc(cut(name, 64))}</td><td>${int(c.contractCount)}</td><td>${money(c.contractSum ?? 0)}</td></tr>`;
       })
       .join('');
+    const topWord = top.length === 1 ? 'Один код' : top.length === 2 ? 'Два кода' : 'Три кода';
     slides.push(
       slide(
-        `<h2>Начните с ${codesGen(top.length)}: в ${top.length === 1 ? 'нём' : 'них'} ${pctNum(topSum, marketSum)} рынка</h2>
+        `<h2>С каких кодов начать: наибольшая сумма рынка</h2>
         <table>
-          <tr class="th"><th class="l" style="width:18%">Код ЕНС ТРУ</th><th class="l" style="width:40%">Наименование</th><th style="width:12%">Договоров</th><th style="width:18%">Сумма, ₸</th><th style="width:12%">Доля</th></tr>
+          <tr class="th"><th class="l" style="width:20%">Код ЕНС ТРУ</th><th class="l" style="width:48%">Наименование</th><th style="width:12%">Договоров</th><th style="width:20%">Сумма, ₸</th></tr>
           ${rows}
         </table>
-        <p class="hl">${codesNom(top.length)} из ${int(codesAll.length)}: ${tg(topSum)} и ${int(topCnt)} договоров — ${pctNum(topSum, marketSum)} суммы рынка.</p>`,
+        <p class="hl">${topWord} из ${int(codesAll.length)} дают ${fmtP((topSum / (marketSum || 1)) * 100)} суммы рынка: ${tg(topSum)} и ${int(topCnt)} ${dog(topCnt)}.</p>`,
       ),
     );
   }
 
   // 6. Сезонность
-  let prepareText = '';
   const s = d.seasonality;
   if (s && s.count > 0) {
     const f = seasonFacts(s);
-    prepareText = f.prepare;
     const maxC = Math.max(...f.counts, 1);
     const bars = f.counts
       .map((c, i) => {
@@ -287,27 +275,39 @@ export function buildBinPresentationHtml(d: BinPresentationInput): string {
       })
       .join('');
     const [p1, p2] = f.peaks;
-    const peaksNom = p2 !== undefined ? `${MONTH_NOM[p1]} и ${MONTH_NOM[p2]}` : MONTH_NOM[p1];
     const peaksPrep = p2 !== undefined ? `${MONTH_PREP[p1]} и ${MONTH_PREP[p2]}` : MONTH_PREP[p1];
+    const peakNums = p2 !== undefined ? `${int(f.counts[p1])} и ${int(f.counts[p2])} ${dog(f.counts[p2])}` : `${int(f.counts[p1])} ${dog(f.counts[p1])}`;
+    // Самое насыщенное и самое «тихое» окно из 4 месяцев подряд.
+    const win = (i: number) => f.counts.slice(i, i + 4).reduce((a, b) => a + b, 0);
+    let hi = 0;
+    let lo = 0;
+    for (let i = 1; i <= 8; i++) {
+      if (win(i) > win(hi)) hi = i;
+      if (win(i) < win(lo)) lo = i;
+    }
+    const range = (i: number) => `${MONTH_NOM[i]}–${MONTH_NOM[i + 3]}`;
+    const cap = (t: string) => `${t[0].toUpperCase()}${t.slice(1)}`;
+    const windows =
+      Math.abs(hi - lo) >= 4
+        ? ` ${cap(range(hi))} дают ${fmtP((win(hi) / s.count) * 100)} договоров года, ${range(lo)} только ${fmtP((win(lo) / s.count) * 100)}.`
+        : '';
     const few = s.count < SEASONALITY_MIN_CONTRACTS ? ` Данных мало (${int(s.count)} дог.), картина может быть неточной.` : '';
     slides.push(
       slide(
-        `<h2>Успейте к сезону: пик в ${peaksPrep}</h2>
-        <p class="hl">${esc(
-          `${peaksNom[0].toUpperCase()}${peaksNom.slice(1)} — ${fmtP(f.peakShare)} договоров года. Минимум — ${MONTH_NOM[f.low.i]} (${int(f.low.c)} договоров). Выходить на рынок стоит ${f.prepare}.${few}`,
-        )}</p>
+        `<h2>Когда покупают: пик в ${peaksPrep}</h2>
+        <p class="hl">${esc(`Пик в ${peaksPrep}: ${peakNums}.${windows}${few}`)}</p>
         <div class="bars">${bars}</div>
-        <p class="note">Количество договоров по месяцам ${year} года (по дате заключения), всего ${int(s.count)}. Два месяца-лидера выделены цветом.</p>`,
+        <p class="note">Количество договоров по месяцам, по дате заключения. Всего в расчёте ${int(s.count)} ${dog(s.count)}.</p>`,
       ),
     );
   }
 
   // 7. ЭМ быстрее и проще
   const emLine =
-    baseEmShare != null && curEmShare != null && d.current
-      ? `Доля Электронного магазина в сумме закупок по вашим кодам: ${fmtP(baseEmShare)} в ${year} году → ${fmtP(curEmShare)} в ${d.current.year} году.`
-      : baseEmShare != null
-        ? `В ${year} году на Электронный магазин пришлось ${fmtP(baseEmShare)} суммы закупок по вашим кодам.`
+    baseEmShare != null && curEmShare != null && base
+      ? `Доля Электронного магазина в сумме рынка ваших кодов: ${fmt2(base.em.sum, base.total)} в ${year} году и ${fmtP(curEmShare)} в ${curYear} году.`
+      : baseEmShare != null && base
+        ? `Доля Электронного магазина в сумме рынка ваших кодов: ${fmt2(base.em.sum, base.total)} в ${year} году.`
         : '';
   slides.push(
     slide(
@@ -329,15 +329,15 @@ export function buildBinPresentationHtml(d: BinPresentationInput): string {
   );
 
   // 8. Сопровождение
-  const sup = (t: string, x: string) => `<div class="card"><p class="v">${t}</p><p class="sm">${x}</p></div>`;
+  const sup = (t: string, x: string) => `<div class="card"><p class="st2">${t}</p><p class="sm">${x}</p></div>`;
   slides.push(
     slide(
       `<h2>Комплексное сопровождение: от карточки до заявки</h2>
       <div class="grid2">
-        ${sup('1. Консультация', 'По карточкам товаров и прохождению модерации')}
-        ${sup('2. Заявки', 'Передаём заявки отделу продаж')}
-        ${sup('3. Целевые заказчики', 'Подбираем целевых заказчиков и выгружаем базу')}
-        ${sup('4. Обучение', 'Учим алгоритму закупки через Omarket')}
+        ${sup('1. Карточки и статус', 'Консультируем по расширению карточек и подсказываем, как пройти модерацию и подтвердить статус на ЭТП')}
+        ${sup('2. Готовые заявки', 'Передаём утверждённые пункты плана вашему отделу продаж в работу')}
+        ${sup('3. Целевые заказчики', 'Определяем целевой сегмент госзаказчиков и выгружаем базу')}
+        ${sup('4. Обучение', 'Учим алгоритму закупки через Omarket, правилам и условиям')}
       </div>`,
     ),
   );
@@ -346,11 +346,13 @@ export function buildBinPresentationHtml(d: BinPresentationInput): string {
   slides.push(
     slide(
       `<div class="center">
+        <p class="st">Следующий шаг</p>
         <h1 class="huge">Готовы к запуску?</h1>
+        <p class="lead2">Давайте обсудим детали и запустим продажи.</p>
         <div class="row steps">
-          <div class="card dk"><p class="st">1. Каталог</p><p class="sd">Выставляем ваш каталог на Omarket</p></div>
-          <div class="card dk"><p class="st">2. Старт</p><p class="sd">Начинаем с кодов-лидеров${top.length > 0 ? `: ${codesNom(top.length)} дают ${pctNum(topSum, marketSum)} рынка` : ''}</p></div>
-          <div class="card dk"><p class="st">3. Сезон</p><p class="sd">${prepareText.startsWith('до') ? `Успеваем ${esc(prepareText)}` : 'Успеваем к началу сезона закупок'}</p></div>
+          <div class="card dk"><p class="st">1. Подключение</p><p class="sd">Выставляем ваш каталог на Omarket</p></div>
+          <div class="card dk"><p class="st">2. Старт</p><p class="sd">Начинаем с кодов с наибольшей суммой рынка</p></div>
+          <div class="card dk"><p class="st">3. Сезон</p><p class="sd">Планируем запуск до пика закупок</p></div>
         </div>
       </div>`,
       true,
@@ -362,11 +364,11 @@ export function buildBinPresentationHtml(d: BinPresentationInput): string {
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { background: #FBFCFE; }
 body { font-family: 'Inter', Arial, sans-serif; color: #14213D; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-.slide { width: 1920px; height: 1080px; overflow: hidden; background: #FBFCFE; padding: 96px 128px 80px; display: flex; flex-direction: column; gap: 32px; page-break-after: always; break-after: page; position: relative; }
+.slide { width: 1920px; height: 1080px; overflow: hidden; background: #FBFCFE; padding: 128px 128px 100px; display: flex; flex-direction: column; gap: 32px; page-break-after: always; break-after: page; position: relative; }
 .slide:last-child { page-break-after: auto; break-after: auto; }
 .slide.dark { background: #14213D; color: #F4F7FB; }
 h1, h2, h3, p { line-height: 1.2; }
-h2 { font-size: 60px; font-weight: 700; line-height: 1.1; }
+h2 { font-size: 64px; font-weight: 700; line-height: 1.1; }
 h3 { font-size: 40px; font-weight: 700; }
 .center { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 40px; text-align: center; }
 .huge { font-size: 96px; font-weight: 700; line-height: 1.1; }
@@ -386,12 +388,17 @@ h3 { font-size: 40px; font-weight: 700; }
 .big-card { gap: 24px; padding: 48px; }
 .cl { font-size: 28px; font-weight: 600; color: #4A5A75; }
 .card.blue .cl { color: #DCE6F5; }
-.big { font-size: 64px; font-weight: 700; line-height: 1.1; color: #0B57D0; }
+.big { font-size: 52px; font-weight: 700; line-height: 1.1; color: #0B57D0; }
 .card.blue .big { color: #fff; }
 .w { color: #fff; }
 .w2 { color: #DCE6F5; }
 .sm { font-size: 28px; line-height: 1.35; color: #4A5A75; }
 .card.blue .sm { color: #DCE6F5; }
+.h3 { font-size: 30px; font-weight: 600; }
+.big2 { font-size: 48px; font-weight: 700; line-height: 1.1; color: #0B57D0; }
+.lead2 { font-size: 44px; font-weight: 500; line-height: 1.3; color: #C9D6EC; }
+.st2 { font-size: 32px; font-weight: 700; color: #0B57D0; }
+td.em { font-weight: 700; color: #0B57D0; }
 .v { font-size: 34px; font-weight: 600; }
 .st { font-size: 34px; font-weight: 700; color: #8AB4FF; }
 .sd { font-size: 30px; line-height: 1.35; color: #F4F7FB; }
