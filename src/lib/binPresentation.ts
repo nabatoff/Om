@@ -285,6 +285,7 @@ h3 { font-size: 40px; font-weight: 700; }
 .big-card { gap: 24px; padding: 48px; }
 .cl { font-size: 30px; font-weight: 600; color: #4A5A75; }
 .card.blue .cl { color: #DCE6F5; }
+.card.blue .big { color: #fff; }
 .big { font-size: 72px; font-weight: 700; line-height: 1.1; color: #0B57D0; }
 .row .big { font-size: 64px; }
 .big.w, .w { color: #fff; }
