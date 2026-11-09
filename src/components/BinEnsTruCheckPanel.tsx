@@ -93,6 +93,7 @@ export function BinEnsTruCheckPanel() {
   const [sumCap, setSumCap] = useState<number | null>(null);
   const [maxContractPrice, setMaxContractPrice] = useState<number | null>(null);
   const [supplier, setSupplier] = useState<BinSupplierStats | null>(null);
+  const [companyName, setCompanyName] = useState('');
   const [methods, setMethods] = useState<BinPurchaseMethodStat[]>([]);
   const [codesSource, setCodesSource] = useState<BinCodesSource>('ktp');
   const [share, setShare] = useState<BinShareTotals | null>(null);
@@ -140,6 +141,7 @@ export function BinEnsTruCheckPanel() {
       setSumCap(res.sumCap ?? null);
       setMaxContractPrice(res.maxContractPrice ?? null);
       setSupplier(res.supplier ?? null);
+      setCompanyName(res.companyName ?? '');
       setMethods(res.methods ?? []);
       setCodesSource(res.codesSource ?? 'ktp');
       setShare(res.share ?? null);
@@ -310,6 +312,7 @@ export function BinEnsTruCheckPanel() {
                 maxContractPrice,
                 sumCap,
                 supplier,
+                companyName,
                 methods,
                 regimes,
                 codes: sortedCodes,
@@ -334,6 +337,7 @@ export function BinEnsTruCheckPanel() {
                 year,
                 maxContractPrice,
                 supplier,
+                companyName,
                 methods,
                 codesSource,
                 share,

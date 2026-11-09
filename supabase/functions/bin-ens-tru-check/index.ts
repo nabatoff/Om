@@ -94,18 +94,19 @@ function addCode(map: Map<string, CodeEntry>, code: string, name: string) {
 }
 
 /** Реестр 1: "Казахстанские товаропроизводители" — плоские строки, один товар на строку. */
-async function collectFromRegistryFront(bin: string, codes: Map<string, CodeEntry>): Promise<void> {
+async function collectFromRegistryFront(bin: string, codes: Map<string, CodeEntry>, nameBox: { name: string }): Promise<void> {
   const limit = 100;
   let page = 1;
   for (let guard = 0; guard < 20; guard++) {
     const url = `${ONDIRIS_BASE}/awp-api/registry-front?page=${page}&limit=${limit}&bin_iin=${encodeURIComponent(bin)}`;
     const data = await fetchJson<{
       success: boolean;
-      data: Array<{ bin_iin: string; product_name?: string; enstru_code?: string }>;
+      data: Array<{ bin_iin: string; company_name?: string; product_name?: string; enstru_code?: string }>;
       meta: { hasNextPage: boolean };
     }>(url);
     for (const row of data.data ?? []) {
       if (row.bin_iin !== bin) continue;
+      if (!nameBox.name && row.company_name?.trim()) nameBox.name = row.company_name.trim();
       for (const code of extractCodes(row.enstru_code)) {
         addCode(codes, code, row.product_name ?? "");
       }
@@ -116,7 +117,7 @@ async function collectFromRegistryFront(bin: string, codes: Map<string, CodeEntr
 }
 
 /** Реестр 2: "Полностью произведено в РК" — компании с вложенным списком товаров. */
-async function collectFromFullKzRegistry(bin: string, codes: Map<string, CodeEntry>): Promise<void> {
+async function collectFromFullKzRegistry(bin: string, codes: Map<string, CodeEntry>, nameBox: { name: string }): Promise<void> {
   const limit = 50;
   let page = 1;
   for (let guard = 0; guard < 20; guard++) {
@@ -125,12 +126,14 @@ async function collectFromFullKzRegistry(bin: string, codes: Map<string, CodeEnt
       success: boolean;
       data: Array<{
         bin: string;
+        companyName?: string;
         products?: Array<{ name?: string; ens_tru?: string[] }>;
       }>;
       meta: { hasNextPage: boolean };
     }>(url);
     for (const company of data.data ?? []) {
       if (company.bin !== bin) continue;
+      if (!nameBox.name && company.companyName?.trim()) nameBox.name = company.companyName.trim();
       for (const product of company.products ?? []) {
         for (const raw of product.ens_tru ?? []) {
           for (const code of extractCodes(raw)) {
@@ -480,12 +483,13 @@ Deno.serve(async (req: Request) => {
     }
 
     let ktpFailures = 0;
+    const nameBox = { name: "" };
     const [, , supplierInfo] = await Promise.all([
-      collectFromRegistryFront(bin, codeMap).catch((e) => {
+      collectFromRegistryFront(bin, codeMap, nameBox).catch((e) => {
         ktpFailures += 1;
         console.error("registry-front failed", e);
       }),
-      collectFromFullKzRegistry(bin, codeMap).catch((e) => {
+      collectFromFullKzRegistry(bin, codeMap, nameBox).catch((e) => {
         ktpFailures += 1;
         console.error("full_kz registry failed", e);
       }),
@@ -495,6 +499,9 @@ Deno.serve(async (req: Request) => {
       }),
     ]);
     const supplier = supplierInfo?.stats ?? null;
+    // Название: zakup.gov.kz, а если поставщика там нет или имя пустое — из реестров e-ondiris.
+    const companyName = supplier?.name?.trim() || nameBox.name;
+    if (supplier && !supplier.name?.trim()) supplier.name = companyName;
     const supplierOrgId = supplierInfo?.orgId ?? null;
 
     // Основной источник — КТП (реестры e-ondiris). Если там пусто — уникальные коды из договоров поставщика за год.
@@ -522,6 +529,7 @@ Deno.serve(async (req: Request) => {
           year: TARGET_YEAR,
           maxContractPrice: MAX_CONTRACT_PRICE,
           supplier,
+          companyName,
           codesSource,
           codes: [],
           message: "Нет данных для анализа рынка",
@@ -613,6 +621,7 @@ Deno.serve(async (req: Request) => {
         sumCap: SUM_CAP,
         maxContractPrice: MAX_CONTRACT_PRICE,
         supplier,
+        companyName,
         codesSource,
         methods,
         share: { marketSum, supplierSum, nicheMarketSum, nicheCodes },

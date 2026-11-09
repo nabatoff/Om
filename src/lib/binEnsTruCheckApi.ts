@@ -54,6 +54,8 @@ export type BinEnsTruCheckResponse = {
   sumCap: number;
   maxContractPrice: number;
   supplier: BinSupplierStats | null;
+  /** Название компании: zakup.gov.kz, иначе реестры e-ondiris. */
+  companyName?: string;
   methods?: BinPurchaseMethodStat[];
   codesSource?: BinCodesSource;
   share?: BinShareTotals;

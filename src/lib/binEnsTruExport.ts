@@ -163,6 +163,7 @@ export function exportBinCheckToExcel(opts: {
   maxContractPrice: number | null;
   sumCap: number | null;
   supplier: BinSupplierStats | null;
+  companyName?: string;
   methods: BinPurchaseMethodStat[];
   regimes: Record<string, CodeRegime>;
   codes: BinEnsTruCodeResult[];
@@ -171,7 +172,7 @@ export function exportBinCheckToExcel(opts: {
   seasonality?: BinSeasonality | null;
   cappedCount?: number;
 }): void {
-  const { bin, year, maxContractPrice, sumCap, supplier, methods, regimes, codes, codesSource, share, seasonality, cappedCount } = opts;
+  const { bin, year, maxContractPrice, sumCap, supplier, companyName, methods, regimes, codes, codesSource, share, seasonality, cappedCount } = opts;
   const y = year ?? '';
   const COLS = 8;
   const rows: Row[] = [];
@@ -181,7 +182,7 @@ export function exportBinCheckToExcel(opts: {
   rows.push({
     cells: [
       {
-        v: `${supplier?.name ? `${supplier.name} · ` : ''}БИН/ИИН ${bin} · ${y} год${
+        v: `${supplier?.name || companyName ? `${supplier?.name || companyName} · ` : ''}БИН/ИИН ${bin} · ${y} год${
           codesSource === 'ktp' ? ' · Коды из КТП' : codesSource === 'contracts' ? ' · Коды из договоров (нет в КТП)' : ''
         }`,
         s: 'subtitle',

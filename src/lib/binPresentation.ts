@@ -13,6 +13,7 @@ export type BinPresentationInput = {
   year: number | null;
   maxContractPrice: number | null;
   supplier: BinSupplierStats | null;
+  companyName?: string;
   methods: BinPurchaseMethodStat[];
   codesSource: BinCodesSource;
   share: BinShareTotals | null;
@@ -72,7 +73,7 @@ function seasonFacts(s: BinSeasonality) {
 
 export function buildBinPresentationHtml(d: BinPresentationInput): string {
   const year = d.year ?? new Date().getFullYear() - 1;
-  const company = d.supplier?.name?.trim() || `БИН ${d.bin}`;
+  const company = d.supplier?.name?.trim() || d.companyName?.trim() || `БИН ${d.bin}`;
   const codesAll = d.codes;
   const marketSum = d.share?.marketSum ?? codesAll.reduce((a, c) => a + (c.contractSum ?? 0), 0);
   const marketCount = codesAll.reduce((a, c) => a + c.contractCount, 0);
