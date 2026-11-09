@@ -88,7 +88,8 @@ function Tile({ label, value, sub, tone }: { label: string; value: string; sub?:
 
 export function BinEnsTruCheckPanel() {
   const [bin, setBin] = useState('');
-  const [yearSel, setYearSel] = useState(2025);
+  /** Проверка за 2026 год (неполный) — показывается рядом с основным 2025. */
+  const [res26, setRes26] = useState<BinEnsTruCheckResponse | null>(null);
   const [presBusy, setPresBusy] = useState(false);
   /** Ответы проверки по годам для текущего БИН — презентации нужны оба года (2025 — основа, 2026 — текущие закупки). */
   const resByYear = useRef<{ bin: string; byYear: Record<number, BinEnsTruCheckResponse> }>({ bin: '', byYear: {} });
@@ -123,11 +124,12 @@ export function BinEnsTruCheckPanel() {
     setMethods([]);
     setShare(null);
     setSeasonality(null);
+    setRes26(null);
     setRegimes({});
     setChecked(false);
   };
 
-  const handleCheck = async (yearOverride?: number) => {
+  const handleCheck = async () => {
     const trimmed = bin.trim();
     if (!/^\d{12}$/.test(trimmed)) {
       setError('БИН/ИИН должен состоять из 12 цифр');
@@ -140,9 +142,13 @@ export function BinEnsTruCheckPanel() {
     setError(null);
     setMessage(null);
     try {
-      const res = await checkBinEnsTruContractsApi(trimmed, yearOverride ?? yearSel);
-      if (resByYear.current.bin !== trimmed) resByYear.current = { bin: trimmed, byYear: {} };
-      resByYear.current.byYear[res.year ?? yearOverride ?? yearSel] = res;
+      // Оба года параллельно: 2025 — основной, 2026 (неполный) — рядом; если 2026 не загрузился, просто не показываем.
+      const [res, cur] = await Promise.all([
+        checkBinEnsTruContractsApi(trimmed, 2025),
+        checkBinEnsTruContractsApi(trimmed, 2026).catch(() => null),
+      ]);
+      resByYear.current = { bin: trimmed, byYear: cur ? { 2025: res, 2026: cur } : { 2025: res } };
+      setRes26(cur);
       setCodes(res.codes);
       setYear(res.year ?? null);
       setSumCap(res.sumCap ?? null);
@@ -271,6 +277,7 @@ export function BinEnsTruCheckPanel() {
       return next;
     });
 
+  const codes26 = useMemo(() => new Map((res26?.codes ?? []).map((c) => [c.code, c])), [res26]);
   const marketContracts = tableCodes.reduce((sum, c) => sum + c.contractCount, 0);
   const methodsCount = methods.reduce((a, m) => a + m.count, 0);
   const methodsSum = methods.reduce((a, m) => a + m.sum, 0);
@@ -339,23 +346,6 @@ export function BinEnsTruCheckPanel() {
             placeholder="Например: 061040006993"
             className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-mono"
           />
-        </label>
-        <label className="block space-y-1.5">
-          <span className="text-[10px] font-bold text-gray-400 uppercase">Год договоров</span>
-          <select
-            value={yearSel}
-            onChange={(e) => {
-              const y = Number(e.target.value);
-              setYearSel(y);
-              // Уже есть результат по этому БИН — сразу пересчитываем за выбранный год.
-              if (checked && !checking) void handleCheck(y);
-            }}
-            disabled={checking}
-            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold"
-          >
-            <option value={2025}>2025</option>
-            <option value={2026}>2026 (год неполный)</option>
-          </select>
         </label>
         {error ? <p className="text-xs font-bold text-rose-600">{error}</p> : null}
         <button
@@ -458,6 +448,38 @@ export function BinEnsTruCheckPanel() {
             />
           </div>
 
+          {/* 2б. Те же показатели за 2026 (год неполный) */}
+          {res26 && res26.codes.length > 0 ? (
+            <div className="space-y-2">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                2026 год (неполный, данные на сегодня)
+              </p>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <Tile
+                  label="Поставщик · 2026"
+                  value={res26.supplier ? (res26.supplier.sum != null ? `${formatMoney(res26.supplier.sum)} ₸` : 'не считали') : 'нет договоров'}
+                  tone="text-emerald-700"
+                  sub={res26.supplier ? `${res26.supplier.count} дог.` : undefined}
+                />
+                <Tile
+                  label="Рынок по кодам · 2026"
+                  value={res26.share ? `${formatMoney(res26.share.marketSum)} ₸` : '—'}
+                  tone="text-indigo-700"
+                  sub={`${res26.codes.filter((c) => c.contractCount > 0 && !c.sumCapped && !c.error).reduce((a, c) => a + c.contractCount, 0)} договоров`}
+                />
+                <Tile
+                  label="Доля по всем кодам · 2026"
+                  value={res26.share ? formatPct(res26.share.supplierSum, res26.share.marketSum) : '—'}
+                  sub={res26.share ? `${formatMoney(res26.share.supplierSum)} из ${formatMoney(res26.share.marketSum)} ₸` : undefined}
+                />
+                <Tile
+                  label="Доля в нише · 2026"
+                  value={res26.share ? formatPct(res26.share.supplierSum, res26.share.nicheMarketSum) : '—'}
+                />
+              </div>
+            </div>
+          ) : null}
+
           {/* 3. Договоры до лимита — только если отличается от «Все договоры» */}
           {supplier && underLimitDiffers ? (
             <div className="rounded-2xl border border-gray-200 bg-white px-5 py-4 shadow-sm flex flex-wrap items-center gap-x-8 gap-y-2">
@@ -503,7 +525,7 @@ export function BinEnsTruCheckPanel() {
                   </p>
                 ) : (
                   <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-x-auto">
-                    <table className="w-full text-left border-collapse min-w-[860px]">
+                    <table className="w-full text-left border-collapse min-w-[1060px]">
                       <thead>
                         <tr className="bg-gray-50/50 text-[10px] font-bold text-gray-400 border-b border-gray-100 uppercase tracking-wider">
                           <th className="py-4 pl-4 pr-1 w-8" />
@@ -538,6 +560,8 @@ export function BinEnsTruCheckPanel() {
                             </div>
                           </th>
                           <th className="py-4 px-4 text-center">Место</th>
+                          {res26 ? <th className="py-4 px-3 text-center">2026: договоров</th> : null}
+                          {res26 ? <th className="py-4 px-3 text-right">2026: сумма рынка</th> : null}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-50">
@@ -579,11 +603,21 @@ export function BinEnsTruCheckPanel() {
                                     <span className="text-gray-300">—</span>
                                   )}
                                 </td>
+                                {res26 ? (
+                                  <td className="py-3 px-3 text-center font-bold text-gray-800">
+                                    {codes26.get(row.code)?.contractCount ?? 0}
+                                  </td>
+                                ) : null}
+                                {res26 ? (
+                                  <td className="py-3 px-3 text-right font-bold text-emerald-700 whitespace-nowrap">
+                                    {formatMoney(codes26.get(row.code)?.contractSum ?? 0)} ₸
+                                  </td>
+                                ) : null}
                               </tr>
                               {open ? (
                                 <tr className={mine ? 'bg-indigo-50/30' : 'bg-gray-50/40'}>
                                   <td />
-                                  <td colSpan={7} className="px-3 pb-3 pt-0 text-xs text-gray-600">
+                                  <td colSpan={res26 ? 9 : 7} className="px-3 pb-3 pt-0 text-xs text-gray-600">
                                     <span className="font-bold text-gray-400 uppercase text-[10px] mr-2">Товар по реестру</span>
                                     {row.names.length > 0 ? row.names.join('; ') : 'нет (код найден по договорам поставщика)'}
                                   </td>
