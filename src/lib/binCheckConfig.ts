@@ -2,7 +2,7 @@
 export const SEASONALITY_MIN_CONTRACTS = 30;
 
 /** Сколько кодов показываем в таблице до нажатия «Показать все». */
-export const CODES_TOP_LIMIT = 10;
+export const CODES_TOP_LIMIT = 5;
 
 /** Пиковый месяц — доля месяца не ниже среднего (1/12), умноженного на этот коэффициент. */
 export const SEASONALITY_PEAK_FACTOR = 1.5;

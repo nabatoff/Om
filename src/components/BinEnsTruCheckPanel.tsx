@@ -76,14 +76,46 @@ function SourceBadge({ source }: { source: BinCodesSource }) {
   );
 }
 
-function Tile({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: string }) {
+function Tile({
+  label,
+  value,
+  sub,
+  tone,
+  line26,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  tone?: string;
+  /** Строка «2026: …» под разделителем; undefined — данных за 2026 нет. */
+  line26?: string;
+}) {
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-      <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{label}</p>
-      <p className={`mt-1 text-xl font-black leading-tight ${tone ?? 'text-gray-900'}`}>{value}</p>
-      {sub ? <p className="mt-1 text-[11px] font-medium text-gray-500">{sub}</p> : null}
+      <p className="text-[11px] font-medium text-gray-500">{label}</p>
+      <p className={`mt-1 text-2xl font-black leading-tight ${tone ?? 'text-gray-900'}`}>{value}</p>
+      {sub ? <p className="mt-1 text-xs font-medium text-gray-500">{sub}</p> : null}
+      {line26 ? <p className="mt-3 border-t border-gray-100 pt-2 text-xs font-medium text-gray-700">{line26}</p> : null}
     </div>
   );
+}
+
+/** Крупные суммы компактно: «1,73 млрд ₸», «214 млн ₸». */
+function compactMoney(n: number): string {
+  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(2).replace('.', ',')} млрд ₸`;
+  if (n >= 1_000_000) return `${Math.round(n / 1_000_000)} млн ₸`;
+  return `${formatMoney(n)} ₸`;
+}
+
+function codesWord(n: number): string {
+  const a = n % 10;
+  const b = n % 100;
+  return a === 1 && b !== 11 ? `${n} код` : a >= 2 && a <= 4 && (b < 12 || b > 14) ? `${n} кода` : `${n} кодов`;
+}
+
+/** 2026 зелёным при росте относительно 2025, красным при снижении. */
+function deltaTone(prev: number, next: number): string {
+  return next > prev ? 'text-emerald-700' : next < prev ? 'text-rose-600' : 'text-gray-500';
 }
 
 export function BinEnsTruCheckPanel() {
@@ -410,75 +442,69 @@ export function BinEnsTruCheckPanel() {
 
       {hasResult ? (
         <>
-          {/* 2. Сводка из четырёх плиток */}
+          {/* 2. Заголовок и сводка из четырёх плиток: 2025 крупно, 2026 строкой ниже */}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-medium text-gray-800">
+              {supplier?.name || companyName || `БИН ${bin}`} · {codesWord(tableCodes.length)}
+            </p>
+            {res26 ? (
+              <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
+                2026 год неполный, данные на сегодня
+              </span>
+            ) : null}
+          </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <Tile
-              label={`Поставщик · ${year}`}
-              value={supplier ? (supplier.sum != null ? `${formatMoney(supplier.sum)} ₸` : 'не считали') : 'нет договоров'}
+              label="Поставщик"
+              value={supplier ? (supplier.sum != null ? compactMoney(supplier.sum) : 'не считали') : '0 ₸'}
               tone="text-emerald-700"
               sub={
                 supplier
-                  ? `${supplier.name} · ${supplier.count} дог.${
-                      supplier.avgCheck != null ? ` · ср. чек ${formatMoney(supplier.avgCheck)} ₸` : ''
-                    }`
-                  : 'не найден на zakup.gov.kz'
+                  ? `${year} · ${supplier.count} дог.${supplier.avgCheck != null ? ` · ср. чек ${formatMoney(supplier.avgCheck)} ₸` : ''}`
+                  : `${year} · не найден на zakup.gov.kz`
+              }
+              line26={
+                res26
+                  ? `2026: ${res26.supplier?.sum != null ? compactMoney(res26.supplier.sum) : '0 ₸'} · ${res26.supplier?.count ?? 0} дог.`
+                  : undefined
               }
             />
             <Tile
               label="Рынок по кодам"
-              value={share ? `${formatMoney(share.marketSum)} ₸` : '—'}
+              value={share ? compactMoney(share.marketSum) : '—'}
               tone="text-indigo-700"
-              sub={`${tableCodes.length} кодов · ${marketContracts} договоров`}
+              sub={`${year} · ${formatMoney(marketContracts)} дог.`}
+              line26={
+                res26?.share
+                  ? `2026: ${compactMoney(res26.share.marketSum)} · ${formatMoney(
+                      res26.codes.filter((c) => c.contractCount > 0 && !c.sumCapped && !c.error).reduce((a, c) => a + c.contractCount, 0),
+                    )} дог.`
+                  : undefined
+              }
             />
             <Tile
               label="Доля по всем кодам"
               value={share ? formatPct(share.supplierSum, share.marketSum) : '—'}
-              sub={share ? `${formatMoney(share.supplierSum)} из ${formatMoney(share.marketSum)} ₸` : undefined}
+              sub={share ? `${year} · ${compactMoney(share.supplierSum).replace(' ₸', '')} из ${compactMoney(share.marketSum)}` : undefined}
+              line26={res26?.share ? `2026: ${formatPct(res26.share.supplierSum, res26.share.marketSum)}` : undefined}
             />
             <Tile
               label="Доля в своей нише"
-              value={share ? formatPct(share.supplierSum, share.nicheMarketSum) : '—'}
+              value={share && share.nicheMarketSum > 0 ? formatPct(share.supplierSum, share.nicheMarketSum) : '—'}
               sub={
                 share
                   ? share.nicheCodes > 0
-                    ? `по ${share.nicheCodes} кодам с договорами`
-                    : 'нет договоров по этим кодам'
+                    ? `${year} · по ${codesWord(share.nicheCodes)} с договорами`
+                    : `${year} · нет договоров`
+                  : undefined
+              }
+              line26={
+                res26?.share
+                  ? `2026: ${res26.share.nicheMarketSum > 0 ? formatPct(res26.share.supplierSum, res26.share.nicheMarketSum) : '—'}`
                   : undefined
               }
             />
           </div>
-
-          {/* 2б. Те же показатели за 2026 (год неполный) */}
-          {res26 && res26.codes.length > 0 ? (
-            <div className="space-y-2">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                2026 год (неполный, данные на сегодня)
-              </p>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <Tile
-                  label="Поставщик · 2026"
-                  value={res26.supplier ? (res26.supplier.sum != null ? `${formatMoney(res26.supplier.sum)} ₸` : 'не считали') : 'нет договоров'}
-                  tone="text-emerald-700"
-                  sub={res26.supplier ? `${res26.supplier.count} дог.` : undefined}
-                />
-                <Tile
-                  label="Рынок по кодам · 2026"
-                  value={res26.share ? `${formatMoney(res26.share.marketSum)} ₸` : '—'}
-                  tone="text-indigo-700"
-                  sub={`${res26.codes.filter((c) => c.contractCount > 0 && !c.sumCapped && !c.error).reduce((a, c) => a + c.contractCount, 0)} договоров`}
-                />
-                <Tile
-                  label="Доля по всем кодам · 2026"
-                  value={res26.share ? formatPct(res26.share.supplierSum, res26.share.marketSum) : '—'}
-                  sub={res26.share ? `${formatMoney(res26.share.supplierSum)} из ${formatMoney(res26.share.marketSum)} ₸` : undefined}
-                />
-                <Tile
-                  label="Доля в нише · 2026"
-                  value={res26.share ? formatPct(res26.share.supplierSum, res26.share.nicheMarketSum) : '—'}
-                />
-              </div>
-            </div>
-          ) : null}
 
           {/* 3. Договоры до лимита — только если отличается от «Все договоры» */}
           {supplier && underLimitDiffers ? (
@@ -525,99 +551,95 @@ export function BinEnsTruCheckPanel() {
                   </p>
                 ) : (
                   <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-x-auto">
-                    <table className="w-full text-left border-collapse min-w-[1060px]">
+                    <table className="w-full text-left border-collapse min-w-[720px]">
                       <thead>
-                        <tr className="bg-gray-50/50 text-[10px] font-bold text-gray-400 border-b border-gray-100 uppercase tracking-wider">
-                          <th className="py-4 pl-4 pr-1 w-8" />
-                          <th className="py-4 px-3">Код ЕНС ТРУ</th>
-                          <th className="py-4 px-3">Наименование</th>
-                          <th className="py-4 px-3 text-center">Статус</th>
+                        <tr className="text-xs font-medium text-gray-500 border-b border-gray-100">
+                          <th className="py-3 px-4">Код и наименование</th>
                           <th
-                            className="py-4 px-3 text-center cursor-pointer hover:bg-gray-100/80 select-none"
+                            className="py-3 px-4 text-right cursor-pointer hover:bg-gray-50 select-none"
                             onClick={() => handleSort('contractCount')}
                           >
-                            <div className="flex items-center justify-center">
-                              Договоров
+                            <div className="flex items-center justify-end">
+                              <span>
+                                Договоров
+                                <br />
+                                {year}{res26 ? ' → 2026' : ''}
+                              </span>
                               <SortIcon col="contractCount" />
                             </div>
                           </th>
                           <th
-                            className="py-4 px-3 text-right cursor-pointer hover:bg-gray-100/80 select-none"
+                            className="py-3 px-4 text-right cursor-pointer hover:bg-gray-50 select-none"
                             onClick={() => handleSort('contractSum')}
                           >
                             <div className="flex items-center justify-end">
-                              Сумма рынка
+                              <span>
+                                Сумма рынка, млн ₸
+                                <br />
+                                {year}{res26 ? ' → 2026' : ''}
+                              </span>
                               <SortIcon col="contractSum" />
                             </div>
                           </th>
-                          <th
-                            className="py-4 px-3 text-center cursor-pointer hover:bg-gray-100/80 select-none"
-                            onClick={() => handleSort('share')}
-                          >
-                            <div className="flex items-center justify-center">
-                              Доля, %
-                              <SortIcon col="share" />
-                            </div>
-                          </th>
-                          <th className="py-4 px-4 text-center">Место</th>
-                          {res26 ? <th className="py-4 px-3 text-center">2026: договоров</th> : null}
-                          {res26 ? <th className="py-4 px-3 text-right">2026: сумма рынка</th> : null}
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-50">
+                      <tbody className="divide-y divide-gray-100">
                         {shownCodes.map((row) => {
                           const mine = (row.supplierCount ?? 0) > 0;
                           const open = expanded.has(row.code);
                           const sh = codeShare(row);
+                          const r26 = res26 ? codes26.get(row.code) : undefined;
+                          const c26 = res26 ? r26?.contractCount ?? 0 : null;
+                          const s26 = res26 ? Math.round((r26?.contractSum ?? 0) / 1e6) : null;
+                          const s25 = Math.round((row.contractSum ?? 0) / 1e6);
                           return (
                             <Fragment key={row.code}>
-                              <tr className={`text-sm ${mine ? 'bg-indigo-50/60 hover:bg-indigo-50' : 'hover:bg-gray-50/50'}`}>
-                                <td className={`py-3 pl-4 pr-1 ${mine ? 'border-l-4 border-indigo-500' : 'border-l-4 border-transparent'}`}>
-                                  <button
-                                    type="button"
-                                    onClick={() => toggleExpanded(row.code)}
-                                    title="Товар по реестру"
-                                    className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
-                                  >
-                                    {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                                  </button>
+                              <tr className={`text-sm ${mine ? 'bg-indigo-50/60' : ''}`}>
+                                <td className={`py-3 px-4 ${mine ? 'border-l-4 border-indigo-500' : 'border-l-4 border-transparent'}`}>
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleExpanded(row.code)}
+                                      title="Товар по реестру"
+                                      className="rounded-md p-0.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                                    >
+                                      {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                                    </button>
+                                    <span className="font-bold text-gray-900 whitespace-nowrap">{row.code}</span>
+                                    <RegimeBadges regime={regimes[row.code]} />
+                                  </div>
+                                  <p className="pl-6 text-xs text-gray-500">
+                                    {row.canonicalName ?? '—'}
+                                    {mine && row.supplierRank != null && row.suppliersTotal ? (
+                                      <span className="ml-2 font-bold text-indigo-700">
+                                        {row.supplierRank}-й из {row.suppliersTotal}
+                                        {sh != null ? ` · доля ${sh >= 10 ? sh.toFixed(1) : sh.toFixed(2)}%` : ''}
+                                      </span>
+                                    ) : null}
+                                  </p>
                                 </td>
-                                <td className="py-3 px-3 font-mono font-bold text-gray-900 whitespace-nowrap">{row.code}</td>
-                                <td className="py-3 px-3 text-gray-800 text-xs font-bold max-w-sm">
-                                  {row.canonicalName ?? <span className="text-gray-400 font-normal">—</span>}
+                                <td className="py-3 px-4 text-right text-gray-800 whitespace-nowrap">
+                                  {row.contractCount}
+                                  {c26 != null ? (
+                                    <>
+                                      {' → '}
+                                      <span className={`font-bold ${deltaTone(row.contractCount, c26)}`}>{c26}</span>
+                                    </>
+                                  ) : null}
                                 </td>
-                                <td className="py-3 px-3 text-center">
-                                  <RegimeBadges regime={regimes[row.code]} />
+                                <td className="py-3 px-4 text-right text-gray-800 whitespace-nowrap">
+                                  {formatMoney(s25)}
+                                  {s26 != null ? (
+                                    <>
+                                      {' → '}
+                                      <span className={`font-bold ${deltaTone(s25, s26)}`}>{formatMoney(s26)}</span>
+                                    </>
+                                  ) : null}
                                 </td>
-                                <td className="py-3 px-3 text-center font-bold text-gray-800">{row.contractCount}</td>
-                                <td className="py-3 px-3 text-right font-bold text-emerald-700 whitespace-nowrap">
-                                  {formatMoney(row.contractSum ?? 0)} ₸
-                                </td>
-                                <td className="py-3 px-3 text-center font-bold text-gray-800 whitespace-nowrap">
-                                  {sh == null ? <span className="text-gray-300">—</span> : `${sh >= 10 ? sh.toFixed(1) : sh.toFixed(2)}%`}
-                                </td>
-                                <td className="py-3 px-4 text-center text-xs font-bold text-gray-700 whitespace-nowrap">
-                                  {mine && row.supplierRank != null && row.suppliersTotal ? (
-                                    `${row.supplierRank}-й из ${row.suppliersTotal}`
-                                  ) : (
-                                    <span className="text-gray-300">—</span>
-                                  )}
-                                </td>
-                                {res26 ? (
-                                  <td className="py-3 px-3 text-center font-bold text-gray-800">
-                                    {codes26.get(row.code)?.contractCount ?? 0}
-                                  </td>
-                                ) : null}
-                                {res26 ? (
-                                  <td className="py-3 px-3 text-right font-bold text-emerald-700 whitespace-nowrap">
-                                    {formatMoney(codes26.get(row.code)?.contractSum ?? 0)} ₸
-                                  </td>
-                                ) : null}
                               </tr>
                               {open ? (
                                 <tr className={mine ? 'bg-indigo-50/30' : 'bg-gray-50/40'}>
-                                  <td />
-                                  <td colSpan={res26 ? 9 : 7} className="px-3 pb-3 pt-0 text-xs text-gray-600">
+                                  <td colSpan={3} className="px-4 pb-3 pt-0 pl-10 text-xs text-gray-600">
                                     <span className="font-bold text-gray-400 uppercase text-[10px] mr-2">Товар по реестру</span>
                                     {row.names.length > 0 ? row.names.join('; ') : 'нет (код найден по договорам поставщика)'}
                                   </td>
@@ -631,13 +653,18 @@ export function BinEnsTruCheckPanel() {
                   </div>
                 )}
                 {sortedCodes.length > CODES_TOP_LIMIT ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowAllCodes((v) => !v)}
-                    className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50"
-                  >
-                    {showAllCodes ? `Свернуть до ${CODES_TOP_LIMIT}` : `Показать все ${sortedCodes.length} кодов`}
-                  </button>
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs text-gray-500">
+                      {showAllCodes ? `Все ${sortedCodes.length}` : `Топ-${CODES_TOP_LIMIT}`} по сумме {year} года из {sortedCodes.length}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setShowAllCodes((v) => !v)}
+                      className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50"
+                    >
+                      {showAllCodes ? `Свернуть до ${CODES_TOP_LIMIT}` : `Показать все ${codesWord(sortedCodes.length)}`}
+                    </button>
+                  </div>
                 ) : null}
                 <p className="text-[11px] text-gray-400 font-medium">
                   <span className="font-black text-rose-600">Н</span> — нацизъятие, <span className="font-black text-amber-600">О</span> — ООИ.
