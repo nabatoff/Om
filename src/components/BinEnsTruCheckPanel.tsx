@@ -574,7 +574,7 @@ export function BinEnsTruCheckPanel() {
                           >
                             <div className="flex items-center justify-end">
                               <span>
-                                Сумма рынка, млн ₸
+                                Сумма рынка, ₸
                                 <br />
                                 {year}{res26 ? ' → 2026' : ''}
                               </span>
@@ -590,8 +590,8 @@ export function BinEnsTruCheckPanel() {
                           const sh = codeShare(row);
                           const r26 = res26 ? codes26.get(row.code) : undefined;
                           const c26 = res26 ? r26?.contractCount ?? 0 : null;
-                          const s26 = res26 ? Math.round((r26?.contractSum ?? 0) / 1e6) : null;
-                          const s25 = Math.round((row.contractSum ?? 0) / 1e6);
+                          const s26 = res26 ? Math.round(r26?.contractSum ?? 0) : null;
+                          const s25 = Math.round(row.contractSum ?? 0);
                           return (
                             <Fragment key={row.code}>
                               <tr className={`text-sm ${mine ? 'bg-indigo-50/60' : ''}`}>
