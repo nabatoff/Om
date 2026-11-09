@@ -127,7 +127,7 @@ export function BinEnsTruCheckPanel() {
     setChecked(false);
   };
 
-  const handleCheck = async () => {
+  const handleCheck = async (yearOverride?: number) => {
     const trimmed = bin.trim();
     if (!/^\d{12}$/.test(trimmed)) {
       setError('БИН/ИИН должен состоять из 12 цифр');
@@ -140,9 +140,9 @@ export function BinEnsTruCheckPanel() {
     setError(null);
     setMessage(null);
     try {
-      const res = await checkBinEnsTruContractsApi(trimmed, yearSel);
+      const res = await checkBinEnsTruContractsApi(trimmed, yearOverride ?? yearSel);
       if (resByYear.current.bin !== trimmed) resByYear.current = { bin: trimmed, byYear: {} };
-      resByYear.current.byYear[res.year ?? yearSel] = res;
+      resByYear.current.byYear[res.year ?? yearOverride ?? yearSel] = res;
       setCodes(res.codes);
       setYear(res.year ?? null);
       setSumCap(res.sumCap ?? null);
@@ -344,7 +344,12 @@ export function BinEnsTruCheckPanel() {
           <span className="text-[10px] font-bold text-gray-400 uppercase">Год договоров</span>
           <select
             value={yearSel}
-            onChange={(e) => setYearSel(Number(e.target.value))}
+            onChange={(e) => {
+              const y = Number(e.target.value);
+              setYearSel(y);
+              // Уже есть результат по этому БИН — сразу пересчитываем за выбранный год.
+              if (checked && !checking) void handleCheck(y);
+            }}
             disabled={checking}
             className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold"
           >
