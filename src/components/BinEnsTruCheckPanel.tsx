@@ -175,10 +175,23 @@ export function BinEnsTruCheckPanel() {
     setMessage(null);
     try {
       // Оба года параллельно: 2025 — основной, 2026 (неполный) — рядом; если 2026 не загрузился, просто не показываем.
-      // Если коды не из КТП, а из договоров поставщика, 2026 считаем по тем же кодам, что и 2025 (иначе набор кодов был бы другим).
-      const res = await checkBinEnsTruContractsApi(trimmed, 2025);
-      const sameCodes = res.codesSource === 'contracts' ? res.codes.map((c) => c.code) : undefined;
-      const cur = await checkBinEnsTruContractsApi(trimmed, 2026, sameCodes).catch(() => null);
+      let [res, cur] = await Promise.all([
+        checkBinEnsTruContractsApi(trimmed, 2025),
+        checkBinEnsTruContractsApi(trimmed, 2026).catch(() => null),
+      ]);
+      // Если коды не из КТП, а из договоров поставщика, у каждого года свой набор кодов. Берём объединение
+      // и пересчитываем год, в котором набор не полный, — чтобы оба года считались по одним и тем же кодам.
+      if (res.codesSource === 'contracts' && cur && cur.codesSource === 'contracts') {
+        const a = new Set(res.codes.map((c) => c.code));
+        const b = new Set(cur.codes.map((c) => c.code));
+        const union = Array.from(new Set([...a, ...b]));
+        const [res2, cur2] = await Promise.all([
+          union.length > a.size ? checkBinEnsTruContractsApi(trimmed, 2025, union) : Promise.resolve(res),
+          union.length > b.size ? checkBinEnsTruContractsApi(trimmed, 2026, union).catch(() => cur) : Promise.resolve(cur),
+        ]);
+        res = res2;
+        cur = cur2;
+      }
       resByYear.current = { bin: trimmed, byYear: cur ? { 2025: res, 2026: cur } : { 2025: res } };
       setRes26(cur);
       setCodes(res.codes);
@@ -238,12 +251,7 @@ export function BinEnsTruCheckPanel() {
       const load = async (y: number) => {
         const cached = store.byYear[y];
         if (cached) return cached;
-        const base = store.byYear[2025];
-        const r = await checkBinEnsTruContractsApi(
-          checkedBin,
-          y,
-          y !== 2025 && base?.codesSource === 'contracts' ? base.codes.map((c) => c.code) : undefined,
-        );
+        const r = await checkBinEnsTruContractsApi(checkedBin, y);
         store.byYear[y] = r;
         return r;
       };
@@ -272,10 +280,10 @@ export function BinEnsTruCheckPanel() {
   };
 
   // В таблицу идут только коды с посчитанной суммой; коды с превышением лимита и ошибками — под таблицей счётчиком.
-  const tableCodes = useMemo(
-    () => codes.filter((c) => c.contractCount > 0 && !c.sumCapped && !c.error),
-    [codes],
-  );
+  const tableCodes = useMemo(() => {
+    const in26 = new Set((res26?.codes ?? []).filter((c) => c.contractCount > 0).map((c) => c.code));
+    return codes.filter((c) => (c.contractCount > 0 || in26.has(c.code)) && !c.sumCapped && !c.error);
+  }, [codes, res26]);
   const cappedCount = useMemo(() => codes.filter((c) => c.sumCapped).length, [codes]);
   const errorCount = useMemo(() => codes.filter((c) => c.error).length, [codes]);
 
