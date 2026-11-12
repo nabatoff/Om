@@ -475,7 +475,7 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  let body: { bin?: string; year?: number };
+  let body: { bin?: string; year?: number; codes?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -544,6 +544,15 @@ Deno.serve(async (req: Request) => {
 
     // Основной источник — КТП (реестры e-ondiris). Если там пусто — уникальные коды из договоров поставщика за год.
     let codesSource: "ktp" | "contracts" | "none" = "ktp";
+    // Набор кодов от клиента (для «Проверки по БИН» за второй год): если поставщика нет в КТП, коды берутся из его договоров
+    // года, и без этого параметра 2026 считался бы по другим кодам, чем 2025.
+    const givenCodes = Array.isArray(body.codes)
+      ? body.codes.filter((c): c is string => typeof c === "string" && /^[0-9A-Za-z.\-]{6,40}$/.test(c)).slice(0, 2000)
+      : [];
+    if (codeMap.size === 0 && givenCodes.length > 0) {
+      for (const code of givenCodes) addCode(codeMap, code, "");
+      codesSource = "contracts";
+    }
     if (codeMap.size === 0) {
       if (ktpFailures > 0) {
         return new Response(

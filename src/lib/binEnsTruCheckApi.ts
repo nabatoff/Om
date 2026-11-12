@@ -80,10 +80,15 @@ export type BinEnsTruCheckResponse = {
  * «Проверка по БИН»: коды ЕНС ТРУ поставщика (из реестров e-ondiris.gov.kz) +
  * количество/сумма договоров по каждому коду за год на zakup.gov.kz (см. docs/BUSINESS_LOGIC.md).
  */
-export async function checkBinEnsTruContractsApi(bin: string, year?: number): Promise<BinEnsTruCheckResponse> {
+export async function checkBinEnsTruContractsApi(
+  bin: string,
+  year?: number,
+  /** Тот же набор кодов, что у базового года (если коды взяты не из КТП, а из договоров). */
+  codes?: string[],
+): Promise<BinEnsTruCheckResponse> {
   const { data, error } = await getSupabase().functions.invoke<BinEnsTruCheckResponse & { error?: string }>(
     'bin-ens-tru-check',
-    { body: { bin: bin.trim(), ...(year ? { year } : {}) } },
+    { body: { bin: bin.trim(), ...(year ? { year } : {}), ...(codes && codes.length > 0 ? { codes } : {}) } },
   );
   if (data?.error) throw new Error(data.error);
   if (error) {

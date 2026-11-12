@@ -175,10 +175,10 @@ export function BinEnsTruCheckPanel() {
     setMessage(null);
     try {
       // Оба года параллельно: 2025 — основной, 2026 (неполный) — рядом; если 2026 не загрузился, просто не показываем.
-      const [res, cur] = await Promise.all([
-        checkBinEnsTruContractsApi(trimmed, 2025),
-        checkBinEnsTruContractsApi(trimmed, 2026).catch(() => null),
-      ]);
+      // Если коды не из КТП, а из договоров поставщика, 2026 считаем по тем же кодам, что и 2025 (иначе набор кодов был бы другим).
+      const res = await checkBinEnsTruContractsApi(trimmed, 2025);
+      const sameCodes = res.codesSource === 'contracts' ? res.codes.map((c) => c.code) : undefined;
+      const cur = await checkBinEnsTruContractsApi(trimmed, 2026, sameCodes).catch(() => null);
       resByYear.current = { bin: trimmed, byYear: cur ? { 2025: res, 2026: cur } : { 2025: res } };
       setRes26(cur);
       setCodes(res.codes);
@@ -238,12 +238,18 @@ export function BinEnsTruCheckPanel() {
       const load = async (y: number) => {
         const cached = store.byYear[y];
         if (cached) return cached;
-        const r = await checkBinEnsTruContractsApi(checkedBin, y);
+        const base = store.byYear[2025];
+        const r = await checkBinEnsTruContractsApi(
+          checkedBin,
+          y,
+          y !== 2025 && base?.codesSource === 'contracts' ? base.codes.map((c) => c.code) : undefined,
+        );
         store.byYear[y] = r;
         return r;
       };
       // 2025 — основа презентации, 2026 — слайд текущих закупок (если не загрузился — слайд просто не показываем).
-      const [baseRes, curRes] = await Promise.all([load(2025), load(2026).catch(() => null)]);
+      const baseRes = await load(2025);
+      const curRes = await load(2026).catch(() => null);
       renderBinPresentation(w, {
         bin: checkedBin,
         year: baseRes.year ?? 2025,
