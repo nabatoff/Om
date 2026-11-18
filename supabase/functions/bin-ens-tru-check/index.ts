@@ -279,8 +279,8 @@ type PurchaseAcc = {
   seen: Set<number>;
   methods: MethodTotals;
   em: Map<string, { count: number; sum: number }>;
-  /** Только режим chunk: какие договоры добавлены именно в этом вызове (клиент копит их как «уже учтённые»). */
-  added?: number[];
+  /** Только режим chunk: договоры для статистики закупок [id, способ, сумма, заказчик ЭМ или null] — клиент дедуплицирует по id. */
+  rows?: Array<[number, string, number, string | null]>;
 };
 const EM_RE = /электронный магазин/i;
 /** Сезонность рынка: помесячно (индекс 0..11) договоры целевого года без договоров самого поставщика. */
@@ -376,18 +376,19 @@ async function countAndSumContracts(
 
       if (row.contract_type_id === 1 && (row.sign_date ?? "").startsWith(`${year}-`) && !acc.seen.has(row.id)) {
         acc.seen.add(row.id);
-        acc.added?.push(row.id);
         const pm = acc.methods.get(method) ?? { count: 0, sum: 0 };
         pm.count += 1;
         pm.sum += value;
         acc.methods.set(method, pm);
+        let cname: string | null = null;
         if (EM_RE.test(method)) {
-          const cname = row.customer_organization_name?.trim() || `Заказчик ${row.customer_organization_id ?? ""}`.trim();
+          cname = row.customer_organization_name?.trim() || `Заказчик ${row.customer_organization_id ?? ""}`.trim();
           const cm = acc.em.get(cname) ?? { count: 0, sum: 0 };
           cm.count += 1;
           cm.sum += value;
           acc.em.set(cname, cm);
         }
+        acc.rows?.push([row.id, method, value, cname]);
       }
 
       const sid = row.supplier_organization_id ?? null;
@@ -527,7 +528,7 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  let body: { bin?: string; year?: number; codes?: unknown; mode?: unknown; supplierOrgId?: unknown; seenIds?: unknown };
+  let body: { bin?: string; year?: number; codes?: unknown; mode?: unknown; supplierOrgId?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -578,7 +579,7 @@ Deno.serve(async (req: Request) => {
       // Часть кодов за один вызов: так CPU-лимит функции (546) не превышается на тяжёлых поставщиках.
       const chunkCodes = (Array.isArray(body.codes) ? body.codes : [])
         .filter((c): c is string => typeof c === "string" && /^[0-9A-Za-z.\-]{6,40}$/.test(c))
-        .slice(0, 20);
+        .slice(0, 40);
       if (chunkCodes.length === 0) {
         return new Response(JSON.stringify({ error: "Не переданы коды" }), {
           status: 400,
@@ -587,15 +588,22 @@ Deno.serve(async (req: Request) => {
       }
       const orgNum = Number(body.supplierOrgId);
       const chunkOrgId = Number.isInteger(orgNum) && orgNum > 0 ? orgNum : null;
-      const seenIds = (Array.isArray(body.seenIds) ? body.seenIds : []).filter(
-        (n): n is number => typeof n === "number" && Number.isFinite(n),
-      );
       const methodTotals: MethodTotals = new Map();
       const monthTotals: MonthTotals = Array.from({ length: 12 }, () => ({ count: 0, sum: 0 }));
-      const purchaseAcc: PurchaseAcc = { seen: new Set(seenIds), methods: new Map(), em: new Map(), added: [] };
-      const results = await mapPool(chunkCodes, 3, (code) =>
-        computeCodeResult({ code, names: new Set<string>() }, yearId, methodTotals, monthTotals, chunkOrgId, year, purchaseAcc)
-      );
+      const purchaseAcc: PurchaseAcc = { seen: new Set(), methods: new Map(), em: new Map(), rows: [] };
+      // Бюджет по времени: берём коды, пока не вышло ~3.5 с; остаток вернём клиенту (`remaining`) на следующий вызов.
+      const started = Date.now();
+      const results: Awaited<ReturnType<typeof computeCodeResult>>[] = [];
+      const remaining: string[] = [];
+      await mapPool(chunkCodes, 3, async (code) => {
+        if (Date.now() - started > 3500) {
+          remaining.push(code);
+          return;
+        }
+        results.push(
+          await computeCodeResult({ code, names: new Set<string>() }, yearId, methodTotals, monthTotals, chunkOrgId, year, purchaseAcc),
+        );
+      });
       return new Response(
         JSON.stringify({
           ok: true,
@@ -607,9 +615,8 @@ Deno.serve(async (req: Request) => {
           codes: results,
           methods: Array.from(methodTotals, ([name, v]) => ({ name, count: v.count, sum: v.sum })),
           months: monthTotals,
-          purchaseMethods: Array.from(purchaseAcc.methods, ([name, v]) => ({ name, count: v.count, sum: v.sum })),
-          emCustomers: Array.from(purchaseAcc.em, ([name, v]) => ({ name, count: v.count, sum: v.sum })),
-          addedIds: purchaseAcc.added ?? [],
+          purchaseRows: purchaseAcc.rows ?? [],
+          remaining,
         }),
         { headers: { ...cors, "Content-Type": "application/json" } },
       );

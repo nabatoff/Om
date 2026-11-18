@@ -119,13 +119,16 @@ type ChunkResponse = {
   codes: BinEnsTruCodeResult[];
   methods: BinPurchaseMethodStat[];
   months: Array<{ count: number; sum: number }>;
-  purchaseMethods: BinPurchaseMethodStat[];
-  emCustomers: BinPurchaseMethodStat[];
-  addedIds: number[];
+  /** Договоры для статистики закупок: [id, способ, сумма, заказчик ЭМ или null]. */
+  purchaseRows: Array<[number, string, number, string | null]>;
+  /** Коды, до которых сервер не дошёл в рамках своего бюджета времени. */
+  remaining: string[];
 };
 
 /** Сколько кодов считаем за один вызов функции (при ошибке лимита — делим пополам). */
-const CHUNK_SIZE = 4;
+const CHUNK_SIZE = 12;
+/** Сколько порций считаем параллельно. */
+const CHUNK_PARALLEL = 3;
 
 function addTo(map: Map<string, { count: number; sum: number }>, rows: BinPurchaseMethodStat[]) {
   for (const r of rows) {
@@ -162,10 +165,12 @@ export async function checkBinEnsTruContractsApi(
   const purchaseMethods = new Map<string, { count: number; sum: number }>();
   const emCustomers = new Map<string, { count: number; sum: number }>();
   const months = Array.from({ length: 12 }, () => ({ count: 0, sum: 0 }));
-  const seenIds: number[] = [];
+  const seenIds = new Set<number>();
   const results = new Map<string, BinEnsTruCodeResult>();
   const names = new Map(plan.codeList.map((c) => [c.code, c.names]));
 
+  const queue: string[][] = [];
+  let inFlight = 0;
   const runChunk = async (chunk: string[]): Promise<void> => {
     try {
       const r = await invokeBinFn<ChunkResponse>({
@@ -173,22 +178,25 @@ export async function checkBinEnsTruContractsApi(
         mode: 'chunk',
         codes: chunk,
         supplierOrgId: plan.supplierOrgId,
-        seenIds,
       });
       addTo(methodTotals, r.methods);
-      addTo(purchaseMethods, r.purchaseMethods);
-      addTo(emCustomers, r.emCustomers);
       r.months.forEach((m, i) => {
         months[i].count += m.count;
         months[i].sum += m.sum;
       });
-      for (const id of r.addedIds) seenIds.push(id);
+      // Договор с несколькими кодами может прийти из разных порций — считаем его один раз.
+      for (const [id, method, value, customer] of r.purchaseRows) {
+        if (seenIds.has(id)) continue;
+        seenIds.add(id);
+        addTo(purchaseMethods, [{ name: method, count: 1, sum: value }]);
+        if (customer != null) addTo(emCustomers, [{ name: customer, count: 1, sum: value }]);
+      }
       for (const c of r.codes) results.set(c.code, { ...c, names: names.get(c.code) ?? c.names });
+      if (r.remaining.length > 0) queue.push(r.remaining);
     } catch (e) {
       if (e instanceof CpuLimitError && chunk.length > 1) {
         const mid = Math.ceil(chunk.length / 2);
-        await runChunk(chunk.slice(0, mid));
-        await runChunk(chunk.slice(mid));
+        queue.push(chunk.slice(0, mid), chunk.slice(mid));
         return;
       }
       if (e instanceof CpuLimitError) {
@@ -209,7 +217,30 @@ export async function checkBinEnsTruContractsApi(
   };
 
   const all = plan.codeList.map((c) => c.code);
-  for (let i = 0; i < all.length; i += CHUNK_SIZE) await runChunk(all.slice(i, i + CHUNK_SIZE));
+  for (let i = 0; i < all.length; i += CHUNK_SIZE) queue.push(all.slice(i, i + CHUNK_SIZE));
+  let failure: unknown = null;
+  await Promise.all(
+    Array.from({ length: CHUNK_PARALLEL }, async () => {
+      while (!failure) {
+        const next = queue.shift();
+        if (!next) {
+          // Другой воркер ещё может вернуть остаток в очередь — коротко ждём, пока все не закончат.
+          if (inFlight === 0) return;
+          await new Promise((r) => setTimeout(r, 50));
+          continue;
+        }
+        inFlight += 1;
+        try {
+          await runChunk(next);
+        } catch (e) {
+          failure = e;
+        } finally {
+          inFlight -= 1;
+        }
+      }
+    }),
+  );
+  if (failure) throw failure;
 
   const list = all.map((c) => results.get(c)).filter((c): c is BinEnsTruCodeResult => !!c);
   if (list.length > 0 && list.every((r) => r.error)) {
