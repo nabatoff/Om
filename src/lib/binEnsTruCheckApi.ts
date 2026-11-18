@@ -76,9 +76,72 @@ export type BinEnsTruCheckResponse = {
   message?: string;
 };
 
+/** Сообщение для пользователя вместо общего «Edge Function returned a non-2xx status code». */
+const TOO_HEAVY_MSG =
+  'Слишком много данных по этому поставщику — сервер не успел всё посчитать. Попробуйте ещё раз; если повторяется, сообщите разработчику.';
+
+class CpuLimitError extends Error {}
+
+/** Один вызов функции; достаёт из ответа текст ошибки, а лимит CPU (546) превращает в CpuLimitError. */
+async function invokeBinFn<T>(body: Record<string, unknown>): Promise<T> {
+  const { data, error } = await getSupabase().functions.invoke<T & { error?: string }>('bin-ens-tru-check', { body });
+  if ((data as { error?: string } | null)?.error) throw new Error((data as { error: string }).error);
+  if (error) {
+    const ctx = (error as { context?: Response }).context;
+    const status = ctx && typeof ctx.status === 'number' ? ctx.status : 0;
+    let message: string | undefined;
+    if (ctx && typeof ctx.json === 'function') {
+      message = ((await ctx.json().catch(() => null)) as { error?: string; message?: string } | null)?.error;
+    }
+    if (!message && (status === 546 || status === 504 || status === 502 || status === 500)) throw new CpuLimitError(TOO_HEAVY_MSG);
+    throw new Error(message || (status ? `${TOO_HEAVY_MSG} (код ${status})` : error.message) || 'Не удалось выполнить проверку по БИН');
+  }
+  if (!data) throw new Error('Не удалось выполнить проверку по БИН');
+  return data as T;
+}
+
+type PlanResponse = {
+  ok: true;
+  plan?: true;
+  bin: string;
+  year: number;
+  sumCap: number;
+  maxContractPrice: number;
+  supplier: BinSupplierStats | null;
+  companyName?: string;
+  supplierOrgId: number | null;
+  codesSource: BinCodesSource;
+  codeList: Array<{ code: string; names: string[] }>;
+};
+
+type ChunkResponse = {
+  ok: true;
+  codes: BinEnsTruCodeResult[];
+  methods: BinPurchaseMethodStat[];
+  months: Array<{ count: number; sum: number }>;
+  purchaseMethods: BinPurchaseMethodStat[];
+  emCustomers: BinPurchaseMethodStat[];
+  addedIds: number[];
+};
+
+/** Сколько кодов считаем за один вызов функции (при ошибке лимита — делим пополам). */
+const CHUNK_SIZE = 4;
+
+function addTo(map: Map<string, { count: number; sum: number }>, rows: BinPurchaseMethodStat[]) {
+  for (const r of rows) {
+    const cur = map.get(r.name) ?? { count: 0, sum: 0 };
+    cur.count += r.count;
+    cur.sum += r.sum;
+    map.set(r.name, cur);
+  }
+}
+
 /**
  * «Проверка по БИН»: коды ЕНС ТРУ поставщика (из реестров e-ondiris.gov.kz) +
  * количество/сумма договоров по каждому коду за год на zakup.gov.kz (см. docs/BUSINESS_LOGIC.md).
+ *
+ * Считаем порциями: сначала «план» (поставщик и список кодов), затем коды по несколько штук за вызов —
+ * иначе на тяжёлых поставщиках функция упирается в лимит CPU Supabase (ошибка 546).
  */
 export async function checkBinEnsTruContractsApi(
   bin: string,
@@ -86,23 +149,114 @@ export async function checkBinEnsTruContractsApi(
   /** Тот же набор кодов, что у базового года (если коды взяты не из КТП, а из договоров). */
   codes?: string[],
 ): Promise<BinEnsTruCheckResponse> {
-  const { data, error } = await getSupabase().functions.invoke<BinEnsTruCheckResponse & { error?: string }>(
-    'bin-ens-tru-check',
-    { body: { bin: bin.trim(), ...(year ? { year } : {}), ...(codes && codes.length > 0 ? { codes } : {}) } },
-  );
-  if (data?.error) throw new Error(data.error);
-  if (error) {
-    let message = (data as { error?: string } | null)?.error;
-    if (!message) {
-      // supabase-js не кладёт тело non-2xx ответа в data — достаём его из error.context.
-      const ctx = (error as { context?: Response }).context;
-      if (ctx && typeof ctx.json === 'function') {
-        message = ((await ctx.json().catch(() => null)) as { error?: string } | null)?.error;
+  const base = { bin: bin.trim(), ...(year ? { year } : {}) };
+  const plan = await invokeBinFn<PlanResponse | BinEnsTruCheckResponse>({
+    ...base,
+    mode: 'plan',
+    ...(codes && codes.length > 0 ? { codes } : {}),
+  });
+  // Кодов нет («Нет данных для анализа рынка») или старая версия функции вернула готовый ответ.
+  if (!('plan' in plan) || !plan.plan) return plan as BinEnsTruCheckResponse;
+
+  const methodTotals = new Map<string, { count: number; sum: number }>();
+  const purchaseMethods = new Map<string, { count: number; sum: number }>();
+  const emCustomers = new Map<string, { count: number; sum: number }>();
+  const months = Array.from({ length: 12 }, () => ({ count: 0, sum: 0 }));
+  const seenIds: number[] = [];
+  const results = new Map<string, BinEnsTruCodeResult>();
+  const names = new Map(plan.codeList.map((c) => [c.code, c.names]));
+
+  const runChunk = async (chunk: string[]): Promise<void> => {
+    try {
+      const r = await invokeBinFn<ChunkResponse>({
+        ...base,
+        mode: 'chunk',
+        codes: chunk,
+        supplierOrgId: plan.supplierOrgId,
+        seenIds,
+      });
+      addTo(methodTotals, r.methods);
+      addTo(purchaseMethods, r.purchaseMethods);
+      addTo(emCustomers, r.emCustomers);
+      r.months.forEach((m, i) => {
+        months[i].count += m.count;
+        months[i].sum += m.sum;
+      });
+      for (const id of r.addedIds) seenIds.push(id);
+      for (const c of r.codes) results.set(c.code, { ...c, names: names.get(c.code) ?? c.names });
+    } catch (e) {
+      if (e instanceof CpuLimitError && chunk.length > 1) {
+        const mid = Math.ceil(chunk.length / 2);
+        await runChunk(chunk.slice(0, mid));
+        await runChunk(chunk.slice(mid));
+        return;
       }
+      if (e instanceof CpuLimitError) {
+        // Один код не помещается в лимит — помечаем его ошибкой, остальные считаем дальше.
+        results.set(chunk[0], {
+          code: chunk[0],
+          names: names.get(chunk[0]) ?? [],
+          canonicalName: null,
+          contractCount: 0,
+          contractSum: null,
+          sumCapped: false,
+          error: 'Слишком много данных по коду',
+        });
+        return;
+      }
+      throw e;
     }
-    message = message || error.message;
-    throw new Error(message || 'Не удалось выполнить проверку по БИН');
+  };
+
+  const all = plan.codeList.map((c) => c.code);
+  for (let i = 0; i < all.length; i += CHUNK_SIZE) await runChunk(all.slice(i, i + CHUNK_SIZE));
+
+  const list = all.map((c) => results.get(c)).filter((c): c is BinEnsTruCodeResult => !!c);
+  if (list.length > 0 && list.every((r) => r.error)) {
+    throw new Error(`Сайт zakup.gov.kz сейчас недоступен (${list[0].error ?? 'ошибка или таймаут'}). Попробуйте позже.`);
   }
-  if (!data?.ok) throw new Error('Не удалось выполнить проверку по БИН');
-  return data;
+  list.sort((a, b) => (b.contractCount || 0) - (a.contractCount || 0));
+
+  let marketSum = 0;
+  let supplierSum = 0;
+  let nicheMarketSum = 0;
+  let nicheCodes = 0;
+  for (const r of list) {
+    if (r.error || r.sumCapped || r.contractSum == null) continue;
+    marketSum += r.contractSum;
+    if ((r.supplierCount ?? 0) > 0) {
+      supplierSum += r.supplierSum ?? 0;
+      nicheMarketSum += r.contractSum;
+      nicheCodes += 1;
+    }
+  }
+  const toList = (m: Map<string, { count: number; sum: number }>) =>
+    Array.from(m, ([name, v]) => ({ name, count: v.count, sum: v.sum })).sort((a, b) => b.sum - a.sum);
+
+  return {
+    ok: true,
+    bin: plan.bin,
+    year: plan.year,
+    sumCap: plan.sumCap,
+    maxContractPrice: plan.maxContractPrice,
+    supplier: plan.supplier,
+    companyName: plan.companyName,
+    codesSource: plan.codesSource,
+    methods: toList(methodTotals),
+    purchaseStats: {
+      year: plan.year,
+      // Дата выгрузки по Астане/Алматы (UTC+5), как на сервере.
+      asOf: new Date(Date.now() + 5 * 3600_000).toISOString().slice(0, 10),
+      methods: toList(purchaseMethods),
+      emCustomers: toList(emCustomers).slice(0, 5),
+      emCustomersTotal: emCustomers.size,
+    },
+    share: { marketSum, supplierSum, nicheMarketSum, nicheCodes },
+    seasonality: {
+      months,
+      count: months.reduce((a, m) => a + m.count, 0),
+      sum: months.reduce((a, m) => a + m.sum, 0),
+    },
+    codes: list,
+  };
 }
